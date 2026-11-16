@@ -42,7 +42,8 @@ def pairs_of(html: str) -> list[tuple[str, str]]:
 def _mask(html: str) -> str:
     """把不该动的区域（标题、术语表）替换成等长空格，保持下标不变。"""
     out = list(html)
-    for pat in (r"<h2>.*?</h2>", r"<h3>.*?</h3>", r'<table class="glossary">.*?</table>'):
+    for pat in (r"<h2>.*?</h2>", r"<h3>.*?</h3>", r'<table class="glossary">.*?</table>',
+                r"<svg.*?</svg>", r'<pre class="code">.*?</pre>'):
         for m in re.finditer(pat, html, re.S):
             for i in range(m.start(), m.end()):
                 if out[i] != "\n":

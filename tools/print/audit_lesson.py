@@ -174,7 +174,9 @@ def content_audit(path: str, draft: bool = False) -> dict:
         title = strip_tags(m.group(1)).strip() if m else ""
         if not title or any(k in title for k in LEC_SKIP):
             continue
-        flat = strip_tags(re.sub(r"<h[23]>.*?</h[23]>", " ", sec, flags=re.S))
+        flat = strip_tags(re.sub(r"<h[23]>.*?</h[23]>", " ",
+                                 re.sub(r"<svg.*?</svg>|<pre class=\"code\">.*?</pre>", " ", sec, flags=re.S),
+                                 flags=re.S))
         for zh, _en in pairs:
             i = first_standalone(flat, zh, pairs)
             if i < 0:
@@ -210,6 +212,23 @@ def content_audit(path: str, draft: bool = False) -> dict:
             no_lec.append(title)
     if no_lec:
         fails.append("这些概念节没有「讲法」段（<p class=\"lec\">）：" + "、".join(no_lec[:5]))
+
+    # 5c 每节要有「代码 / 例题」（用户 2026-11-16 定：以代码、题目运算为主，理论为辅）
+    #    现在记 WARN：存量 L02–L09 是老口径，返工完再转 FAIL；新写的讲必须每节至少一个。
+    no_prac = []
+    for sec in secs:
+        m = re.search(r'<span class="zh">(.*?)</span>', sec, re.S)
+        title = strip_tags(m.group(1)).strip() if m else ""
+        if not title or any(k in title for k in LEC_SKIP):
+            continue
+        if not re.search(r'<pre class="code">|<div class="eg">', sec):
+            no_prac.append(title)
+    if no_prac:
+        warns.append("这些节只有理论、没有代码或例题（练习型讲义要求每节至少一个）："
+                     + "、".join(no_prac[:5]) + (f"…共 {len(no_prac)} 节" if len(no_prac) > 5 else ""))
+
+    n_prac = len(re.findall(r'<pre class="code">|<div class="eg">', html))
+    n_dia = len(re.findall(r'figure class="diagram"', html))
 
     n_q = len(re.findall(r'class="(?:q|ans)"', html))
     n_qq = len(re.findall(r'class="q"', html))

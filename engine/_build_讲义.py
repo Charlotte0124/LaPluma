@@ -99,6 +99,19 @@ CSS = """
   .note .tag{display:inline-block; color:var(--amber); font-size:8.4pt; letter-spacing:.06em;
              margin-right:2mm; border:1px solid var(--line); border-radius:5px; padding:.2mm 1.6mm}
   figure{margin:3.6mm 0}
+  pre.code{margin:3mm 0; padding:3mm 4mm; background:#0F0F0D; border:1px solid var(--line);
+           border-left:3px solid var(--amber); border-radius:6px; overflow-wrap:anywhere;
+           white-space:pre-wrap; font-family:Consolas,"Courier New",monospace; font-size:8.9pt;
+           line-height:1.75; color:#E4E0D4}
+  pre.code .cap{display:block; color:var(--mute); font-size:8pt; margin-bottom:1.4mm;
+                font-family:"Microsoft YaHei",sans-serif}
+  .eg{margin:3.4mm 0; padding:3mm 4mm; background:var(--card); border:1px solid var(--line);
+      border-left:3px solid #8FA7B8; border-radius:8px; break-inside:avoid}
+  .eg .ask{font-weight:600; color:var(--text); margin-bottom:1.6mm; font-size:10pt}
+  .eg ol{margin:0; padding-left:6mm; font-size:9.3pt; line-height:1.8; color:var(--dim)}
+  .eg .a{margin-top:1.8mm; color:var(--amber); font-size:9.3pt}
+  figure.diagram{margin:3.6mm 0; text-align:center; break-inside:avoid}
+  figure.diagram svg{display:block; margin:0 auto; max-width:100%; height:auto}
   figure img{display:block; margin:0 auto; width:auto; max-width:100%; max-height:66mm;
              border:1px solid var(--line); border-radius:8px; background:#fff}
   figcaption{color:var(--mute); font-size:8.6pt; margin-top:1.6mm; text-align:center}
@@ -141,6 +154,16 @@ def render_block(b):
         return '<ul>\n' + '\n'.join('  <li>%s</li>' % x for x in b[1]) + '\n</ul>'
     if kind == 'ol':
         return '<ol>\n' + '\n'.join('  <li>%s</li>' % x for x in b[1]) + '\n</ol>'
+    if kind == 'code':                  # (lang 标签, 代码文本, 说明)
+        esc = (b[2].replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;'))
+        cap = ('<span class="cap">%s</span>' % b[3]) if len(b) > 3 and b[3] else ''
+        return '<pre class="code">%s%s</pre>' % (cap, esc)
+    if kind == 'eg':                    # (题面, [步骤], 答案)
+        steps = ''.join('<li>%s</li>' % x for x in b[2])
+        return ('<div class="eg"><div class="ask">%s</div><ol>%s</ol><div class="a">%s</div></div>'
+                % (b[1], steps, b[3]))
+    if kind == 'svg':                   # (svg 源码, 图注)
+        return '<figure class="diagram">%s<figcaption>%s</figcaption></figure>' % (b[1], b[2])
     if kind == 'note':
         return '<div class="note"><span class="tag">%s</span>%s</div>' % (b[1], b[2])
     if kind == 'table':                 # (head, [rows], [widths])
