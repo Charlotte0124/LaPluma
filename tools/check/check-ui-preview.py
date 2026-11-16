@@ -92,14 +92,19 @@ def run(root):
 
     t_ui = last_ts(root, UI)
     t_prev = last_ts(root, PREV) if os.path.isdir(prev_dir) else None
+    # 最后一次 ui 提交动了什么（A 与 D 共用）：D 只在「真改了页面」时才比截图，不然
+    # 改个缓存头/接口也会被判「截图旧」，那是误报。
+    ui_rev = (git(root, 'log', '-1', '--format=%H', '--', UI)[1] or '') if t_ui else ''
+    ui_files = [f.replace('\\', '/') for f in commit_files(root, ui_rev)] if ui_rev else []
+    page_changed = any(f.startswith('ui/index.html') for f in ui_files)
     note.append('ui/ 最后提交 %s · docs\\预览 最后提交 %s' % (fmt(t_ui), fmt(t_prev)))
 
     # —— A：最后一次改界面的提交里，有没有给图留痕（同提交必须带 docs\预览 或 docs\资产）
     if not os.path.isdir(prev_dir):
         red.append('A 没有 docs\\预览 目录：设计稿无处可放，等于这条规矩不存在')
     elif t_ui:
-        rev = git(root, 'log', '-1', '--format=%H', '--', UI)[1]
-        files = [f.replace('\\', '/') for f in commit_files(root, rev)]
+        rev = ui_rev
+        files = ui_files
         touched = [f for f in files if f.startswith('docs/预览') or f.startswith('docs/资产')]
         note.append('最后一次界面提交 %s（%s）带图 %d 个' % (rev[:7] or '?', fmt(t_ui), len(touched)))
         if not touched:
@@ -133,8 +138,8 @@ def run(root):
     if dirty(root, UI) and not dirty(root, PREV):
         yel.append('C ui/ 有未提交改动，docs\\预览 没动 —— 正在改界面？图记得一起出')
 
-    # —— D：已实现截图忘了重拍
-    if os.path.isdir(asset_dir) and t_ui:
+    # —— D：已实现截图忘了重拍（只在「真的改了 index.html」时才比，否则改服务代码会误报）
+    if page_changed and os.path.isdir(asset_dir) and t_ui:
         stale = []
         for name in sorted(os.listdir(asset_dir)):
             if name.startswith('界面-') and name.lower().endswith('.png'):
