@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# 生成物（重跑即可再生，且含课程内容，不入库）
+out/
+CS340/06_笔记/*.html
+CS340/01_讲义/*.pdf
+!CS340/06_笔记/.gitkeep
+!CS340/01_讲义/.gitkeep
+
+# 密钥（2026-11-16）：任何 key 都不进 Git
+.env
+.env.*
+*.key
+*.pem
+api.json
+secrets/
+
+# 系统噪声
+Thumbs.db
+desktop.ini
+~$*
+.DS_Store
+*.log
