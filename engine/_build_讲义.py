@@ -18,6 +18,8 @@ import os
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# 2026-11-17：课程代码不再写死（示例课程 / 截图演示用 PLUMA_COURSE 切，默认仍是 CS340）
+COURSE = os.environ.get("PLUMA_COURSE") or "CS340"
 
 # ── 课件图片目录（2026-11-16 加）──────────────────────────────────────────────
 # 为什么要有：拆家后「课件原图」留在资料仓（80 MB），软件仓里一张都没有；
@@ -339,7 +341,7 @@ def build(lesson: dict) -> str:
 
 
 def load(no: str) -> dict:
-    path = os.path.join(ROOT, 'CS340', '_lessons', no + '.py')
+    path = os.path.join(ROOT, COURSE, '_lessons', no + '.py')
     spec = importlib.util.spec_from_file_location('lesson_' + no, path)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
@@ -353,7 +355,7 @@ def main(argv):
     for no in argv:
         lesson = load(no)
         html = build(lesson)
-        dst = os.path.join(ROOT, 'CS340', '06_笔记', '%s_零基础_讲义_源.html' % no)
+        dst = os.path.join(ROOT, COURSE, '06_笔记', '%s_零基础_讲义_源.html' % no)
         open(dst, 'w', encoding='utf-8').write(html)
         print('已生成 %s（%d 字符）' % (dst, len(html)))
     return 0

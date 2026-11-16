@@ -27,14 +27,16 @@ import subprocess
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# 2026-11-17：课程代码不再写死（示例课程 / 截图演示用 PLUMA_COURSE 切，默认仍是 CS340）
+COURSE = os.environ.get("PLUMA_COURSE") or "CS340"
 sys.path.insert(0, os.path.join(ROOT, 'engine'))
 sys.path.insert(0, os.path.join(ROOT, 'tools', 'print'))
 
 import _build_讲义 as builder  # noqa: E402
 
 ORDER = ['L01', 'L02', 'L03', 'L04-01', 'L04-02', 'L05', 'L06', 'L08', 'L09']
-OUT_HTML = os.path.join(ROOT, 'CS340', '06_笔记', 'CS340_合订本_源.html')
-OUT_PDF = os.path.join(ROOT, 'CS340', '01_讲义', 'CS340_九讲合订本_讲义.pdf')
+OUT_HTML = os.path.join(ROOT, COURSE, '06_笔记', COURSE + '_合订本_源.html')
+OUT_PDF = os.path.join(ROOT, COURSE, '01_讲义', COURSE + '_九讲合订本_讲义.pdf')
 
 
 def strip_fixed_pages(html: str) -> str:
@@ -155,7 +157,7 @@ def main(argv: list[str]) -> int:
 
     rc = run([sys.executable, os.path.join('tools', 'print', 'html2pdf.py'), OUT_HTML,
               '-o', OUT_PDF, '--theme', 'dark', '--toc', '--bg', '#0E0E0C',
-              '--footer', 'CS340 操作系统 · 九讲合订本'])
+              '--footer', COURSE + ' 讲义 · 九讲合订本'])
     if rc != 0:
         print('[停] 打印失败')
         return 1
@@ -168,7 +170,7 @@ def main(argv: list[str]) -> int:
     body = 0
     detail = []
     for L in lessons:
-        p = os.path.join(ROOT, 'CS340', '01_讲义', L['out'])
+        p = os.path.join(ROOT, COURSE, '01_讲义', L['out'])
         d = pymupdf.open(p)
         body += d.page_count - 2            # 每讲去掉封面与目录两页
         detail.append('%s %d' % (L['no'], d.page_count - 2))

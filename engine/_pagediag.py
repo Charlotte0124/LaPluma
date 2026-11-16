@@ -9,11 +9,13 @@ import sys
 import pymupdf
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# 2026-11-17：课程代码不再写死（示例课程 / 截图演示用 PLUMA_COURSE 切，默认仍是 CS340）
+COURSE = os.environ.get("PLUMA_COURSE") or "CS340"
 
 
 def main(no):
     pdf = None
-    d = os.path.join(ROOT, 'CS340', '01_讲义')
+    d = os.path.join(ROOT, COURSE, '01_讲义')
     for f in os.listdir(d):
         if f.startswith(no) and f.endswith('.pdf') and '讲义' in f:
             pdf = os.path.join(d, f)

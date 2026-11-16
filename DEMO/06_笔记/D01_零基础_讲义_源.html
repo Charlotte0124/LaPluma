@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark" data-reader="大学">
+
+<head>
+<meta charset="utf-8">
+<meta name="out" content="D01_一份讲义是怎么出来的_讲义.pdf">
+
+<title>D01 一份讲义是怎么出来的 · 讲义</title>
+<style>
+  :root{
+    --bg:#0E0E0C; --card:#161614; --text:#F4F1E6; --dim:#A8A498;
+    --mute:#6E6B61; --line:#2A2A24; --amber:#E7C246; --code:#121210;
+  }
+  *{box-sizing:border-box}
+  html{background:var(--bg)}
+  body{
+    margin:0; padding:0; background:transparent; color:var(--text);
+    font-family:"Microsoft YaHei","Source Han Sans SC","PingFang SC",system-ui,sans-serif;
+    font-size:10.5pt; line-height:1.78;
+    -webkit-print-color-adjust:exact; print-color-adjust:exact;
+  }
+  @page{size:A4; margin:15mm 16mm 16mm}
+  h2,h3{break-after:avoid}
+  h2{break-before:page}
+  .lec{margin:3.4mm 0; padding:2mm 0 2mm 4mm; border-left:2px solid var(--line);
+       color:var(--text); font-size:10.3pt}
+  .lec b:first-child{color:var(--amber)}
+  .pb{break-before:page}
+  p,li{break-inside:avoid}
+  section.sec{break-inside:avoid}
+  p,li{orphans:2; widows:2}
+  figure,.eq,.note,blockquote,table.sym,pre.code,.eg{break-inside:avoid}
+  .eg .ask{break-after:avoid}
+  h3{break-after:avoid}
+  tr{break-inside:avoid}
+  table{break-inside:auto}
+  .cover{height:calc(297mm - 31mm); display:flex; flex-direction:column; justify-content:center;
+         break-after:page}
+  .cover .kicker{color:var(--amber); font-size:9pt; letter-spacing:.14em}
+  .cover h1{font-size:26pt; line-height:1.3; margin:5mm 0 3mm; font-weight:600}
+  .cover .sub{color:var(--dim); font-size:10.5pt; line-height:1.9; margin-bottom:12mm}
+  .meta{border:1px solid var(--line); border-radius:8px; background:var(--card); padding:5mm 6mm}
+  .meta .row{display:grid; grid-template-columns:24mm 1fr; gap:4mm; font-size:9.2pt;
+             color:var(--dim); padding:1.1mm 0}
+  .meta .row b{color:var(--text); font-weight:500}
+  .tocpage{break-after:page}
+  .toc{margin-top:2mm}
+  .toc .item{display:grid; grid-template-columns:9mm 1fr 10mm; gap:2mm; align-items:baseline;
+             padding:1.4mm 0; border-bottom:1px dotted var(--line)}
+  .toc .no{color:var(--amber); font-variant-numeric:tabular-nums}
+  .toc .t{color:var(--text)}
+  .toc .t small{color:var(--mute); font-size:8.4pt; margin-left:2.5mm; letter-spacing:.03em}
+  .toc .pg{color:var(--dim); font-variant-numeric:tabular-nums; text-align:right}
+  h2{display:grid; grid-template-columns:11mm 1fr; column-gap:4mm; align-items:baseline;
+     margin:7mm 0 3mm; padding-top:4mm; border-top:1px solid var(--line)}
+  h2 .no{grid-row:1; color:var(--amber); font-size:11pt; font-weight:600;
+         font-variant-numeric:tabular-nums}
+  h2 .zh{grid-column:2; font-size:14.5pt; font-weight:600; line-height:1.4}
+  h2 .en{grid-column:2; color:var(--mute); font-size:8.8pt; letter-spacing:.05em; margin-top:.8mm}
+  h3{font-size:11.2pt; font-weight:600; margin:6mm 0 1.5mm}
+  p{margin:2.6mm 0}
+  b,strong{font-weight:600}
+  em{font-style:normal; color:var(--amber)}
+  sub,sup{font-size:.74em; line-height:0}
+  ul,ol{margin:2.2mm 0; padding-left:5.5mm}
+  li{margin:1.4mm 0; list-style:none; position:relative; padding-left:4mm}
+  li::before{content:"–"; position:absolute; left:0; color:var(--mute)}
+  ol{counter-reset:n}
+  ol li{counter-increment:n}
+  ol li::before{content:counter(n) "."; color:var(--amber); font-variant-numeric:tabular-nums}
+  blockquote{margin:3.2mm 0; padding:3mm 4mm; background:var(--card); border-radius:8px;
+             border-left:2px solid var(--amber)}
+  blockquote .en{display:block; font-family:Georgia,"Times New Roman",serif; font-size:9.9pt;
+                 color:var(--text); line-height:1.7}
+  blockquote .ref{display:block; text-align:right; color:var(--mute); font-size:8.6pt; margin-top:1.2mm}
+  .eq{margin:3mm 0 0; padding:2.8mm 4mm; background:var(--code); border:1px solid var(--line);
+      border-radius:8px; font-family:"Cambria Math",Cambria,Georgia,"Times New Roman",serif;
+      font-size:10.4pt; line-height:2.05; white-space:pre-wrap; overflow-wrap:anywhere}
+  table.sym{width:100%; border-collapse:collapse; margin:0 0 3.4mm; font-size:8.8pt;
+            table-layout:fixed}
+  table.sym th{background:transparent; color:var(--mute); font-weight:600;
+               border:none; border-bottom:1px solid var(--line); padding:1.2mm 2.2mm; text-align:left}
+  table.sym td{border:none; border-bottom:1px dotted #22221C; padding:1.2mm 2.2mm;
+               color:var(--dim); vertical-align:top; overflow-wrap:anywhere}
+  table.sym td:first-child{color:var(--amber); white-space:nowrap}
+  .note{margin:3.2mm 0; padding:3mm 4mm; background:var(--card); border:1px solid var(--line);
+        border-radius:8px; font-size:9.7pt; color:var(--dim)}
+  .note .tag{display:inline-block; color:var(--amber); font-size:8.4pt; letter-spacing:.06em;
+             margin-right:2mm; border:1px solid var(--line); border-radius:5px; padding:.2mm 1.6mm}
+  figure{margin:3.6mm 0}
+  pre.code{margin:3mm 0; padding:3mm 4mm; background:#0F0F0D; border:1px solid var(--line);
+           border-left:3px solid var(--amber); border-radius:6px; overflow-wrap:anywhere;
+           white-space:pre-wrap; font-family:Consolas,"Courier New",monospace; font-size:8.9pt;
+           line-height:1.75; color:#E4E0D4}
+  pre.code .cap{display:block; color:var(--mute); font-size:8pt; margin-bottom:1.4mm;
+                font-family:"Microsoft YaHei",sans-serif}
+  .eg{margin:3.4mm 0; padding:3mm 4mm; background:var(--card); border:1px solid var(--line);
+      border-left:3px solid #8FA7B8; border-radius:8px; break-inside:avoid}
+  .eg .ask{font-weight:600; color:var(--text); margin-bottom:1.6mm; font-size:10pt}
+  .eg ol{margin:0; padding-left:6mm; font-size:9.3pt; line-height:1.8; color:var(--dim)}
+  .eg .a{margin-top:1.8mm; color:var(--amber); font-size:9.3pt}
+  figure.diagram{margin:3.6mm 0; text-align:center; break-inside:avoid}
+  figure.diagram svg{display:block; margin:0 auto; max-width:100%; height:auto}
+  figure img{display:block; margin:0 auto; width:auto; max-width:100%; max-height:66mm;
+             border:1px solid var(--line); border-radius:8px; background:#fff}
+  figcaption{color:var(--mute); font-size:8.6pt; margin-top:1.6mm; text-align:center}
+  table:not(.sym){width:100%; border-collapse:collapse; margin:3mm 0; font-size:9.2pt;
+                  table-layout:fixed}
+  table:not(.sym) th,table:not(.sym) td{border:1px solid var(--line); padding:1.8mm 2.2mm;
+                  text-align:left; vertical-align:top; overflow-wrap:anywhere}
+  table:not(.sym) th{background:var(--card); color:var(--dim); font-weight:600}
+  thead{display:table-header-group}
+  td .en{display:block; color:var(--mute); font-size:8.4pt}
+  .src{color:var(--mute); font-size:8.8pt}
+  .q{margin:3mm 0}
+  .q b{color:var(--amber)}
+  .ans{color:var(--dim); font-size:9.6pt; margin:1.6mm 0}
+  .self{margin-top:6mm; padding-top:3mm; border-top:1px solid var(--line)}
+  table.glossary td:first-child{white-space:nowrap}
+  table.glossary td,table.glossary th{padding:.7mm 2.2mm; font-size:8.4pt}
+  table.glossary td:nth-child(3){white-space:nowrap}
+</style>
+</head>
+<body>
+
+<section class="cover">
+  <div class="kicker">DEMO · LECTURE D01</div>
+  <h1>一份讲义是怎么出来的</h1>
+  <div class="sub">How a Handout Gets Built<br>
+  示例课程 ｜ 数据 → 讲义源 → PDF → 三道门 ｜ 每个数都能自己算一遍</div>
+  <div class="meta">
+    <div class="row"><b>用途</b><span>随仓库发布的示例课程，用来试跑流水线；不含任何真实课程内容</span></div>
+    <div class="row"><b>怎么跑</b><span>PLUMA_COURSE=DEMO python engine\_make.py D01（PowerShell 用 $env:PLUMA_COURSE='DEMO'）</span></div>
+    <div class="row"><b>读法</b><span>§1 一份讲义的组成 → §2 三道门各查什么 → §3 自己跑一遍</span></div>
+    <div class="row"><b>口径</b><span>示例数据，数字是编的，别拿去引用</span></div>
+  </div>
+</section>
+
+<section class="tocpage">
+  <h2 style="margin-top:0"><span class="no">·</span><span class="zh">目录</span><span class="en">CONTENTS</span></h2>
+  <div class="toc">
+    <div class="item"><span class="no">0</span><span class="t">本讲导读<small>Read Me First</small></span><span class="pg" data-head="本讲导读">·</span></div>
+    <div class="item"><span class="no">1</span><span class="t">一份讲义由什么组成<small>Anatomy of a Handout</small></span><span class="pg" data-head="一份讲义由什么组成">·</span></div>
+    <div class="item"><span class="no">2</span><span class="t">三道门各查什么<small>What the Three Gates Check</small></span><span class="pg" data-head="三道门各查什么">·</span></div>
+    <div class="item"><span class="no">3</span><span class="t">自己跑一遍<small>Run It Yourself</small></span><span class="pg" data-head="自己跑一遍">·</span></div>
+  </div>
+</section>
+
+<section class="sec">
+<h2><span class="no">0</span><span class="zh">本讲导读</span><span class="en">Read Me First</span></h2>
+<p class="lec"><b>讲法。</b>这一讲不教任何课程内容，只回答一个问题：你写的那份 Python 数据，是怎么变成一本能打印的 PDF 的。</p>
+<p><b>这一节能解决什么。</b>让你在十分钟内看懂仓库里每个目录在流水线的哪一段，并且能自己改一个字、再生成一份。</p>
+<p><b>这一节不能解决什么。</b>不解释三道门的判据为什么这样定（那是 `docs\使用\03-三道门.md` 的事），也不讲怎么写出好例题。</p>
+<div class="note"><span class="tag">整条线</span>一份数据（D01.py）→ 讲义源（source html） HTML → 过内容门（content gate） → 无头浏览器（headless browser）打 PDF → 过版式门（layout gate） → 成品。</div>
+<p>引用写法：真实课程会标成「课件 p.N」，指向源 PDF 的页序；示例课程没有源课件，N 仅作格式演示（如课件 p.1）。</p>
+</section>
+
+<section class="sec">
+<h2><span class="no">1</span><span class="zh">一份讲义由什么组成</span><span class="en">Anatomy of a Handout</span></h2>
+<p class="lec"><b>讲法。</b>先看目录与文件名，再看那张表：仓库里每一样东西，只负责流水线的一段（依据：仓根目录树，§1）。</p>
+<table>
+<tr><th style="width:20%">目录</th><th style="width:52%">它是什么</th><th style="width:28%">谁改它</th></tr>
+<tr><td>engine\</td><td>生成器：数据 → HTML → PDF → 两道门</td><td>开发者</td></tr>
+<tr><td><课程>\_lessons\</td><td>讲义数据（lesson data）（每讲一个 .py，变量名 LESSON）</td><td>写内容的人</td></tr>
+<tr><td><课程>\01_讲义\</td><td>成品 PDF（生成物，不进 Git）</td><td>没人手改</td></tr>
+<tr><td>tools\print\</td><td>打印与检查：audit_lesson、pdf.js、KaTeX</td><td>开发者</td></tr>
+<tr><td>ui\</td><td>本地界面：看成品、生成、阅读、记笔记（note）</td><td>开发者</td></tr>
+</table>
+<pre class="code"><span class="cap">一条命令走完四步，中间不手动开浏览器</span>engine\_make.py 做四件事：
+1 读 &lt;课程&gt;\_lessons\D01.py 的 LESSON
+2 渲染成 HTML（含目录、公式、结构图）
+3 调本机 Edge/Chrome 无头打 PDF
+4 过内容门与版式门，红项不出货</pre>
+<div class="eg"><div class="ask">一份讲义要求「每节至少有一段代码或一道例题」，这条是由谁保证的？</div><ol><li>由内容门（audit_lesson.py --content）保证，不是靠自觉</li><li>它逐节扫 <pre class="code"> 与 <div class="eg">，缺一即红</li><li>所以写数据的时候，每节都要带上其中一样</li></ol><div class="a">答案：内容门。人只负责写对，机器负责不漏。</div></div>
+</section>
+
+<section class="sec">
+<h2><span class="no">2</span><span class="zh">三道门各查什么</span><span class="en">What the Three Gates Check</span></h2>
+<p class="lec"><b>讲法。</b>三道门是三种不同性质的检查：内容有没有、版式对不对、图有没有破（判据实现见 `tools\print\audit_lesson.py`，§2）。任何一门红，都不许出货。</p>
+<table>
+<tr><th style="width:20%">门</th><th style="width:52%">查什么</th><th style="width:28%">红了怎么办</th></tr>
+<tr><td>内容门（content gate）</td><td>每节是否有代码/例题；术语首次出现是否附英文</td><td>补内容，不改判据</td></tr>
+<tr><td>版式门（layout gate）</td><td>每页首行是否是标题/表格/图（不能是正文半行）</td><td>调分页（pagination）：补小标题或删表</td></tr>
+<tr><td>破图门（broken image）</td><td>图片宽高是否小于 32px（Chrome 缺图图标）</td><td>把素材放回对应目录</td></tr>
+</table>
+<div class="eg"><div class="ask">版式门报「第 7 页首行是正文」，你有哪两种改法？</div><ol><li>在该页之前补一个真实的小标题（h3），让新页从标题起</li><li>或者把跨页的那段拆开/删掉一小段，让正文不落在页首</li><li>两种都不许改版式门的白名单（whitelist）——判据不是用来迁就排版的</li></ol><div class="a">答案：补标题或调内容；改判据等于把门拆了。</div></div>
+<pre class="code"><span class="cap">红项不会自动变绿，必须人改内容</span>python engine\_make.py D01
+# 输出会逐项打印 OK / WARN / FAIL；有三行 OK 才算过完三道门</pre>
+</section>
+
+<section class="sec">
+<h2><span class="no">3</span><span class="zh">自己跑一遍</span><span class="en">Run It Yourself</span></h2>
+<p class="lec"><b>讲法。</b>这一节只有一件事：动手。改一个字，重新生成，看着它变。</p>
+<pre class="code"><span class="cap">第一次跑会给 10–20 秒；之后同一份数据再跑仍然要全量重建</span>$env:PLUMA_COURSE='DEMO'
+python engine\_make.py D01
+# 然后打开 DEMO\01_讲义\D01_一份讲义是怎么出来的_讲义.pdf</pre>
+<p>改这一讲最省事的入口：把上面 §1 那张表的「谁改它」一列随便改两个字，重新跑一遍，看 PDF 里是不是真的变了。改完记得改回来。</p>
+<div class="eg"><div class="ask">如果生成后 PDF 没变化，最可能的原因是什么？</div><ol><li>命令跑的是另一门课（没设 PLUMA_COURSE，用的是默认课程（default course））</li><li>或者改的不是 LESSON 里的数据，而是注释/文档</li><li>第三可能：PDF 被别的程序占用，写入失败——输出里会有 FAIL</li></ol><div class="a">答案：先看输出里读的是哪个目录、哪一讲，再怀疑缓存。</div></div>
+</section>
+
+<section class="sec">
+<h2><span class="no">4</span><span class="zh">本讲小结</span><span class="en">Takeaways</span></h2>
+<p class="lec"><b>讲法。</b>收口用一张表：每条都配一个能自己验的动作，不写虚无的话。</p>
+<table>
+<tr><th style="width:24%">记住什么</th><th style="width:48%">一句话</th><th style="width:28%">怎么自查</th></tr>
+<tr><td>流水线</td><td>数据 → HTML → PDF → 三道门</td><td>改一个字再跑 `_make.py`</td></tr>
+<tr><td>数据在哪</td><td>`<课程>\_lessons\<讲号>.py` 的 `LESSON`</td><td>打开文件看 sections</td></tr>
+<tr><td>谁不让出货</td><td>内容门 / 版式门 / 破图门</td><td>看生成输出的 OK / FAIL 行</td></tr>
+<tr><td>课程怎么切</td><td>`PLUMA_COURSE` 环境变量（默认取 courses.json 第一门）</td><td>`$env:PLUMA_COURSE='DEMO'`</td></tr>
+</table>
+<p>如果只带走一句：<b>讲义是「数据 + 三道门」的产物，不是手写出来的</b>；改数据、重跑、看门报告，这条线在任何一个课程里都一样。</p>
+</section>
+
+<section class="sec">
+<h2><span class="no">5</span><span class="zh">自测</span><span class="en">Self-check</span></h2>
+<p class="lec"><b>讲法。</b>四题都是「你要去哪儿改、改完看哪个输出」，不考背诵。</p>
+
+<div class="q"><b>Q1.</b> 想让某一节多一段代码，改哪个文件？</div>
+<div class="ans">答：`<课程>\_lessons\<讲号>.py` 里那个节的 `body`，加一条 `("code", 语言, 代码, 说明)`；不是改 HTML。回看 §1。</div>
+
+<div class="q"><b>Q2.</b> 生成后 PDF 里没有你刚加的那段，先查什么？</div>
+<div class="ans">答：看命令输出里读的是哪门课、哪一讲——没设 `PLUMA_COURSE` 时会跑默认课程。回看 §3。</div>
+
+<div class="q"><b>Q3.</b> 内容门报「第 2 节没有代码或例题」，两种改法？</div>
+<div class="ans">答：给该节加 `code` 或 `eg` 块；或者该节本来就只是过渡，把它并到相邻节。**不许改门**。回看 §2。</div>
+
+<div class="q"><b>Q4.</b> 为什么成品 PDF 不进 Git？</div>
+<div class="ans">答：它是生成物，重跑即可再生；而且体积大、每次生成字节都不同，入库只会把仓撑胖。回看 §1。</div>
+</section>
+
+<section class="sec">
+<h2><span class="no">6</span><span class="zh">术语表</span><span class="en">Glossary</span></h2>
+<p class="lec"><b>讲法。</b>本讲出现的词，每个都标了英文——写代码、查文档都用得着。</p>
+
+<table class="glossary">
+  <colgroup><col style="width:20%"><col style="width:27%"><col style="width:15%"><col style="width:38%"></colgroup>
+  <thead><tr><th>中文</th><th>English</th><th>页码</th><th>备注</th></tr></thead>
+  <tbody>
+  <tr><td>讲义数据</td><td>lesson data</td><td>本讲 §1</td><td>`_lessons\<讲号>.py` 里的 `LESSON` 字典</td></tr>
+  <tr><td>讲义源</td><td>source html</td><td>本讲 §1</td><td>渲染出来、给无头浏览器打 PDF 的那个 HTML</td></tr>
+  <tr><td>内容门</td><td>content gate</td><td>本讲 §2</td><td>逐节查有没有代码或例题</td></tr>
+  <tr><td>版式门</td><td>layout gate</td><td>本讲 §2</td><td>逐页查首行是不是标题/表格/图</td></tr>
+  <tr><td>破图门</td><td>broken image</td><td>本讲 §2</td><td>图片宽高小于 32px 即当成缺图</td></tr>
+  <tr><td>课程代码</td><td>course code</td><td>本讲 §3</td><td>仓根下一个目录名，由 `courses.json` 与 `PLUMA_COURSE` 决定</td></tr>
+  <tr><td>默认课程</td><td>default course</td><td>本讲 §3</td><td>`courses.json` 里的第一个键</td></tr>
+  <tr><td>无头浏览器</td><td>headless browser</td><td>本讲 §1</td><td>不弹窗口的 Chrome/Edge，用命令行参数把 HTML 打成 PDF</td></tr>
+  <tr><td>渲染</td><td>render</td><td>本讲 §1</td><td>把数据换成 HTML 的过程</td></tr>
+  <tr><td>合订本</td><td>book</td><td>本讲 §1</td><td>把一门的全部讲合并成一份 PDF，封面 1 页 + 总目录 1 页</td></tr>
+  <tr><td>术语附英</td><td>term with English</td><td>本讲 §2</td><td>术语在每节首次出现时带括号英文</td></tr>
+  <tr><td>定位标注</td><td>citation anchor</td><td>本讲 §2</td><td>页码 / §号 / 时间戳 / 行号，用来回查</td></tr>
+  <tr><td>分页</td><td>pagination</td><td>本讲 §2</td><td>一节一页；一节超长就拆成两节，不在正文中间断页</td></tr>
+  <tr><td>白名单</td><td>whitelist</td><td>本讲 §2</td><td>版式门里允许出现在页首的那几类元素</td></tr>
+  <tr><td>产物</td><td>artifact</td><td>本讲 §1</td><td>跑完之后生成的文件（HTML / PDF）</td></tr>
+  <tr><td>重生成</td><td>rebuild</td><td>本讲 §3</td><td>把同一份数据再跑一次，产物字节可能变、内容不变</td></tr>
+  <tr><td>检索</td><td>retrieval</td><td>本讲 §3</td><td>问课件时按节→块打分挑片段，不用向量库</td></tr>
+  <tr><td>提问包</td><td>prompt pack</td><td>本讲 §3</td><td>检索结果 + 节号页码拼成的上下文</td></tr>
+  <tr><td>会话</td><td>session</td><td>本讲 §3</td><td>一门课一个，存在 `%USERPROFILE%\.pluma\sessions\`</td></tr>
+  <tr><td>笔记</td><td>note</td><td>本讲 §3</td><td>按课程 + 文档存本机，可追加成 PDF 附页</td></tr>
+  </tbody>
+</table>
+</section>
+
+<section class="sec">
+<h2><span class="no">7</span><span class="zh">附录</span><span class="en">Appendix</span></h2>
+<p class="lec"><b>讲法。</b>一张命令速查 + 一组新手常见误解。</p>
+
+<table class="sym">
+<tr><th>符号 / 缩写</th><th>读法·含义</th><th>出处</th></tr>
+<tr><td>`PLUMA_COURSE`</td><td>指定默认课程（不设则取 courses.json 第一门）</td><td>本讲 §3</td></tr>
+<tr><td>`_make.py <讲号>`</td><td>生成一份讲义并过三道门</td><td>本讲 §3</td></tr>
+<tr><td>`_book.py`</td><td>把一门的全部讲合订成一本</td><td>本讲 §1</td></tr>
+<tr><td>`_ask.py <讲号> "问题"`</td><td>在这一讲里检索片段（加 `--ask` 才调模型）</td><td>docs\使用</td></tr>
+</table>
+
+<h3>常见误解</h3>
+<ol>
+<li>把讲义当成手写的：它是数据渲染出来的，改 HTML 下次重跑就没了。</li>
+<li>以为门红了可以改判据：门是用来拦内容的，改门等于拆门。</li>
+<li>以为 PDF 该进 Git：它是生成物，重跑即可再生。</li>
+<li>忘了设 `PLUMA_COURSE` 就以为代码没生效：先看输出里读的是哪门课。</li>
+</ol>
+</section>
+
+
+</body>
+</html>

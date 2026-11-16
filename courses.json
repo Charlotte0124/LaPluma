@@ -4,5 +4,11 @@
     "en": "Operating Systems",
     "desc": "进程、线程、进程间通信、内存管理｜CS340 课件讲义",
     "reader": "大学"
+  },
+  "DEMO": {
+    "title": "示例课程",
+    "en": "Sample Course",
+    "desc": "用一讲把「数据 → 讲义 → PDF → 三道门」走一遍｜示例数据，可替换成你自己的课件",
+    "reader": "大学"
   }
 }

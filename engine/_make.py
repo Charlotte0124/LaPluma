@@ -14,6 +14,8 @@ import subprocess
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# 2026-11-17：课程代码不再写死（示例课程 / 截图演示用 PLUMA_COURSE 切，默认仍是 CS340）
+COURSE = os.environ.get("PLUMA_COURSE") or "CS340"
 sys.path.insert(0, os.path.join(ROOT, 'tools', 'print'))
 sys.path.insert(0, os.path.join(ROOT, 'engine'))
 
@@ -36,7 +38,7 @@ def main(argv):
         print('=' * 60)
         print('## %s' % no)
         lesson = builder.load(no)
-        src = os.path.join(ROOT, 'CS340', '06_笔记', '%s_零基础_讲义_源.html' % no)
+        src = os.path.join(ROOT, COURSE, '06_笔记', '%s_零基础_讲义_源.html' % no)
         html = builder.build(lesson)
         if builder.MISSING:
             print('缺图 %d 张：%s' % (len(builder.MISSING), '、'.join(builder.MISSING[:4])))
@@ -59,7 +61,7 @@ def main(argv):
             print('[停] 内容门未过，先修源')
             return 1
 
-        pdf = os.path.join(ROOT, 'CS340', '01_讲义', lesson['out'])
+        pdf = os.path.join(ROOT, COURSE, '01_讲义', lesson['out'])
         rc, out = run([sys.executable, os.path.join('tools', 'print', 'html2pdf.py'), src,
                        '-o', pdf, '--theme', 'dark', '--toc', '--bg', '#0E0E0C',
                        '--footer', '%s %s · %s' % (lesson['code'], no, lesson['zh'])])
@@ -68,7 +70,7 @@ def main(argv):
             print('[停] 打印失败')
             return 1
 
-        rc, out = run([sys.executable, os.path.join('tools', 'print', 'audit_lesson.py'), 'CS340'])
+        rc, out = run([sys.executable, os.path.join('tools', 'print', 'audit_lesson.py'), COURSE])
         head = [l for l in out.strip().splitlines() if lesson['out'] in l or l.strip().startswith(('OK', 'WARN', 'FAIL', '✗', '!'))]
         print('\n'.join(head))
     return 0

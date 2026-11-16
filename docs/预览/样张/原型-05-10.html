@@ -274,10 +274,10 @@ nav a.on{background:var(--ink);color:var(--bg)}
       <p>点一门课开抽屉：看成品、问这一门、读讲义。一门课一条会话，互不串。</p>
     </div>
     <div class="courses">
-      <div class="course" data-open="CS340">
+      <div class="course" data-open="DEMO">
         <span class="star">★</span>
-        <div class="code">CS340</div>
-        <h3>操作系统</h3>
+        <div class="code">DEMO</div>
+        <h3>示例课程</h3>
         <p>九讲：进程、线程、调度、同步、内存。练习型 9 讲。</p>
         <div class="foot"><span>10 份成品</span><span>166 页</span><span>会话 2 轮</span></div>
       </div>
@@ -306,7 +306,7 @@ nav a.on{background:var(--ink);color:var(--bg)}
         <div class="rcard" style="border:0;padding:0;box-shadow:none">
           <h5>成品形态</h5>
           <div class="tabs"><button class="on">单本（一讲一份）</button><button>合订本（1 封面 + 1 总目录 + 正文）</button></div>
-          <div class="kv">范围<b>CS340 · 9 讲</b></div>
+          <div class="kv">范围<b>DEMO · 9 讲</b></div>
           <div class="kv">预计页数<b>166 页</b></div>
           <button class="btn" style="margin-top:12px" onclick="toast('原型不接生成后端：真机上点这里会跑 engine\\_make.py')">生成</button>
         </div>
@@ -322,7 +322,7 @@ nav a.on{background:var(--ink);color:var(--bg)}
         <div class="chat-h">
           <span class="back" data-nav="courses">←</span>
           <span class="sub">课程</span>
-          <span class="ttl">操作系统 · CS340</span>
+          <span class="ttl">示例课程 · DEMO</span>
           <span class="pill">本会话只查这一门</span>
         </div>
         <div class="selbar">
@@ -344,7 +344,7 @@ nav a.on{background:var(--ink);color:var(--bg)}
       <div>
         <div class="rcard">
           <h5>本会话</h5>
-          <div class="kv">范围<b>CS340 · 操作系统</b></div>
+          <div class="kv">范围<b>DEMO · 示例课程</b></div>
           <div class="kv">问答<b id="rounds">2 轮</b></div>
           <div class="kv">别的课件<b id="crossState">未接入</b></div>
           <div class="hint">一个课件一个会话；换课件就是另一条会话，上下文不串。</div>
@@ -370,8 +370,8 @@ nav a.on{background:var(--ink);color:var(--bg)}
       <div class="read-top">
         <span class="back link" data-nav="courses">←</span>
         <div>
-          <div class="t" id="rTitle">L05_进程间通信与同步_讲义.pdf</div>
-          <div class="p">CS340\01_讲义\ · <span id="rPages">17</span> 页</div>
+          <div class="t" id="rTitle">D05_示例第五讲_讲义.pdf</div>
+          <div class="p">DEMO\01_讲义\ · <span id="rPages">17</span> 页</div>
         </div>
         <div class="read-ctl">
           <div class="seg">
@@ -462,16 +462,16 @@ nav a.on{background:var(--ink);color:var(--bg)}
 /* ───────────── 状态 ───────────── */
 const S = {
   theme: localStorage.getItem('pluma.theme') || 'light',
-  lens: new Set(['L05','L06']),
+  lens: new Set(['D05','D06']),
   sel: new Set([0,2]),
   rounds: 2,
   cross: false,
   page: 12, total: 17, zoom: 100,
   notes: [],
-  target: 'L05',
+  target: 'D05',
   noteAdded: false
 };
-const LESSONS = ['L01','L02','L03','L04','L05','L06','L08','L09'];
+const LESSONS = ['D01','D02','D03','D04','D05','D06','D08','D09'];
 
 const NOTES0 = [
   {p:12, t:'21:41', x:'初值 0 = 一开始没有资源。这个和「初值 1 当锁」要一起记：一个是「没有」，一个是「独占」。'},
@@ -491,18 +491,18 @@ const MSGS = [
     <pre>down(s):
     if s &gt; 0: s = s - 1   <span class="c"># 拿到</span>
     else: 睡眠排队, s 不变   <span class="c"># 等 up 唤醒后重试</span></pre>
-    <div class="src">§6 信号量的 down / up · 课件 p.85 · <b>L05</b></div>`},
-  {role:'me', html:'<div class="bubble">那跟 L06 的互斥锁是什么关系？</div>'},
+    <div class="src">§6 信号量的 down / up · 课件 p.85 · <b>D05</b></div>`},
+  {role:'me', html:'<div class="bubble">那跟 D06 的互斥锁是什么关系？</div>'},
   {role:'ai', html:`
     <h4>锁是「只有 0 和 1」的信号量：初值 1、加锁 = down、解锁 = up</h4>
-    <p>区别只在语义 —— 锁值只表达「独占」，信号量还能表达「还有几个可用」。这一条跨到了 L06，回答里会标出来。</p>
-    <div class="src">§6 信号量 / §2 互斥锁 · 课件 p.85、p.9 · <b>L05 + L06（跨讲）</b></div>`}
+    <p>区别只在语义 —— 锁值只表达「独占」，信号量还能表达「还有几个可用」。这一条跨到了 D06，回答里会标出来。</p>
+    <div class="src">§6 信号量 / §2 互斥锁 · 课件 p.85、p.9 · <b>D05 + D06（跨讲）</b></div>`}
 ];
 
 const PAGES = {
   11:{html:`
     <h3>§5 为什么要有信号量：从忙等说起</h3>
-    <div class="meta">CS340 · L05 进程间通信与同步 ｜ 讲义 · 练习型</div>
+    <div class="meta">DEMO · D05 示例第五讲 ｜ 讲义 · 练习型</div>
     <p>用「反复检查标志位」来等资源，叫忙等（busy waiting）：CPU 空转，还不一定轮到你。信号量把「等」交给内核调度，进程睡眠排队，有人释放再被唤醒。</p>
     <pre>while (flag == 1) ;   <span class="c">// 忙等：空转，浪费一个时间片</span>
 P(s);                 <span class="c">// 睡眠排队，让出 CPU</span></pre>
@@ -511,7 +511,7 @@ P(s);                 <span class="c">// 睡眠排队，让出 CPU</span></pre>
     <div class="pn">— 11 —</div>`},
   12:{html:`
     <h3>§6 信号量：初值、down/up 与互斥</h3>
-    <div class="meta">CS340 · L05 进程间通信与同步 ｜ 讲义 · 练习型</div>
+    <div class="meta">DEMO · D05 示例第五讲 ｜ 讲义 · 练习型</div>
     <p>信号量是一个整数 s 加一个等待队列。它在讲义里的身份由初值决定：初值 1 当锁用，初值 N 当「还剩几个空位」用。</p>
     <h4>6.1 down 在 s = 0 时发生什么</h4>
     <p>初值 0 表示一开始没有可用资源，因此第一个 down 就会把 s 减到 −1，进程进入等待队列并让出 CPU。</p>
@@ -543,7 +543,7 @@ P(s);                 <span class="c">// 睡眠排队，让出 CPU</span></pre>
     <div class="pn">— 12 —</div>`},
   13:{html:`
     <h3>6.2 up 在队列非空时发生什么</h3>
-    <div class="meta">CS340 · L05 进程间通信与同步 ｜ 讲义 · 练习型</div>
+    <div class="meta">DEMO · D05 示例第五讲 ｜ 讲义 · 练习型</div>
     <p>up 先把 s 加 1，再看队列：队列不空就唤醒队首进程，让它的 down 重试（s 已经够用，于是减回 0 进入临界区）。</p>
     <pre>def up(s):
     s = s + 1
@@ -642,21 +642,21 @@ function notePageHtml(){
 
 /* ───────────── 笔记弹窗 ───────────── */
 const PDFS = [
-  {k:'L05', name:'L05_进程间通信与同步_讲义.pdf', p:17},
-  {k:'book', name:'CS340_九讲合订本_讲义.pdf', p:144},
-  {k:'L06', name:'L06_线程_讲义.pdf', p:16},
-  {k:'L0402', name:'L04-02_进程组织与调度二_讲义.pdf', p:20}
+  {k:'D05', name:'D05_示例第五讲_讲义.pdf', p:17},
+  {k:'book', name:'DEMO_合订本_讲义.pdf', p:144},
+  {k:'D06', name:'D06_示例第六讲_讲义.pdf', p:16},
+  {k:'L0402', name:'D04-02_示例第四讲二_讲义.pdf', p:20}
 ];
 function openNote(){
   const n = S.sel.size;
   if (!n) return;
-  document.getElementById('noteCap').innerHTML = `已选 <b>${n} 条</b>：2 个问题 · 1 个回答 · 来自 <b>CS340 · ${[...S.lens].join(' / ') || '整门课'}</b>`;
+  document.getElementById('noteCap').innerHTML = `已选 <b>${n} 条</b>：2 个问题 · 1 个回答 · 来自 <b>DEMO · ${[...S.lens].join(' / ') || '整门课'}</b>`;
   document.getElementById('notePrev').innerHTML = `
     <h3>信号量与互斥锁：初值 0 意味着什么</h3>
     <div class="row"><span>结论</span><div>初值 0 = 一开始没有可用资源，第一个 down 就进等待队列。</div></div>
     <div class="row"><span>为什么</span><div>down 先把 s 减 1；减到 −1 表示有 1 个进程在等，该进程睡眠并让出 CPU。</div></div>
     <div class="row"><span>和锁的关系</span><div>锁是二元信号量（初值 1）：加锁 = down、解锁 = up，只表达独占。</div></div>
-    <div class="row"><span>出处</span><div>§6 课件 p.85（L05）· §2 课件 p.9（L06）</div></div>`;
+    <div class="row"><span>出处</span><div>§6 课件 p.85（D05）· §2 课件 p.9（D06）</div></div>`;
   document.getElementById('pdfs').innerHTML = PDFS.map(p => `
     <button data-pdf="${p.k}" class="${S.target === p.k ? 'on' : ''}">
       ${p.name}<b>${p.p} p</b>
@@ -672,7 +672,7 @@ function typeTerm(){
   termDone = true;
   const lines = [
     '<span class="ps">PS F:\\文件\\Chatbox文件\\LaPluma&gt;</span> .\\一键启动.ps1',
-    '<span class="name">羽毛笔 La Pluma v1.4.0 · 主机已上线</span>',
+    '<span class="name">羽毛笔 La Pluma v1.5.0 · 主机已上线</span>',
     '<span class="k">本机</span>    <span class="v">http://127.0.0.1:8765/</span>',
     '<span class="k">局域网</span>  <span class="hl">http://192.0.2.23:8765/</span>  <span class="dim">← 平板 / 手机用这个</span>',
     '<span class="k">访问码</span>  <span class="hl">4821 6735</span>  <span class="dim">← 只给对一次，同一 WiFi 才能用</span>',
@@ -753,12 +753,12 @@ document.getElementById('noteGo').addEventListener('click', () => {
   S.noteAdded = true;
   S.total = 18;
   S.page = 18;
-  toast('已生成 L05_进程间通信与同步_讲义_附笔记.pdf（17 → 18 页）', '去读第 18 页', () => go('read'));
+  toast('已生成 D05_示例第五讲_讲义_附笔记.pdf（17 → 18 页）', '去读第 18 页', () => go('read'));
 });
 document.getElementById('crossBtn').addEventListener('click', () => {
   S.cross = !S.cross;
   document.getElementById('crossState').textContent = S.cross ? '1 门' : '未接入';
-  toast(S.cross ? '已引用 L06：回答里会标注跨讲引用' : '已取消跨课件引用');
+  toast(S.cross ? '已引用 D06：回答里会标注跨讲引用' : '已取消跨课件引用');
 });
 document.getElementById('sendBtn').addEventListener('click', send);
 document.getElementById('q').addEventListener('keydown', e => { if (e.key === 'Enter') send(); });

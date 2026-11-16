@@ -24,12 +24,30 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 UI_DIR = os.path.join(ROOT, "ui")
-NOTES = os.path.join(ROOT, "CS340", "06_笔记")
-PDF_DIR = os.path.join(ROOT, "CS340", "01_讲义")
-LESSONS = os.path.join(ROOT, "CS340", "_lessons")
+# 2016-11-17：默认课程不再写死 CS340 —— 原来的「多课程」只是 UI 支持，代码里到处是 CS340，
+#   换一门课（示例课程 / 截图演示）就得改代码。现在取 courses.json 的第一个 key，
+#   环境变量 PLUMA_COURSE 可覆盖（截图演示仓靠它切到示例课程）。
+def _pick_default_course() -> str:
+    env = os.environ.get("PLUMA_COURSE")
+    if env:
+        return env
+    try:
+        with open(os.path.join(ROOT, "courses.json"), "r", encoding="utf-8-sig") as _f:
+            _keys = [k for k in json.load(_f).keys() if not k.startswith("_")]
+        if _keys:
+            return _keys[0]
+    except Exception:  # noqa: BLE001
+        pass
+    return "CS340"
+
+
+DEFAULT_COURSE = _pick_default_course()
+NOTES = os.path.join(ROOT, DEFAULT_COURSE, "06_笔记")
+PDF_DIR = os.path.join(ROOT, DEFAULT_COURSE, "01_讲义")
+LESSONS = os.path.join(ROOT, DEFAULT_COURSE, "_lessons")
 API_DIR = os.path.join(ROOT, "api")
 LOG_DIR = os.path.join(ROOT, "_logs")
-USER_DIR = os.path.join(os.path.expanduser("~"), ".pluma")
+USER_DIR = os.environ.get("PLUMA_HOME") or os.path.join(os.path.expanduser("~"), ".pluma")
 CFG_PATH = os.path.join(USER_DIR, "api.json")
 FAV_PATH = os.path.join(USER_DIR, "favorites.json")
 USAGE_PATH = os.path.join(LOG_DIR, "usage.jsonl")
@@ -40,7 +58,7 @@ HOST, PORT = "127.0.0.1", 8765
 #   index.html 必须仍走 no-store（改完界面要能立刻看到新版）。
 _STATIC_ETAG = {}
 VERSION = "1.5.0"
-BOOK_NAME = "CS340_九讲合订本_讲义.pdf"
+BOOK_NAME = DEFAULT_COURSE + "_九讲合订本_讲义.pdf"
 
 # ---------- 主机上线（局域网 + 8 位访问码）----------
 # 2026-11-16 用户定 A 方案：只在跑服务的这台电脑上线；同一 WiFi 的平板/手机用访问码打开。
@@ -148,7 +166,7 @@ def _write_json(path, obj):
 
 def load_cfg():
     cfg = _read_json(CFG_PATH)
-    default_dir = os.path.join("CS340", "01_讲义")
+    default_dir = os.path.join(DEFAULT_COURSE, "01_讲义")
     out = {
         "provider": cfg.get("provider", "DeepSeek"),
         "base_url": cfg.get("base_url", "https://api.deepseek.com"),
@@ -161,6 +179,12 @@ def load_cfg():
     # 2026-11-16 实际撞到：某个写入环节把「讲义」写成了 ??，之后每次生成都往 CS340/01_?? 里放。
     # 路径里出现问号就认为被编码破坏，退回默认目录并在界面上说明。
     if "?" in out["save_dir"] or "\ufffd" in out["save_dir"]:
+        out["save_dir"] = default_dir
+        out["save_dir_fixed"] = True
+    # 2026-11-17：换课程（示例课程 / 别人自己的课件）后，配置里存的旧课程目录会失效——
+    #   以前会把 PDF 写到一个不存在的目录。现在目录不存在就退回当前课程的默认目录。
+    _first = os.path.normpath(out["save_dir"]).split(os.sep)[0]
+    if _first and _first not in (".", "..") and not os.path.isdir(os.path.join(ROOT, _first)):
         out["save_dir"] = default_dir
         out["save_dir_fixed"] = True
     # 本机没填 key 时，走 D 层的三级回退（环境变量 / PRTS secrets）
@@ -547,7 +571,7 @@ class Handler(BaseHTTPRequestHandler):
             if u.path == "/api/host":
                 return self._json(dict(ok=True, **host_state()))
             if u.path == "/api/notes":
-                return self._json(dict(ok=True, **load_notes(q.get("code", ["CS340"])[0],
+                return self._json(dict(ok=True, **load_notes(q.get("code", [DEFAULT_COURSE])[0],
                                                              q.get("doc", [""])[0])))
             if u.path == "/favicon.ico":
                 self.send_response(204)
@@ -581,7 +605,7 @@ class Handler(BaseHTTPRequestHandler):
                     return self._json({"ok": False, "error": str(e)})
             if u.path == "/api/session":
                 # 会话读取：一个课件一个会话，文件在 %USERPROFILE%\.pluma\sessions
-                return self._json(dict(ok=True, **load_session(q.get("code", ["CS340"])[0])))
+                return self._json(dict(ok=True, **load_session(q.get("code", [DEFAULT_COURSE])[0])))
             if u.path == "/api/pdf":
                 rel = q.get("p", [""])[0]
                 return self._file(safe_join(*rel.split("/")))
@@ -610,7 +634,7 @@ class Handler(BaseHTTPRequestHandler):
             if not self._authed():
                 return self._json({"ok": False, "need_access": True, "error": "需要访问码"}, 401)
             if u.path == "/api/notes":
-                code = str(body.get("code") or "CS340")
+                code = str(body.get("code") or DEFAULT_COURSE)
                 doc = str(body.get("doc") or "")
                 cur = load_notes(code, doc)["notes"]
                 act = str(body.get("action") or "add")
@@ -635,7 +659,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({"ok": True, "notes": cur, "count": n})
             if u.path == "/api/note/export":
                 # 07：选中对话 / 侧栏笔记 → 整理成笔记页 → 追加到指定 PDF 末尾（另存副本）
-                code = str(body.get("code") or "CS340")
+                code = str(body.get("code") or DEFAULT_COURSE)
                 target = str(body.get("target") or "").strip()
                 if not target:
                     return self._json({"ok": False, "error": "要选一份 PDF 作为追加目标"}, 400)
@@ -710,7 +734,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({"ok": True, "configured": bool(cfg["api_key"])})
             if u.path == "/api/session":
                 # 追加 / 清空：前端提问成功后把问答两边都落盘，关掉再开还在
-                code = str(body.get("code") or "CS340")
+                code = str(body.get("code") or DEFAULT_COURSE)
                 act = str(body.get("action") or "append")
                 sess = load_session(code)
                 if act == "clear":
@@ -739,7 +763,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({"ok": True, "fav": code in codes})
             if u.path == "/api/generate":
                 no = str(body.get("lesson", "")).strip()
-                course = str(body.get("course", "CS340")).strip()
+                course = str(body.get("course", DEFAULT_COURSE)).strip()
                 form = str(body.get("form", "single")).strip() or "single"
                 t0 = time.time()
                 if form == "book":
@@ -770,7 +794,7 @@ class Handler(BaseHTTPRequestHandler):
                 # 问课件：先检索，再由模型回答。
                 # 2026-11-16：改成「一个课件一个会话」——不传 lesson 就搜整门课；
                 # 跨课件必须显式 allow_cross=true，否则永远只在当前这门里找。
-                code = str(body.get("course") or "CS340").strip()
+                code = str(body.get("course") or DEFAULT_COURSE).strip()
                 no = str(body.get("lesson") or "").strip()
                 allow_cross = bool(body.get("allow_cross"))
                 # 2026-11-16：讲次改成勾选多选（05），前端传 lessons 列表；空 = 整门课

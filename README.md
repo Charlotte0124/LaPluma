@@ -28,19 +28,24 @@
 
 ## 下载
 
-**① 下载安装包（推荐）**：[`LaPluma-1.1.0.zip`](https://github.com/Charlotte0124/LaPluma/releases/latest) → 解压到任意目录 → 双击 `一键启动.ps1`。
-
-- 需要 Python 3.12（脚本会检查并提示），依赖只有一个 `pymupdf`
-- 需要本机 Chrome 或 Edge（打印 PDF 用，不用另装）
-- 仓库是私有的，下载前先登录 GitHub
-
-**② 从源码跑**
+**从源码跑（目前唯一方式）**
 
 ```powershell
 git clone https://github.com/Charlotte0124/LaPluma.git
 cd LaPluma
 .\一键启动.ps1
 ```
+
+- 需要 Python 3.12（脚本会检查并提示），依赖只有一个 `pymupdf`
+- 需要本机 Chrome 或 Edge（打印 PDF 用，不用另装）
+- **仓库自带示例课程 `DEMO`**：不用准备任何教材就能把「数据 → 讲义 → PDF → 三道门」跑一遍：
+
+```powershell
+$env:PLUMA_COURSE='DEMO'
+python engine\_make.py D01
+```
+
+换你自己的课件：把数据写成 `<课程代码>\_lessons\<讲号>.py`（结构见 `DEMO\_lessons\D01.py`），在 `courses.json` 里登记一行即可。
 
 ## 一键启动
 
