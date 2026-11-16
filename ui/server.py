@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import mimetypes
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -54,6 +55,65 @@ MODELS = [
     {"id": "deepseek-flash", "name": "DeepSeek 4.1 Flash", "note": "快、便宜；日常生成够用"},
     {"id": "deepseek-v4-pro", "name": "DeepSeek 4.1 Pro", "note": "更强；长推导、结构复杂的讲次"},
 ]
+
+
+# ---------- 会话（一个课件一个会话） ----------
+# 2026-11-16：课程会话按课件隔离，存本机用户目录，不进仓库。
+# 存 %USERPROFILE%\.pluma\sessions\<课程代码>.json —— 换课件就是另一个文件，上下文不会串。
+SESS_DIR = os.path.join(os.path.expanduser("~"), ".pluma", "sessions")
+
+
+def _safe_code(code: str) -> str:
+    return re.sub(r"[^A-Za-z0-9_.-]", "_", code or "default")
+
+
+def load_lesson(course: str, no: str) -> dict:
+    """按 <课程>/_lessons/<讲>.py 读数据（引擎的 builder.load 写死了 CS340，这里按课程走）。"""
+    import importlib.util as ilu
+    path = os.path.join(ROOT, course, "_lessons", no + ".py")
+    if not os.path.isfile(path):
+        raise FileNotFoundError(path)
+    spec = ilu.spec_from_file_location("lesson_%s_%s" % (_safe_code(course), _safe_code(no)), path)
+    mod = ilu.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod.LESSON
+
+
+def find_lesson(course: str) -> list[str]:
+    d = os.path.join(ROOT, course, "_lessons")
+    if not os.path.isdir(d):
+        return []
+    return sorted(x[:-3] for x in os.listdir(d) if x.endswith(".py"))
+
+
+def load_ask_module():
+    """engine/_ask.py 当模块用（检索 + 提示词）。"""
+    import importlib.util as ilu
+    path = os.path.join(ROOT, "engine", "_ask.py")
+    if not os.path.isfile(path):
+        return None
+    spec = ilu.spec_from_file_location("pluma_ask", path)
+    mod = ilu.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def load_session(code: str) -> dict:
+    d = _read_json(os.path.join(SESS_DIR, _safe_code(code) + ".json"), {})
+    if not isinstance(d, dict):
+        d = {}
+    msgs = d.get("messages")
+    return {"code": code, "messages": msgs if isinstance(msgs, list) else [],
+            "updated": d.get("updated", "")}
+
+
+def save_session(code: str, sess: dict) -> int:
+    os.makedirs(SESS_DIR, exist_ok=True)
+    sess["code"] = code
+    sess["updated"] = time.strftime("%Y-%m-%d %H:%M")
+    sess["messages"] = (sess.get("messages") or [])[-200:]  # 只留最近 200 条，防文件无限长
+    _write_json(os.path.join(SESS_DIR, _safe_code(code) + ".json"), sess)
+    return len(sess["messages"])
 
 
 # ---------- 配置 ----------
@@ -243,6 +303,9 @@ class Handler(BaseHTTPRequestHandler):
                                        "balance": (cny or {}).get("total_balance", "0.00")})
                 except Exception as e:  # noqa: BLE001
                     return self._json({"ok": False, "error": str(e)})
+            if u.path == "/api/session":
+                # 会话读取：一个课件一个会话，文件在 %USERPROFILE%\.pluma\sessions
+                return self._json(dict(ok=True, **load_session(q.get("code", ["CS340"])[0])))
             if u.path == "/api/pdf":
                 rel = q.get("p", [""])[0]
                 return self._file(safe_join(*rel.split("/")))
@@ -279,6 +342,26 @@ class Handler(BaseHTTPRequestHandler):
                     cfg["wizard_done"] = bool(body["wizard_done"])
                 save_cfg(cfg)
                 return self._json({"ok": True, "configured": bool(cfg["api_key"])})
+            if u.path == "/api/session":
+                # 追加 / 清空：前端提问成功后把问答两边都落盘，关掉再开还在
+                code = str(body.get("code") or "CS340")
+                act = str(body.get("action") or "append")
+                sess = load_session(code)
+                if act == "clear":
+                    sess["messages"] = []
+                    return self._json({"ok": True, "cleared": True, "count": save_session(code, sess)})
+                msg = body.get("message") or {}
+                text = str(msg.get("text") or "").strip()
+                if not text:
+                    return self._json({"ok": False, "error": "空消息"}, 400)
+                sess["messages"].append({
+                    "role": str(msg.get("role") or "user"),
+                    "text": text[:4000],
+                    "refs": msg.get("refs") or [],
+                    "meta": str(msg.get("meta") or ""),
+                    "at": time.strftime("%H:%M"),
+                })
+                return self._json({"ok": True, "count": save_session(code, sess)})
             if u.path == "/api/favorites":
                 code = str(body.get("code", ""))
                 fav = _read_json(FAV_PATH, {"codes": []})
@@ -318,39 +401,67 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({"ok": p.returncode == 0, "log": log, "form": "single",
                                    "seconds": round(time.time() - t0, 1), "copied": copied})
             if u.path == "/api/ask":
-                # 问课件：只在这一讲的内容数据里找片段（不联网、不跨讲），再交给模型回答
-                import importlib.util as _ilu
-                no = str(body.get("lesson", "")).strip()
-                course = str(body.get("course", "CS340")).strip()
-                question = str(body.get("question", "")).strip()
+                # 问课件：先检索，再由模型回答。
+                # 2026-11-16：改成「一个课件一个会话」——不传 lesson 就搜整门课；
+                # 跨课件必须显式 allow_cross=true，否则永远只在当前这门里找。
+                code = str(body.get("course") or "CS340").strip()
+                no = str(body.get("lesson") or "").strip()
+                allow_cross = bool(body.get("allow_cross"))
+                question = str(body.get("question") or "").strip()
+                history = body.get("history") or []
                 if not (2 <= len(question) <= 500):
-                    return self._json({"ok": False, "error": "问题长度要在 2–500 字之间"}, 400)
-                path = os.path.join(ROOT, "engine", "_ask.py")
-                if not os.path.isfile(path):
+                    return self._json({"ok": False, "error": "问题长度要在 2-500 字之间"}, 400)
+                mod = load_ask_module()
+                if mod is None:
                     return self._json({"ok": False, "error": "缺少 engine/_ask.py"}, 500)
+                targets = [(code, no)] if no else [(code, x) for x in find_lesson(code)]
+                if allow_cross:
+                    for c in discover_courses():
+                        if c["code"] != code:
+                            targets.extend((c["code"], x) for x in c["lessons"])
+                if not targets:
+                    return self._json({"ok": False, "error": "这一门还没有可提问的讲次"}, 400)
+                picked, first = [], None
+                for (c, n) in targets:
+                    try:
+                        lesson = load_lesson(c, n)
+                    except Exception as e:  # noqa: BLE001
+                        if len(targets) == 1:
+                            return self._json({"ok": False, "error": "读不到 %s/%s 的数据：%r" % (c, n, e)}, 400)
+                        continue
+                    if first is None:
+                        first = lesson
+                    for r in mod.search(lesson, question, top_k=3):
+                        r = dict(r)
+                        r["course"], r["lesson"] = c, n
+                        picked.append(r)
+                picked.sort(key=lambda r: -r.get("score", 0))
+                picked = picked[:6]
+                refs = [{"course": r["course"], "lesson": r["lesson"], "sec": r["sec"],
+                         "title": r["title"], "kind": r["kind"], "pages": r["pages"],
+                         "text": r["text"][:160]} for r in picked]
                 cfg = load_cfg()
-                spec = _ilu.spec_from_file_location("pluma_ask", path)
-                mod = _ilu.module_from_spec(spec)
-                spec.loader.exec_module(mod)
-                try:
-                    lesson = mod.builder.load(no)
-                except Exception as e:  # noqa: BLE001
-                    return self._json({"ok": False, "error": "读不到这一讲的数据：%r" % e}, 400)
-                picked = mod.search(lesson, question)
-                refs = [{"sec": r["sec"], "title": r["title"], "kind": r["kind"],
-                         "pages": r["pages"], "text": r["text"][:160]} for r in picked]
                 if api_client is None or not cfg["api_key"]:
                     return self._json({"ok": False, "need_key": True, "refs": refs,
-                                       "error": "没配置 API 钥匙，不能真问。上方设置里填 sk- 开头的 key；"
-                                                "已检索到的片段在下面可以直接看。"})
+                                       "error": "没配置 API 钥匙，不能真问。已检索到的片段在下面可以直接看。"})
+                bare = {"code": code, "no": no or "全课",
+                        "zh": "（跨讲检索）" if not no else str((first or {}).get("zh", ""))}
+                msgs = mod.build_prompt(bare, question, picked)
+                hist = [{"role": ("user" if m.get("role") == "user" else "assistant"),
+                         "content": str(m.get("text") or "")[:600]}
+                        for m in history[-4:] if m.get("text")]
+                if hist:
+                    msgs = [msgs[0]] + hist + msgs[1:]
                 t0 = time.time()
                 try:
-                    out = mod.answer(lesson, question, model=cfg["model"])
+                    out = api_client.chat(msgs, model=cfg["model"])
                 except Exception as e:  # noqa: BLE001
                     return self._json({"ok": False, "error": "模型调用失败：%s" % e, "refs": refs}, 502)
                 log_usage(out.get("model", cfg["model"]), out.get("usage", {}))
                 return self._json({"ok": True, "answer": out["text"], "model": out["model"],
-                                   "seconds": round(time.time() - t0, 1), "refs": refs})
+                                   "seconds": round(time.time() - t0, 1), "refs": refs,
+                                   "scope": {"course": code, "lesson": no or "全课",
+                                             "cross": allow_cross}})
             return self._json({"ok": False, "error": "无此路由"}, 404)
         except subprocess.TimeoutExpired:
             return self._json({"ok": False, "error": "生成超时（>300 s）"}, 504)

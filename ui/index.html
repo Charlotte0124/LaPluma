@@ -10,14 +10,19 @@
   a{color:inherit;text-decoration:none}
   button{font:inherit}
   .wrap{max-width:1080px;margin:0 auto;padding:26px 20px 40px}
-  header{display:flex;align-items:center;justify-content:space-between;padding-bottom:16px;border-bottom:1px solid var(--line)}
+  header{display:flex;align-items:center;gap:26px;padding-bottom:16px;border-bottom:1px solid var(--line)}
   .logo{display:flex;align-items:center;gap:9px;font-size:16px;font-weight:600;letter-spacing:.05em}
   .logo em{font-style:italic;font-weight:400;color:var(--faint);font-family:Georgia,serif;font-size:14px}
-  .head-r{display:flex;gap:16px;align-items:center;font-size:12.5px;color:var(--sub)}
+  nav{display:flex;gap:4px}
+  nav a{font-size:13px;padding:6px 14px;border-radius:999px;cursor:pointer;color:var(--sub)}
+  nav a.on{background:var(--ink);color:#fff}
+  .head-r{margin-left:auto;display:flex;gap:16px;align-items:center;font-size:12.5px;color:var(--sub)}
   .dot{width:7px;height:7px;border-radius:50%;background:var(--faint);display:inline-block;margin-right:6px}
   .dot.ok{background:var(--ok)} .dot.no{background:var(--red)}
   .link{cursor:pointer;border-bottom:1px solid transparent}
   .link:hover{border-color:var(--faint)}
+  .page{display:none}
+  .page.on{display:block}
   .hero{padding:32px 0 20px}
   .hero h1{font-size:33px;margin:0;font-weight:600;letter-spacing:.01em}
   .hero p{margin:9px 0 0;color:var(--sub)}
@@ -63,15 +68,34 @@
   .qi.fail{border-color:#e9c7c4;background:#fdf5f4}
   .qi.fail .st{color:var(--red)}
   .log{margin-top:10px;background:#12120f;color:#d9d4c6;border-radius:10px;padding:12px;font-family:Consolas,monospace;font-size:11.5px;line-height:1.7;max-height:220px;overflow:auto;white-space:pre-wrap;display:none}
-.ask-a{margin-top:12px;background:#12120f;border:1px solid var(--line);border-radius:10px;padding:14px}
-.ask-q{color:var(--faint);font-size:12.5px;margin-bottom:8px}
-.ask-text{color:#e9e5d8;font-size:13px;line-height:1.85}
-.ask-meta{margin-top:10px;color:var(--faint);font-size:11.5px}
-.ask-a details{margin-top:12px;border-top:1px solid var(--line);padding-top:10px}
-.ask-a summary{cursor:pointer;font-size:12px;color:var(--faint)}
-.ask-a ol{margin:10px 0 0 18px;padding:0;color:#cfcabb;font-size:12px;line-height:1.7}
-.ask-a li{margin-bottom:8px}
-.ask-a small{color:var(--faint)}
+  /* ---- 会话页 ---- */
+  .chat{display:grid;grid-template-columns:1fr 268px;gap:14px;margin-top:18px}
+  .chat-main{background:var(--card);border:1px solid var(--line);border-radius:14px;display:flex;flex-direction:column;height:620px}
+  .chat-h{display:flex;align-items:center;gap:10px;padding:13px 18px;border-bottom:1px solid var(--line)}
+  .chat-h .back{font-size:12px;color:var(--sub);cursor:pointer}
+  .chat-h .who{font-size:14px;font-weight:600}
+  .chat-h .only{margin-left:auto;font-size:11px;color:var(--faint);border:1px solid var(--line);border-radius:999px;padding:4px 10px}
+  .msgs{flex:1;overflow:auto;padding:18px}
+  .m{display:flex;gap:10px;margin-bottom:16px}
+  .m .av{width:24px;height:24px;border-radius:50%;background:#efece6;font-size:10px;display:flex;align-items:center;justify-content:center;color:var(--sub);flex:0 0 24px}
+  .m .bd{font-size:13px;line-height:1.85;max-width:86%}
+  .m.u .bd{background:#f4f2ee;border-radius:10px;padding:9px 13px}
+  .m .cite{margin-top:8px;font-family:Consolas,monospace;font-size:11px;color:var(--faint);line-height:1.7}
+  .m .cite b{color:#7a6a3a;font-weight:500}
+  .m .src{margin-top:6px}
+  .m .src summary{cursor:pointer;font-size:11.5px;color:var(--faint)}
+  .m .src ol{margin:8px 0 0 18px;padding:0;font-size:11.5px;color:var(--sub);line-height:1.7}
+  .composer{border-top:1px solid var(--line);padding:11px 16px;display:flex;gap:9px;align-items:center}
+  .composer input{flex:1}
+  .cross{font-size:11px;color:var(--sub);border:1px dashed var(--line);border-radius:999px;padding:6px 10px;white-space:nowrap;cursor:pointer;display:flex;align-items:center;gap:5px}
+  .cross input{width:13px;height:13px}
+  .side{display:flex;flex-direction:column;gap:12px}
+  .sbox{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:15px}
+  .sbox h4{margin:0 0 9px;font-size:12.5px;font-weight:600}
+  .sbox .kv{display:flex;justify-content:space-between;font-size:12px;padding:5px 0;border-bottom:1px solid #f0eeea;color:var(--sub)}
+  .sbox .kv b{color:var(--ink);font-weight:600}
+  .anno{font-size:11px;color:var(--faint);margin-top:8px;line-height:1.7}
+  .empty{padding:26px;color:var(--faint);font-size:12.5px}
   footer{margin-top:34px;padding-top:16px;border-top:1px solid var(--line);display:flex;justify-content:space-between;font-size:12px;color:var(--faint);gap:14px;flex-wrap:wrap}
   .aibadge{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);background:#fff;border-radius:999px;padding:6px 13px;font-size:11.5px;color:var(--sub)}
   .aibadge i{width:13px;height:13px;border:1px solid var(--faint);border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:8px;font-style:normal}
@@ -89,7 +113,9 @@
   .f .n span{display:block;font-family:Consolas,monospace;font-size:10px;color:var(--faint);margin-top:2px}
   .f .pg{font-family:Consolas,monospace;font-size:11px;color:var(--sub);text-align:right}
   .f .op{font-size:11.5px;color:var(--red);text-align:right}
-  .dr-f{padding:11px 22px;border-top:1px solid var(--line);font-family:Consolas,monospace;font-size:10.5px;color:var(--faint)}
+  .dr-f{padding:9px 22px;border-top:1px solid var(--line);font-family:Consolas,monospace;font-size:10.5px;color:var(--faint)}
+  .dr-ask{padding:13px 22px;border-top:1px solid var(--line);display:flex;align-items:center;gap:12px;background:#faf9f6}
+  .dr-ask .note{font-size:11px;color:var(--faint);line-height:1.5}
   .veil{position:fixed;inset:0;background:rgba(23,23,20,.38);display:none;align-items:center;justify-content:center;z-index:40;padding:20px}
   .veil.on{display:flex}
   .dlg{width:560px;max-width:96vw;max-height:92vh;overflow:auto;background:#fff;border-radius:16px;padding:24px 26px;box-shadow:0 30px 70px rgba(23,23,20,.22)}
@@ -101,7 +127,6 @@
   .acts{display:flex;justify-content:flex-end;gap:9px;margin-top:20px}
   .chk{display:flex;gap:8px;align-items:center;margin-top:14px;font-size:12.5px;color:#4c4a45;cursor:pointer}
   .chk input{width:15px;height:15px}
-  /* 向导 */
   .wiz-steps{display:flex;gap:18px;margin:14px 0 18px;font-size:11.5px;color:var(--faint)}
   .wiz-steps b{color:var(--ink)}
   .pick{display:flex;gap:9px;margin-bottom:14px}
@@ -122,6 +147,10 @@
       </svg>
       羽毛笔<em>La Pluma</em>
     </div>
+    <nav id="nav">
+      <a data-page="courses" class="on">课程</a>
+      <a data-page="generate">生成</a>
+    </nav>
     <div class="head-r">
       <span><i class="dot" id="dot"></i><span id="status">检查中…</span></span>
       <span class="link" id="btnTut">教学</span>
@@ -129,78 +158,109 @@
     </div>
   </header>
 
-  <div class="hero">
-    <h1>把一讲的内容，出一份能核对的讲义</h1>
-    <p>数据 → 讲义源 → 打印 PDF → 过三道门。红项不出货。</p>
-    <div class="stats">
-      <div><b id="sCourses">—</b><span>门课</span></div>
-      <div><b id="sFiles">—</b><span>份讲义</span></div>
-      <div><b id="sPages">—</b><span>页成品</span></div>
-      <div><b id="sLessons">—</b><span>讲可生成</span></div>
+  <!-- 页一：课程 -->
+  <div class="page on" id="page-courses">
+    <div class="hero">
+      <h1>把一讲的内容，出一份能核对的讲义</h1>
+      <p>数据 → 讲义源 → 打印 PDF → 过三道门。红项不出货。</p>
+      <div class="stats">
+        <div><b id="sCourses">—</b><span>门课</span></div>
+        <div><b id="sFiles">—</b><span>份讲义</span></div>
+        <div><b id="sPages">—</b><span>页成品</span></div>
+        <div><b id="sLessons">—</b><span>讲可生成</span></div>
+      </div>
     </div>
+    <section>
+      <div class="sec-h">
+        <h2>课程</h2>
+        <div class="tabs"><span class="tab on" data-tab="all">全部</span><span class="tab" data-tab="fav">收藏</span></div>
+      </div>
+      <div class="courses" id="courses"></div>
+    </section>
   </div>
 
-  <section>
-    <div class="sec-h">
-      <h2>课程</h2>
-      <div class="tabs"><span class="tab on" data-tab="all">全部</span><span class="tab" data-tab="fav">收藏</span></div>
-    </div>
-    <div class="courses" id="courses"></div>
-  </section>
+  <!-- 页二：生成 -->
+  <div class="page" id="page-generate">
+    <div class="hero" style="padding:26px 0 6px"><h1 style="font-size:24px">生成</h1>
+      <p style="font-size:13px">选课程与讲次 → 过免责声明 → 开始；成功后自动从队列消失。</p></div>
+    <section>
+      <div class="grid2">
+        <div class="card">
+          <h3>输出方式</h3>
+          <p class="hint">二选一；生成的成品会复制到你设的保存目录。</p>
+          <div class="opts">
+            <div class="opt on" data-mode="local"><b>保存到本地</b><small>落到保存目录</small></div>
+            <div class="opt" data-mode="repo"><b>推送到仓库</b><small>本仓提交即推送</small></div>
+          </div>
+          <div class="fld"><code id="outPath">CS340/01_讲义</code><span style="font-size:11.5px;color:var(--faint)">保存目录</span></div>
+          <p class="note-s" id="dirFix" style="display:none;color:#b4332c">保存目录在配置里是乱码（出现过 ?），已临时退回默认目录；请到「设置」里重填。</p>
+          <h3 style="margin-top:16px">成品形态</h3>
+          <p class="hint">单本＝一讲一份 PDF（默认）；合订本＝全部讲合成一本，去掉各讲自带的封面与目录。</p>
+          <div class="opts" id="formOpts">
+            <div class="opt on" data-form="single"><b>单本</b><small>一讲一份</small></div>
+            <div class="opt" data-form="book"><b>合订本</b><small>全部讲一本</small></div>
+          </div>
+          <div class="tools">
+            <select id="courseSel"></select>
+            <select id="lessonSel"></select>
+            <button class="btn primary" id="btnGen">开始生成</button>
+          </div>
+          <div class="queue" id="queue"></div>
+          <div class="log" id="log"></div>
+        </div>
+        <div class="card">
+          <h3>模型与用量</h3>
+          <p class="hint">真实余额来自接口；花费是按 token 估的，不是账单。</p>
+          <div class="kv"><span>当前模型</span><b id="mModel">—</b></div>
+          <div class="kv"><span>账户余额</span><b id="mBal">—</b></div>
+          <div class="kv"><span>累计调用</span><b id="mCalls">—</b></div>
+          <div class="kv"><span>token（入 / 出）</span><b id="mTok">—</b></div>
+          <div class="kv"><span>估算花费</span><b id="mCost">—</b></div>
+          <p class="note-s">不填 key 也能出 PDF：已有数据走本地渲染，不需要模型。只有「写新内容」才用得到。</p>
+        </div>
+      </div>
+    </section>
+  </div>
 
-  <section>
-    <div class="sec-h"><h2>生成</h2><span style="font-size:12px;color:var(--faint)">成功后自动从队列消失</span></div>
-    <div class="grid2">
-      <div class="card">
-        <h3>输出方式</h3>
-        <p class="hint">二选一；生成的成品会复制到你设的保存目录。</p>
-        <div class="opts">
-          <div class="opt on" data-mode="local"><b>保存到本地</b><small>落到保存目录</small></div>
-          <div class="opt" data-mode="repo"><b>推送到仓库</b><small>本仓提交即推送</small></div>
+  <!-- 页三：单个课件的会话（从课程抽屉进入） -->
+  <div class="page" id="page-chat">
+    <div class="chat">
+      <div class="chat-main">
+        <div class="chat-h">
+          <span class="back" id="chatBack">← 课程</span>
+          <span class="who" id="chatWho">—</span>
+          <span class="only" id="chatOnly">本会话只查这一门</span>
         </div>
-        <div class="fld"><code id="outPath">CS340/01_讲义</code><span style="font-size:11.5px;color:var(--faint)">保存目录</span></div>
-        <p class="note-s" id="dirFix" style="display:none;color:#b4332c">保存目录在配置里是乱码（出现过 ?），已临时退回默认目录；请到「设置」里重填。</p>
-        <h3 style="margin-top:16px">成品形态</h3>
-        <p class="hint">单本＝一讲一份 PDF（默认）；合订本＝全部讲合成一本，去掉各讲自带的封面与目录。</p>
-        <div class="opts" id="formOpts">
-          <div class="opt on" data-form="single"><b>单本</b><small>一讲一份</small></div>
-          <div class="opt" data-form="book"><b>合订本</b><small>全部讲一本</small></div>
+        <div class="msgs" id="msgs"></div>
+        <div class="composer">
+          <label class="cross" title="默认只在这门课里找；勾上才把别的课件一起检索">
+            <input type="checkbox" id="allowCross"> 引用其他课件
+          </label>
+          <input id="chatQ" placeholder="只在这一门里找；要跨课件先勾左边">
+          <button class="btn primary" id="btnSend">提问</button>
         </div>
-        <div class="tools">
-          <select id="courseSel"></select>
-          <select id="lessonSel"></select>
-          <button class="btn primary" id="btnGen">开始生成</button>
-        </div>
-        <div class="queue" id="queue"></div>
-        <div class="log" id="log"></div>
       </div>
-      <div class="card">
-        <h3>模型与用量</h3>
-        <p class="hint">真实余额来自接口；花费是按 token 估的，不是账单。</p>
-        <div class="kv"><span>当前模型</span><b id="mModel">—</b></div>
-        <div class="kv"><span>账户余额</span><b id="mBal">—</b></div>
-        <div class="kv"><span>累计调用</span><b id="mCalls">—</b></div>
-        <div class="kv"><span>token（入 / 出）</span><b id="mTok">—</b></div>
-        <div class="kv"><span>估算花费</span><b id="mCost">—</b></div>
-        <p class="note-s">不填 key 也能出 PDF：已有数据走本地渲染，不需要模型。只有「写新内容」才用得到。</p>
-      </div>
+      <aside class="side">
+        <div class="sbox">
+          <h4>本会话</h4>
+          <div class="kv"><span>范围</span><b id="cScope">—</b></div>
+          <div class="kv"><span>问答</span><b id="cCount">0 轮</b></div>
+          <div class="kv" style="border:0"><span>别的课件</span><b id="cCross">未接入</b></div>
+          <div class="anno">一个课件一个会话；换课件就是另一条会话，互不串上下文。关掉再开还在。</div>
+        </div>
+        <div class="sbox">
+          <h4>讲次范围</h4>
+          <select id="chatLesson"></select>
+          <div class="anno">默认整门课；选具体讲就只查那一讲。</div>
+        </div>
+        <div class="sbox">
+          <h4>会话</h4>
+          <div class="anno" id="cMeta">还没有消息</div>
+          <button class="btn" id="btnClear" style="margin-top:10px;width:100%">清除本会话</button>
+        </div>
+      </aside>
     </div>
-  </section>
-
-  <section>
-    <div class="sec-h"><h2>问课件</h2><span style="font-size:12px;color:var(--faint)">只按这一讲的内容回答，并标出处</span></div>
-    <div class="card">
-      <p class="hint">检索在这一讲的内容数据里做（不联网、不跳讲），命中的节号与课件页码会自动带进回答。
-        没配 API 钥匙时也能看到「命中了哪几段」，只是不出回答。</p>
-      <div class="tools">
-        <select id="askLesson"></select>
-        <input id="askQ" placeholder="例如：信号量初值 0 时 down 会怎样" style="flex:1;min-width:220px">
-        <button class="btn primary" id="btnAsk">提问</button>
-      </div>
-      <div class="ask-a" id="askA" style="display:none"></div>
-      <div class="log" id="askLog"></div>
-    </div>
-  </section>
+  </div>
 
   <footer>
     <div class="aibadge"><i>i</i>本内容由 AI 生成，请自行核实重要信息</div>
@@ -217,6 +277,10 @@
   </div>
   <div class="files" id="drFiles"></div>
   <div class="dr-f" id="drFoot"></div>
+  <div class="dr-ask">
+    <button class="btn primary" id="drAsk">问这一门 →</button>
+    <div class="note">开一个只属于这门的会话，不带到别的课件</div>
+  </div>
 </div>
 
 <div class="veil" id="veil"><div class="dlg" id="dlg"></div></div>
@@ -224,9 +288,19 @@
 <script>
 const $=s=>document.querySelector(s);
 let B={}, MODE='local', FORM='single', TAB='all', Q=[], MODEL='deepseek-flash';
+let PAGE='courses', DRAGGED=null, CHAT={code:null, lessons:[], messages:[], updated:''};
 // 发给接口的是 id（deepseek-flash / deepseek-v4-pro），界面上显示的是档名（DeepSeek 4.1 Flash / 4.1 Pro）
 function mname(id){ const m=(B.models||[]).find(x=>x.id===id); return m?m.name:id; }
 
+/* ---------- 分页 ---------- */
+function showPage(p){
+  PAGE=p;
+  document.querySelectorAll('.page').forEach(e=>e.classList.toggle('on', e.id==='page-'+p));
+  document.querySelectorAll('#nav a').forEach(a=>a.classList.toggle('on', a.dataset.page===p));
+}
+document.querySelectorAll('#nav a').forEach(a=>a.onclick=()=>showPage(a.dataset.page));
+
+/* ---------- 启动 ---------- */
 async function boot(){
   const r=await fetch('/api/bootstrap'); B=await r.json();
   MODEL=B.model; $('#ver').textContent='v'+B.version;
@@ -241,7 +315,13 @@ async function boot(){
   if(/wizard=1/.test(location.search)) setTimeout(()=>wizard(0),300);
   if(/settings=1/.test(location.search)) setTimeout(()=>$('#btnSet').click(),300);
   if(/open=1/.test(location.search)) setTimeout(()=>{const c=document.querySelector('.course'); if(c) c.click();},700);
+  if(/page=generate/.test(location.search)) showPage('generate');
+  // 直接进某一门的会话（调试、截图、或想收藏成书签时用）
+  const mc=location.search.match(/chat=([A-Za-z0-9_-]+)/);
+  if(mc) setTimeout(()=>{ const c=B.courses.find(x=>x.code===mc[1]); if(c) openChat(c); },600);
 }
+
+/* ---------- 课程卡片 ---------- */
 function render(){
   const box=$('#courses'); box.innerHTML='';
   let files=0,pages=0,lessons=0;
@@ -267,6 +347,24 @@ function render(){
   $('#sPages').textContent=B.courses.reduce((a,c)=>a+c.files.reduce((x,f)=>x+f.pages,0),0);
   $('#sLessons').textContent=B.courses.reduce((a,c)=>a+c.lessons.length,0);
 }
+
+/* ---------- 抽屉 ---------- */
+function openDrawer(c){
+  DRAGGED=c;
+  $('#drCode').textContent=c.code+(c.en?' · '+c.en:'');
+  $('#drTitle').textContent=c.title; $('#drDesc').textContent=c.desc;
+  $('#drFiles').innerHTML=c.files.length?c.files.map(f=>`
+    <a class="f" href="/api/pdf?p=${encodeURIComponent(f.rel)}" target="_blank" rel="noopener">
+      <div class="n">${f.name}<span>${f.rel}</span></div>
+      <div class="pg">${f.pages} p</div><div class="op">打开 →</div></a>`).join('')
+    :'<div class="empty">这一门还没有成品。</div>';
+  $('#drFoot').textContent=c.files.length+' FILES · 点击在新标签打开';
+  $('#drawer').classList.add('on');
+}
+$('#drClose').onclick=()=>$('#drawer').classList.remove('on');
+$('#drAsk').onclick=()=>{ const c=DRAGGED; $('#drawer').classList.remove('on'); openChat(c); };
+
+/* ---------- 生成页 ---------- */
 function fillSelects(){
   $('#courseSel').innerHTML=B.courses.map(c=>`<option value="${c.code}">${c.title}</option>`).join('');
   syncLessons();
@@ -275,14 +373,12 @@ function syncLessons(){
   const c=B.courses.find(x=>x.code===$('#courseSel').value)||B.courses[0];
   const opts=(c?c.lessons:[]).map(n=>`<option>${n}</option>`).join('')||'<option value="">（没有可生成的数据）</option>';
   $('#lessonSel').innerHTML=opts;
-  if($('#askLesson')) $('#askLesson').innerHTML=opts;
 }
 $('#courseSel').onchange=syncLessons;
 document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
   document.querySelectorAll('.tab').forEach(x=>x.classList.remove('on'));
   t.classList.add('on'); TAB=t.dataset.tab; render();
 });
-// 两组选项分开管：输出位置（local/repo）与成品形态（single/book）；混在一起会把 MODE 写成 undefined
 document.querySelectorAll('.opt[data-mode]').forEach(o=>o.onclick=()=>{
   document.querySelectorAll('.opt[data-mode]').forEach(x=>x.classList.remove('on'));
   o.classList.add('on'); MODE=o.dataset.mode;
@@ -291,23 +387,8 @@ document.querySelectorAll('.opt[data-mode]').forEach(o=>o.onclick=()=>{
 document.querySelectorAll('.opt[data-form]').forEach(o=>o.onclick=()=>{
   document.querySelectorAll('.opt[data-form]').forEach(x=>x.classList.remove('on'));
   o.classList.add('on'); FORM=o.dataset.form;
-  // 合订本是全部讲合成一本，讲次选择就没意义了
   $('#lessonSel').disabled = FORM==='book';
 });
-function openDrawer(c){
-  $('#drCode').textContent=c.code+(c.en?' · '+c.en:'');
-  $('#drTitle').textContent=c.title; $('#drDesc').textContent=c.desc;
-  $('#drFiles').innerHTML=c.files.length?c.files.map(f=>`
-    <a class="f" href="/api/pdf?p=${encodeURIComponent(f.rel)}" target="_blank" rel="noopener">
-      <div class="n">${f.name}<span>${f.rel}</span></div>
-      <div class="pg">${f.pages} p</div><div class="op">打开 →</div></a>`).join('')
-    :'<div style="padding:22px;color:#97948c;font-size:12.5px">这一门还没有成品。</div>';
-  $('#drFoot').textContent=c.files.length+' FILES · 点击在新标签打开';
-  $('#drawer').classList.add('on');
-}
-$('#drClose').onclick=()=>$('#drawer').classList.remove('on');
-
-// ---- 生成队列 ----
 function renderQueue(){
   $('#queue').innerHTML=Q.map(q=>`<div class="qi ${q.st}">
       <span>${q.course} · ${q.lesson}</span>
@@ -350,7 +431,6 @@ async function runGenerate(course,no,form){
     const j=await r.json();
     log.textContent=(j.ok?'成功（'+j.seconds+'s）\n\n':'失败\n\n')+(j.log||j.error||'');
     if(j.ok){
-      // 成功后从队列移除
       Q=Q.filter(q=>q!==item); renderQueue();
       const bs=await fetch('/api/bootstrap'); B=await bs.json(); render(); refreshUsage();
     }else{
@@ -359,38 +439,97 @@ async function runGenerate(course,no,form){
   }catch(e){ item.st='fail'; item.msg='请求失败'; renderQueue(); log.textContent='请求失败：'+e; }
   $('#btnGen').disabled=false;
 }
-// ---- 问课件 ----
-$('#btnAsk').onclick=async()=>{
-  const course=$('#courseSel').value, no=$('#askLesson').value, q=$('#askQ').value.trim();
-  const log=$('#askLog'), box=$('#askA');
-  box.style.display='none'; log.style.display='block';
-  if(q.length<2){ log.textContent='先把问题写长一点（至少两个字）。'; return; }
-  if(!no){ log.textContent='这一门还没有可提问的讲次。'; return; }
-  log.textContent='正在检索并回答…';
-  $('#btnAsk').disabled=true;
+
+/* ---------- 一个课件一个会话 ---------- */
+async function openChat(c){
+  CHAT={code:c.code, lessons:c.lessons||[], messages:[], updated:'', title:c.title};
+  $('#chatWho').textContent=c.title+' · '+c.code;
+  $('#chatOnly').textContent='本会话只查这一门';
+  $('#cScope').textContent=c.code+' · '+c.title;
+  $('#allowCross').checked=false;
+  $('#cCross').textContent='未接入';
+  $('#chatLesson').innerHTML='<option value="">整门课（默认）</option>'+
+    (c.lessons||[]).map(n=>`<option>${n}</option>`).join('');
+  showPage('chat');
+  try{
+    const j=await (await fetch('/api/session?code='+encodeURIComponent(c.code))).json();
+    CHAT.messages=(j.messages||[]); CHAT.updated=j.updated||'';
+  }catch(e){ CHAT.messages=[]; }
+  renderChat();
+}
+$('#chatBack').onclick=()=>showPage('courses');
+$('#allowCross').onchange=e=>{
+  $('#cCross').textContent = e.target.checked ? '已接入（显式）' : '未接入';
+  $('#chatOnly').textContent = e.target.checked ? '本会话可引用其他课件' : '本会话只查这一门';
+};
+function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;'); }
+function renderChat(){
+  const box=$('#msgs');
+  if(!CHAT.messages.length){
+    box.innerHTML='<div class="empty">问这一门里的任何内容：答案只依据这一门的内容数据，并标出节号与课件页码。<br>'+
+      '想让它参考别的课件，勾上输入框左边那个开关。</div>';
+  }else{
+    box.innerHTML=CHAT.messages.map(m=>{
+      const refs=(m.refs||[]);
+      const src=refs.length?`<details class="src"><summary>命中的片段（核对用）· ${refs.length} 段</summary><ol>`+
+        refs.map(x=>`<li>${x.lesson?('['+x.lesson+'] '):''}§${x.sec} ${esc(x.title)} · ${esc(x.kind)}`+
+          (x.pages&&x.pages.length?' · 课件 p.'+x.pages.join('、p.'):'')+`<br>${esc((x.text||'').slice(0,120))}</li>`).join('')+
+        '</ol></details>':'';
+      const cite=(m.cite?`<div class="cite">${esc(m.cite)}</div>`:'');
+      return `<div class="m ${m.role==='user'?'u':'a'}"><div class="av">${m.role==='user'?'你':'AI'}</div>`+
+        `<div class="bd">${m.role==='user'?esc(m.text):esc(m.text).replace(/\n/g,'<br>')}${cite}${src}</div></div>`;
+    }).join('');
+    box.scrollTop=box.scrollHeight;
+  }
+  const rounds=CHAT.messages.filter(m=>m.role==='user').length;
+  $('#cCount').textContent=rounds+' 轮';
+  $('#cMeta').innerHTML=CHAT.messages.length?
+    esc(CHAT.updated||'')+'<br>存在本机 %USERPROFILE%\\.pluma\\sessions\\'+esc(CHAT.code)+'.json':'还没有消息';
+}
+$('#btnSend').onclick=async()=>{
+  const q=$('#chatQ').value.trim();
+  if(q.length<2){ $('#chatQ').focus(); return; }
+  if(!CHAT.code){ return; }
+  const cross=$('#allowCross').checked;
+  const lesson=$('#chatLesson').value;
+  $('#btnSend').disabled=true; $('#chatQ').value='';
+  const tmp={role:'user',text:q,at:''};
+  CHAT.messages.push(tmp); renderChat();
+  const history=CHAT.messages.slice(0,-1).slice(-6);
   try{
     const r=await fetch('/api/ask',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({course,lesson:no,question:q})});
+      body:JSON.stringify({course:CHAT.code,lesson:lesson,allow_cross:cross,question:q,history:history})});
     const j=await r.json();
-    const refs=(j.refs||[]).map(x=>`<li>§${x.sec} ${x.title} · ${x.kind}`+
-      (x.pages&&x.pages.length?` · 课件 p.${x.pages.join('、p.')}`:'')+
-      `<br><small>${x.text}</small></li>`).join('');
     if(j.ok){
-      log.style.display='none'; box.style.display='block';
-      box.innerHTML=`<div class="ask-q">${q}</div>`+
-        `<div class="ask-text">${j.answer.replace(/</g,'&lt;').replace(/\n/g,'<br>')}</div>`+
-        `<div class="ask-meta">${mname(j.model)} · ${j.seconds}s · 命中 ${(j.refs||[]).length} 段</div>`+
-        (refs?`<details><summary>命中的片段（核对用）</summary><ol>${refs}</ol></details>`:'');
+      const cite=`出自 §${(j.refs[0]||{}).sec||'?'}`+(j.refs[0]&&j.refs[0].title?' '+j.refs[0].title:'')+
+        `｜${j.scope?j.scope.lesson:''}${j.scope&&j.scope.cross?'｜已跨课件':''}｜${mname(j.model)} · ${j.seconds}s`;
+      const msg={role:'a',text:j.answer,refs:j.refs||[],cite:cite,at:''};
+      CHAT.messages.push(msg);
+      await saveMsg({role:'user',text:q});
+      await saveMsg({role:'a',text:j.answer,refs:j.refs||[],meta:cite});
       refreshUsage();
     }else{
-      log.textContent=(j.error||'失败');
-      if(refs){ box.style.display='block';
-        box.innerHTML=`<details open><summary>已检索到的片段（没生成回答）</summary><ol>${refs}</ol></details>`; }
+      CHAT.messages.push({role:'a',text:'（没拿到回答）'+(j.error||''),refs:j.refs||[],cite:''});
     }
-  }catch(e){ log.textContent='请求失败：'+e; }
-  $('#btnAsk').disabled=false;
+  }catch(e){ CHAT.messages.push({role:'a',text:'请求失败：'+e}); }
+  $('#btnSend').disabled=false; renderChat();
+};
+async function saveMsg(m){
+  try{
+    const r=await fetch('/api/session',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({code:CHAT.code,action:'append',message:m})});
+    const j=await r.json(); if(j.ok) CHAT.updated=new Date().toISOString().slice(0,16).replace('T',' ');
+  }catch(e){}
+}
+$('#chatQ').addEventListener('keydown',e=>{ if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); $('#btnSend').click(); } });
+$('#btnClear').onclick=async()=>{
+  if(!CHAT.code) return;
+  await fetch('/api/session',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({code:CHAT.code,action:'clear'})});
+  CHAT.messages=[]; CHAT.updated=''; renderChat();
 };
 
+/* ---------- 用量 ---------- */
 async function refreshUsage(){
   const r=await fetch('/api/bootstrap'); B=await r.json();
   const u=B.usage||{};
@@ -403,12 +542,12 @@ async function refreshUsage(){
   }catch(e){ $('#mBal').textContent='读取失败'; }
 }
 
-// ---- 向导 ----
+/* ---------- 向导 ---------- */
 let W={step:0,model:null,key:'',dir:''};
 function wizard(step){
   W.step=step;
   const steps=`<div class="wiz-steps">
-    <span class="${step===0?'':''}">${step>=0?'<b>1 选模型</b>':'1 选模型'}</span>
+    <span>${step>=0?'<b>1 选模型</b>':'1 选模型'}</span>
     <span>${step>=1?'<b>2 API 钥匙</b>':'2 API 钥匙'}</span>
     <span>${step>=2?'<b>3 保存目录</b>':'3 保存目录'}</span>
     <span>${step>=3?'<b>4 完成</b>':'4 完成'}</span></div>`;
@@ -430,7 +569,7 @@ function wizard(step){
       <p class="note-s">默认 ${B.save_dir_abs}</p>`;
   }else{
     body=`<h4>可以开始了</h4>
-      <div class="kv"><span>模型</span><b>${W.model||MODEL}</b></div>
+      <div class="kv"><span>模型</span><b>${W.model?mname(W.model):mname(MODEL)}</b></div>
       <div class="kv"><span>API 钥匙</span><b>${W.key?'已填写':'未填（不影响出 PDF）'}</b></div>
       <div class="kv"><span>保存目录</span><b>${W.dir||B.save_dir}</b></div>
       <p class="note-s">点「完成」会写入本机配置。想改随时点右上「设置」。</p>`;
@@ -464,7 +603,7 @@ function wizard(step){
   };
 }
 
-// ---- 设置 ----
+/* ---------- 设置 ---------- */
 $('#btnSet').onclick=()=>{
   $('#dlg').innerHTML=`
     <div class="eb">Settings</div><h4>设置</h4>
@@ -501,17 +640,17 @@ $('#btnSet').onclick=()=>{
   };
 };
 
-// ---- 教学 ----
+/* ---------- 教学 ---------- */
 function showTut(){
   $('#dlg').innerHTML=`
     <div class="eb">Getting started</div><h4>四步用起来</h4>
     <div style="font-size:13px;color:#4c4a45;line-height:1.9;margin-top:12px">
       <div>① <b>课程</b>里点任一门 → 右侧列出成品 → 点文件名直接打开。</div>
       <div>② 卡片右上 ☆ 收进<b>收藏夹</b>；课程是按目录自动认出来的。</div>
-      <div>③ <b>生成</b>里选课程与讲次 → 点开始生成 → 勾选免责声明。</div>
-      <div>④ 生成中的任务在队列里，<b>成功后自动消失</b>；失败会留下并标红。</div>
+      <div>③ 抽屉底部<b>「问这一门」</b> → 进这门课自己的会话，答案带节号与课件页码；要参考别的课件得勾开关。</div>
+      <div>④ <b>生成</b>页选课程与讲次 → 开始生成 → 勾选免责声明；成功后队列里自动消失。</div>
     </div>
-    <p class="note-s">模型与用量在右侧面板：余额是接口读的真数，花费是按 token 估的。</p>
+    <p class="note-s">模型与用量在生成页右侧：余额是接口读的真数，花费是按 token 估的。</p>
     <div class="acts"><button class="btn primary" id="tutOk">知道了</button></div>`;
   $('#veil').classList.add('on');
   $('#tutOk').onclick=()=>$('#veil').classList.remove('on');
