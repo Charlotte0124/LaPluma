@@ -8,6 +8,7 @@
 """
 from __future__ import annotations
 
+import io
 import json
 import hashlib
 import mimetypes
@@ -19,6 +20,7 @@ import threading
 import time
 import urllib.parse
 import webbrowser
+import zipfile
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 # 2026-11-17：路径双根（见仓根 paths.py）。本脚本是 `python ui\server.py` 直接跑的，
@@ -64,7 +66,7 @@ HOST, PORT = "127.0.0.1", 8765
 #   每次打开/刷新阅读器都全量重传（本机无感，平板走 WiFi 明显）。
 #   index.html 必须仍走 no-store（改完界面要能立刻看到新版）。
 _STATIC_ETAG = {}
-VERSION = "1.7.0"
+VERSION = "1.8.0"
 BOOK_NAME = DEFAULT_COURSE + "_九讲合订本_讲义.pdf"
 
 # ---------- 主机上线（局域网 + 8 位访问码）----------
@@ -339,6 +341,37 @@ def safe_join(*parts):
         if root and p.startswith(os.path.abspath(root) + os.sep):
             return p
     raise PermissionError("路径越界")
+
+
+def course_pdfs(code: str) -> list:
+    """一门课的全部成品 PDF（数据根 + 资源根各执一份，同名取先出现的）。
+
+    只给「导出」用：只挂文件名、不读页数，不碰 discover_courses 那条路（那里每份都开 PDF 读页数，61 门课时冷得能卡）。
+    """
+    code = _safe_code(code)
+    out, seen = [], set()
+    for root in (paths.DATA_ROOT, paths.RES_ROOT):
+        d = os.path.join(root, code, "01_讲义")
+        if not d or not os.path.isdir(d):
+            continue
+        for fn in sorted(os.listdir(d)):
+            if not fn.lower().endswith(".pdf") or fn in seen:
+                continue
+            seen.add(fn)
+            out.append((os.path.join(d, fn), fn))
+    return out
+
+
+def rel_out(path: str) -> str:
+    """绝对路径→相对路径（两根都对得上）。
+
+    只按 ROOT 算会在示例课程（成品住在资源根）上算成 ..\\..\\ 开头的怪路径。
+    """
+    ap = os.path.abspath(path)
+    for root in (paths.DATA_ROOT, paths.RES_ROOT):
+        if root and ap.startswith(os.path.abspath(root) + os.sep):
+            return os.path.relpath(ap, root).replace(os.sep, "/")
+    return os.path.basename(ap)
 
 
 # ---------- 笔记（按「课程 + 具体文档」落盘）----------
@@ -632,6 +665,22 @@ class Handler(BaseHTTPRequestHandler):
         with open(path, "rb") as f:
             shutil.copyfileobj(f, self.wfile)
 
+    def _bytes(self, data: bytes, filename: str, ctype: str = "application/octet-stream"):
+        """内存里的字节直接当附件下发（导出打包用）。
+
+        中文文件名同样要 ASCII 回退 + RFC 5987 双写，理由见 _file。
+        """
+        ascii_fn = filename.encode("ascii", "ignore").decode() or "export"
+        disp = 'attachment; filename="%s"; filename*=UTF-8\'\'%s' % (
+            ascii_fn.replace('"', ""), urllib.parse.quote(filename))
+        self.send_response(200)
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(data)))
+        self.send_header("Content-Disposition", disp)
+        self.end_headers()
+        self.wfile.write(data)
+
     # ---- 访问码（只在 --lan 时生效）----
     def _authed(self):
         if not LAN:
@@ -712,9 +761,32 @@ class Handler(BaseHTTPRequestHandler):
             if u.path == "/api/session":
                 # 会话读取：一个课件一个会话，文件在 %USERPROFILE%\.pluma\sessions
                 return self._json(dict(ok=True, **load_session(q.get("code", [DEFAULT_COURSE])[0])))
+            if u.path == "/api/export":
+                # 导出成品到本机下载目录（浏览器下载夹）：
+                #   ?p=<相对路径>  → 单份（等同于 /api/pdf?dl=1）
+                #   ?course=<课程> → 整门打包成一个 zip（多份逐个下载会被浏览器拦）
+                # 为什么走下载而不是「拷到某个目录」：桌面上有下载夹，平板上也拿得到；
+                # 拷到一个用户还得先去找的目录，反而多一道。
+                rel = q.get("p", [""])[0]
+                if rel:
+                    return self._file(safe_join(*rel.split("/")), inline=False)
+                code = q.get("course", [""])[0]
+                if not code:
+                    return self._json({"ok": False, "error": "缺参数：p 或 course"}, 400)
+                files = course_pdfs(code)
+                if not files:
+                    return self._json({"ok": False, "error": "这一门还没有成品，先去生成页出一份"}, 404)
+                buf = io.BytesIO()
+                with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+                    for full, fn in files:
+                        z.write(full, fn)
+                return self._bytes(buf.getvalue(), "%s_讲义_%d份.zip" % (_safe_code(code), len(files)),
+                                   "application/zip")
             if u.path == "/api/pdf":
                 rel = q.get("p", [""])[0]
-                return self._file(safe_join(*rel.split("/")))
+                # dl=1 → 当附件下载（导出用）；默认 inline 给 pdf.js 读
+                dl = str(q.get("dl", [""])[0]).lower() in ("1", "true", "yes")
+                return self._file(safe_join(*rel.split("/")), inline=not dl)
             return self._json({"ok": False, "error": "无此路由"}, 404)
         except PermissionError as e:
             return self._json({"ok": False, "error": str(e)}, 403)
@@ -775,10 +847,21 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({"ok": True, "notes": cur, "count": n})
             if u.path == "/api/note/export":
                 # 07：选中对话 / 侧栏笔记 → 整理成笔记页 → 追加到指定 PDF 末尾（另存副本）
+                # 2026-11-17：改成可多选（targets）。用户原话「添加笔记可以选多个」——
+                #   以前一次只能选一份讲义，一门课 120 份时要导十几次。现在一次跑多份，
+                #   模型整理（use_model）只跑一次，结果共用；每份各存自己的 _附笔记.pdf。
                 code = str(body.get("code") or DEFAULT_COURSE)
-                target = str(body.get("target") or "").strip()
-                if not target:
-                    return self._json({"ok": False, "error": "要选一份 PDF 作为追加目标"}, 400)
+                raw_t = body.get("targets")
+                if not isinstance(raw_t, list):
+                    raw_t = [body.get("target")]
+                targets = []
+                for t in raw_t:
+                    t = str(t or "").strip()
+                    if t and t not in targets:
+                        targets.append(t)
+                targets = targets[:20]      # 一次最多 20 份，再多就是误操作
+                if not targets:
+                    return self._json({"ok": False, "error": "要选至少一份 PDF 作为追加目标"}, 400)
                 items = [x for x in (body.get("items") or []) if isinstance(x, dict)]
                 notes = [x for x in (body.get("notes") or []) if isinstance(x, dict)]
                 if not items and not notes:
@@ -825,11 +908,24 @@ class Handler(BaseHTTPRequestHandler):
                             blocks = [{"h": "整理稿（%s）" % cfg["model"], "body": out["text"]}] + blocks
                         except Exception as e:  # noqa: BLE001
                             blocks.insert(0, {"body": "（模型整理失败，下面保留原摘录：%s）" % e})
-                res = build_note_pdf(target, title, blocks)
-                rel = os.path.relpath(res["out"], ROOT).replace(os.sep, "/")
-                return self._json({"ok": True, "file": res["name"], "rel": rel,
-                                   "pages_before": res["pages_before"],
-                                   "pages_after": res["pages_after"], "out": res["out"]})
+                results = []
+                for target in targets:
+                    try:
+                        res = build_note_pdf(target, title, blocks)
+                        results.append({"ok": True, "target": target, "file": res["name"],
+                                        "rel": rel_out(res["out"]),
+                                        "pages_before": res["pages_before"],
+                                        "pages_after": res["pages_after"], "out": res["out"]})
+                    except Exception as e:  # noqa: BLE001
+                        results.append({"ok": False, "target": target, "error": str(e)})
+                done = [r for r in results if r.get("ok")]
+                tip = {"ok": bool(done), "count": len(done), "failed": len(results) - len(done),
+                       "results": results}
+                if len(results) == 1 and done:
+                    tip.update(done[0])                 # 单份时保留旧字段，老前端不用改
+                elif not done:
+                    tip["error"] = "；".join(r.get("error", "") for r in results)[:300]
+                return self._json(tip)
             if u.path == "/api/config":
                 cfg = load_cfg()
                 for k in ("model", "save_dir", "base_url", "provider"):

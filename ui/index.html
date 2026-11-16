@@ -95,6 +95,40 @@ nav a.on{background:var(--ink);color:var(--bg)}
 .course .foot{display:flex;gap:12px;font-size:11.5px;color:var(--faint);border-top:1px solid var(--line2);padding-top:9px;margin-top:11px}
 .star{position:absolute;right:13px;top:11px;color:var(--faint);font-size:14px}
 .star.on{color:var(--ink)}
+/* 2026-11-17：课程卡片右下角「导出 PDF」（设计稿 16）——一个动作一个入口，
+   和搜索面板里的课程行导出走同一个后端（整门打包 zip）。 */
+.course .foot{align-items:center}
+.course .foot .expbtn{margin-left:auto;font-size:11.5px;color:var(--sub);border:1px solid var(--line);
+  background:var(--card);border-radius:7px;padding:3px 10px;cursor:pointer;white-space:nowrap;transition:.14s}
+.course .foot .expbtn:hover{color:var(--ink);border-color:var(--ink)}
+
+/* 2026-11-17：课程标题右侧的放大镜 + 搜索面板（设计稿 15）
+   没输字时按浏览器逻辑显示「最近搜索」前三条（本机 localStorage，不出这台电脑）。 */
+.hd-r{display:flex;align-items:center;gap:10px}
+.lensbtn{width:30px;height:30px;border-radius:50%;border:1px solid var(--line);background:var(--card);
+  color:var(--sub);display:grid;place-items:center;cursor:pointer;transition:.16s}
+.lensbtn:hover{border-color:var(--ink);color:var(--ink)}
+.lensbtn.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.finder{display:none;background:var(--card);border:1px solid var(--ink);border-radius:14px;margin:0 0 16px;
+  overflow:hidden;box-shadow:0 18px 44px rgba(0,0,0,.10)}
+.finder.on{display:block}
+.fd-in{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--line2)}
+.fd-in svg{color:var(--faint);flex:0 0 auto}
+.fd-in input{flex:1;min-width:0;border:0;background:transparent;outline:none;font-size:14px;color:var(--ink)}
+.fd-in .kbd{font-family:Consolas,monospace;font-size:10.5px;color:var(--faint);border:1px solid var(--line);
+  border-radius:6px;padding:2px 6px;white-space:nowrap}
+.fd-grp{padding:7px 0 5px;border-top:1px solid var(--line2)}
+.fd-grp:first-child{border-top:0}
+.fd-grp .gt{font-size:11px;color:var(--faint);padding:2px 16px 5px;letter-spacing:.04em}
+.fd-row{display:flex;align-items:center;gap:10px;padding:9px 16px;transition:.12s}
+.fd-row:hover,.fd-row.sel{background:var(--card2)}
+.fd-row .tt{flex:1;min-width:0;font-size:12.8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
+.fd-row .tt small{font-family:Consolas,monospace;font-size:11px;color:var(--faint);margin-left:7px}
+.fd-row .meta{font-family:Consolas,monospace;font-size:11px;color:var(--faint);white-space:nowrap}
+.fd-act{font-size:11.5px;color:var(--sub);border:1px solid var(--line);background:var(--card);border-radius:7px;
+  padding:3px 10px;cursor:pointer;white-space:nowrap;transition:.14s}
+.fd-act:hover{color:var(--ink);border-color:var(--ink)}
+.fd-empty{padding:12px 16px 16px;font-size:12px;color:var(--faint);line-height:1.8}
 
 /* 抽屉 */
 .drawer{position:fixed;inset:0 0 0 auto;width:520px;max-width:92vw;background:var(--card);border-left:1px solid var(--line);
@@ -375,7 +409,20 @@ footer{max-width:1080px;margin:26px auto 0;padding:0 16px;display:flex;align-ite
     </div>
     <div class="sec-h">
       <h2>课程</h2>
-      <div class="tabs"><span class="tab on" data-tab="all">全部</span><span class="tab" data-tab="fav">收藏</span></div>
+      <div class="hd-r">
+        <div class="tabs"><span class="tab on" data-tab="all">全部</span><span class="tab" data-tab="fav">收藏</span></div>
+        <button class="lensbtn" id="btnFind" title="搜课程与课件（Ctrl+K）" aria-label="搜索">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="11" cy="11" r="6.4"/><path d="M15.8 15.8 21 21"/></svg>
+        </button>
+      </div>
+    </div>
+    <div class="finder" id="finder">
+      <div class="fd-in">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="11" cy="11" r="6.4"/><path d="M15.8 15.8 21 21"/></svg>
+        <input id="fdQ" placeholder="搜课程、讲号或课件关键词…" autocomplete="off">
+        <span class="kbd" id="fdEsc">Esc</span>
+      </div>
+      <div class="fd-body" id="fdBody"></div>
     </div>
     <div class="courses" id="courses"></div>
   </div>
@@ -609,6 +656,7 @@ $('#btnTheme2').onclick = $('#btnTheme').onclick;
 /* ---------- 分页 ---------- */
 function showPage(p){
   PAGE = p;
+  if(p !== 'courses' && typeof findOpen === 'function' && FIND.open) findOpen(false);
   document.querySelectorAll('.page').forEach(e=>e.classList.toggle('on', e.id==='page-'+p));
   document.querySelectorAll('#nav a').forEach(a=>a.classList.toggle('on', a.dataset.page===p));
   window.scrollTo({top:0,behavior:'instant'});
@@ -650,11 +698,13 @@ function render(){
   const list = (B.courses||[]).filter(c=>TAB==='all'||c.fav);
   list.forEach(c=>{
     const el = document.createElement('div'); el.className='course';
+    const exp = `<button class="expbtn" data-exp="${esc(c.code)}" title="把这一门的成品打包下载">⇩ 导出 PDF</button>`;
     el.innerHTML = `<span class="star ${c.fav?'on':''}" title="收藏">${c.fav?'★':'☆'}</span>
       <div class="code">${esc(c.code)}${c.en?' · '+esc(c.en):''}</div>
       <h3>${esc(c.title)}</h3><p>${esc(c.desc)}</p>
-      <div class="foot"><span>${c.files.length} 份</span><span>${c.files.reduce((a,f)=>a+f.pages,0)} 页</span><span>${c.lessons.length} 讲可生成</span></div>`;
-    el.onclick = e => { if(e.target.classList.contains('star')) return; openDrawer(c); };
+      <div class="foot"><span>${c.files.length} 份</span><span>${c.files.reduce((a,f)=>a+f.pages,0)} 页</span><span>${c.lessons.length} 讲可生成</span>${exp}</div>`;
+    el.onclick = e => { if(e.target.classList.contains('star') || e.target.classList.contains('expbtn')) return; openDrawer(c); };
+    el.querySelector('.expbtn').onclick = e => { e.stopPropagation(); exportCourse(c); };
     el.querySelector('.star').onclick = async e=>{
       e.stopPropagation();
       const j = await (await fetch('/api/favorites',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code:c.code})})).json();
@@ -672,6 +722,153 @@ function render(){
 document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
   document.querySelectorAll('.tab').forEach(x=>x.classList.remove('on'));
   t.classList.add('on'); TAB=t.dataset.tab; render();
+});
+
+/* ---------- 15：放大镜 + 搜索面板（2026-11-17）----------
+   用户原话：「在课程旁边放一个放大镜，打开是一个搜索栏」「放大镜按照浏览器的逻辑
+   （未输入文字默认显示前三个最近的搜索的记录）」。
+   浏览器逻辑照抄三处：① 空白时只摆最近搜过的（最多三条）② Esc 一次清空输入、再一次收起
+   ③ 点结果或按回车才算一次「搜索」，才写进历史。历史只在本机（localStorage，最多 8 条）。 */
+const FIND = { open:false };
+const RECENT_KEY = 'pluma.recent';
+function recentRead(){
+  try{
+    const a = JSON.parse(localStorage.getItem(RECENT_KEY) || '[]');
+    return Array.isArray(a) ? a.filter(x => typeof x === 'string' && x.trim()) : [];
+  }catch(e){ return []; }
+}
+function recentPush(kw){
+  kw = String(kw||'').trim(); if(!kw) return;
+  const a = recentRead().filter(x => x !== kw); a.unshift(kw);
+  try{ localStorage.setItem(RECENT_KEY, JSON.stringify(a.slice(0,8))); }catch(e){}
+}
+function findOpen(on){
+  FIND.open = (on === undefined) ? !FIND.open : !!on;
+  $('#finder').classList.toggle('on', FIND.open);
+  $('#btnFind').classList.toggle('on', FIND.open);
+  if(FIND.open){ renderFind(); $('#fdQ').focus(); }
+  // 收起时清空输入：下次打开就是空态，也就是「最近搜索」那三条（与用户要的浏览器逻辑一致）
+  else { $('#fdQ').value = ''; }
+}
+/* 导出：直接走浏览器下载夹（桌面上好找，平板端也拿得到）。
+   用 <a download> 而不是 location.href——服务端真出错时回的是 JSON，
+   跳页会把整个界面换成一段 JSON，看着像软件死掉了。 */
+function downloadUrl(url){
+  const a = document.createElement('a');
+  a.href = url; a.rel = 'noopener'; a.style.display = 'none';
+  document.body.appendChild(a); a.click(); a.remove();
+}
+function exportPdf(rel){
+  if(!rel) return;
+  downloadUrl('/api/export?p=' + encodeURIComponent(rel));
+  toast('已开始下载：' + String(rel).split('/').pop());
+}
+function exportCourse(c){
+  if(!c) return;
+  if(!(c.files||[]).length){ toast('这一门还没有成品，先去生成页出一份'); return; }
+  downloadUrl('/api/export?course=' + encodeURIComponent(c.code));
+  toast('已开始打包下载：' + c.code + ' · ' + c.files.length + ' 份讲义');
+}
+function findHits(kw){
+  const lc = kw.toLowerCase();
+  const cs = (B.courses||[]).filter(c => `${c.code} ${c.title} ${c.en||''} ${c.desc||''}`.toLowerCase().includes(lc));
+  const fs = [];
+  (B.courses||[]).forEach(c => (c.files||[]).forEach(f => {
+    if(String(f.name||'').toLowerCase().includes(lc)) fs.push({c, f});
+  }));
+  return {cs: cs.slice(0,6), fs};
+}
+function renderFind(){
+  const kw = ($('#fdQ').value || '').trim();
+  const box = $('#fdBody');
+  if(!kw){
+    const rec = recentRead().slice(0,3);
+    box.innerHTML = rec.length
+      ? `<div class="fd-grp"><div class="gt">最近搜索</div>` + rec.map(k =>
+          `<div class="fd-row" data-recent="${esc(k)}"><span class="tt">${esc(k)}</span>
+            <span class="fd-act" data-act="again">再搜一次</span></div>`).join('') + `</div>`
+      : `<div class="fd-empty">还没有搜索记录。敲课程名、讲号（如 D01）或课件关键词就开始搜；<b>Ctrl+K</b> 随时唤出这一栏。</div>`;
+  }else{
+    const {cs, fs} = findHits(kw);
+    const CAP = 12;
+    const head = `data-kw="${esc(kw)}"`;
+    let html = `<div class="fd-grp"><div class="gt">课程</div>`;
+    html += cs.length ? cs.map(c => `<div class="fd-row" ${head}>
+        <span class="tt">${esc(c.title)}<small>${esc(c.code)}${c.en?' · '+esc(c.en):''} · ${c.files.length} 份</small></span>
+        <span class="fd-act" data-act="drawer" data-code="${esc(c.code)}">打开抽屉</span>
+        <span class="fd-act" data-act="export" data-code="${esc(c.code)}">导出</span></div>`).join('')
+      : `<div class="fd-empty" style="padding:4px 16px 8px">没有匹配的课程</div>`;
+    html += `</div><div class="fd-grp"><div class="gt">课件${fs.length?' · '+fs.length+' 份命中':''}</div>`;
+    html += fs.length ? fs.slice(0,CAP).map(({c,f}) => `<div class="fd-row" ${head}>
+        <span class="tt">${esc(f.name)}<small>${esc(c.code)}</small></span>
+        <span class="meta">${f.pages} p</span>
+        <span class="fd-act" data-act="read" data-rel="${esc(f.rel)}" data-name="${esc(f.name)}" data-code="${esc(c.code)}">在软件里读</span>
+        <span class="fd-act" data-act="export-pdf" data-rel="${esc(f.rel)}">导出</span></div>`).join('')
+      : `<div class="fd-empty" style="padding:4px 16px 8px">没有匹配的课件</div>`;
+    html += `</div>`;
+    if(fs.length > CAP) html += `<div class="fd-empty">还有 ${fs.length-CAP} 份没展开：再输入几个字窄一点。</div>`;
+    box.innerHTML = html;
+  }
+  // 行点击：点文字/行体 = 默认动作（课程开抽屉、课件在软件里读）；右侧两个按钮各做各的
+  box.querySelectorAll('.fd-row').forEach(row => {
+    const kwOf = row.dataset.kw || '';
+    const def = row.querySelector('[data-act="drawer"],[data-act="read"]');
+    const tt = row.querySelector('.tt');
+    if(row.dataset.recent !== undefined){
+      const hit = () => { $('#fdQ').value = row.dataset.recent; renderFind(); $('#fdQ').focus(); };
+      row.onclick = hit; tt.onclick = hit;
+      return;
+    }
+    if(def) tt.onclick = e => { e.stopPropagation(); fireFindAct(def, kwOf); };
+    row.onclick = e => { if(e.target.closest('.fd-act')) return; if(def) fireFindAct(def, kwOf); };
+  });
+  box.querySelectorAll('.fd-act').forEach(b => {
+    if(b.dataset.act === 'again') return;      // 走上面「再搜一次」
+    b.onclick = e => { e.stopPropagation(); fireFindAct(b, b.closest('.fd-row').dataset.kw || ''); };
+  });
+}
+function fireFindAct(el, kw){
+  const act = el.dataset.act;
+  if(act === 'drawer'){
+    const c = (B.courses||[]).find(x => x.code === el.dataset.code);
+    if(!c) return; recentPush(kw); findOpen(false); openDrawer(c);
+  }else if(act === 'read'){
+    recentPush(kw); findOpen(false);
+    openReader(el.dataset.rel, el.dataset.name, el.dataset.code);
+  }else if(act === 'export'){
+    recentPush(kw);
+    const c = (B.courses||[]).find(x => x.code === el.dataset.code);
+    exportCourse(c);
+  }else if(act === 'export-pdf'){
+    recentPush(kw); exportPdf(el.dataset.rel);
+  }
+}
+$('#btnFind').onclick = () => findOpen();
+$('#fdQ').oninput = renderFind;
+$('#fdEsc').onclick = () => findOpen(false);
+/* 键盘：Ctrl+K 唤出；Esc 先清空再一次收起（与浏览器一致）；回车直接开第一条结果。 */
+document.addEventListener('keydown', e => {
+  if((e.ctrlKey || e.metaKey) && String(e.key).toLowerCase() === 'k'){
+    e.preventDefault();
+    if(PAGE !== 'courses') showPage('courses');
+    findOpen(true);
+    return;
+  }
+  if(!FIND.open) return;
+  if(e.key === 'Escape'){
+    e.preventDefault();
+    const q = $('#fdQ');
+    if((q.value || '').trim()){ q.value = ''; renderFind(); q.focus(); }
+    else findOpen(false);
+    return;
+  }
+  if(e.key === 'Enter'){
+    const first = $('#fdBody').querySelector('[data-act="drawer"],[data-act="read"]');
+    if(!first) return;
+    e.preventDefault();
+    const row = first.closest('.fd-row');
+    fireFindAct(first, row ? (row.dataset.kw || '') : '');
+  }
 });
 
 /* ---------- 抽屉 ---------- */
@@ -930,7 +1127,16 @@ $('#btnClear').onclick = async () => {
 };
 
 /* ---------- 07：选中对话 → 笔记 → 追加到 PDF ---------- */
-let EXPORT = {target:'', useModel:false};
+/* 2026-11-17：一份对话的笔记可以同时追加到多份讲义（用户原话「添加笔记可以选多个」）——
+   以前选中区是单选，一门课 120 份时要导十几次。现在勾几份就跑几份，各存自己的 _附笔记.pdf。 */
+let EXPORT = {targets:new Set(), useModel:false};
+function syncPickCount(){
+  const n = EXPORT.targets.size;
+  const cnt = $('#pickCnt');
+  if(cnt) cnt.textContent = n ? ('已选 '+n+' 份') : '还没选';
+  const go = $('#expGo');
+  if(go){ go.textContent = n ? ('生成并追加（'+n+' 份）') : '生成并追加'; go.disabled = n === 0; }
+}
 $('#btnNote').onclick = () => {
   if(!CHAT.sel.size) return;
   const idx = [...CHAT.sel].sort((a,b)=>a-b);
@@ -944,25 +1150,26 @@ $('#btnNote').onclick = () => {
   const plainFiles = files.filter(f => !f.name.includes('附笔记'));
   const pick = plainFiles.find(f => [...wantLes].some(l => f.name.startsWith(l)))
             || plainFiles[0] || files[0] || null;
-  EXPORT.target = pick ? pick.rel : '';
+  EXPORT.targets = new Set(pick ? [pick.rel] : []);
   const rows = items.map(it=>`<div class="row"><span>${it.role==='user'?'问':'答'}</span>
       <div>${esc(plain(it.text).slice(0,150))}${(it.text||'').length>150?'…':''}</div></div>`).join('');
   $('#dlg').innerHTML = `
     <div class="eb">Export note</div><h4>把选中的对话导成笔记</h4>
-    <p class="desc">勾的这几条整理成一页笔记（保留出处），追加到你要的那份讲义末尾；另存副本，不动原件。</p>
+    <p class="desc">勾的这几条整理成一页笔记（保留出处），追加到选中的讲义末尾（可多份）；每份都另存副本，不动原件。</p>
     <div class="selcap">已选 <b>${items.length} 条</b>：${items.filter(x=>x.role==='user').length} 个问题 · ${items.filter(x=>x.role!=='user').length} 个回答 · 来自 <b>${esc(CHAT.code)}</b>${CHAT.lens.size?' · '+[...CHAT.lens].join(' / '):''}</div>
     <div class="prev">${rows}</div>
-    <div class="pickpdf">追加到哪份讲义末尾（可选一份）</div>
+    <div class="pickpdf">追加到哪份讲义末尾（可多选）<span id="pickCnt" style="color:var(--faint);font-size:11.5px;margin-left:7px"></span></div>
     ${files.length>8?`<div class="dr-find" style="padding:0 0 8px;background:transparent;border:0">
       <input id="pdfFind" placeholder="找讲义：讲号或关键词" autocomplete="off">
       <span class="n" id="pdfCount">${files.length} 份</span></div>`:''}
-    <div class="pdfs" id="pdfPick">${sortFiles(files).map(f=>`<button data-rel="${esc(f.rel)}" data-name="${esc(f.name)}" style="${f.rel===EXPORT.target?'':'display:none'}" class="${f.rel===EXPORT.target?'on':''}">
-        ${esc(f.name)}<b>${f.pages} p</b></button>`).join('') || '<div class="empty">这一门还没有 PDF：先去生成页出一份。</div>'}</div>
+    <div class="pdfs" id="pdfPick">${sortFiles(files).map(f=>`<button data-rel="${esc(f.rel)}" data-name="${esc(f.name)}" class="${EXPORT.targets.has(f.rel)?'on':''}">
+        <span class="ck" style="font-family:Consolas,monospace;color:var(--faint);font-size:11.5px">${EXPORT.targets.has(f.rel)?'✓':'＋'}</span>${esc(f.name)}<b>${f.pages} p</b></button>`).join('') || '<div class="empty">这一门还没有 PDF：先去生成页出一份。</div>'}</div>
     <label class="chk"><input type="checkbox" id="useModel">让模型整理成笔记（花 token；不勾则本地整理，不花钱）</label>
     <p class="fine">页脚固定印「本内容由 AI 生成，请自行核实重要信息」；新页从原讲义末尾续，旧页码不动。</p>
     <div class="acts"><button class="btn ghost" id="expNo">取消</button>
       <button class="btn" id="expGo" ${files.length?'':'disabled'}>生成并追加</button></div>`;
   $('#veil').classList.add('on');
+  syncPickCount();
   /* 2026-11-17：一份课 120 份讲义时，挑选区只能滚 190 px；超过 8 份先只显示默认选中的那份，
      输入关键词才把匹配的摆出来（输入框为空时至少把已选中那份保住，不让人以为列表空了）。 */
   if($('#pdfFind')){
@@ -973,7 +1180,7 @@ $('#btnNote').onclick = () => {
       $('#pdfPick').querySelectorAll('[data-rel]').forEach((b, i)=>{
         let hit;
         if(kw){ hit = String(b.dataset.name||'').toLowerCase().includes(kw); }
-        else { hit = (b.dataset.rel===EXPORT.target) || i < LIST_CAP; }
+        else { hit = EXPORT.targets.has(b.dataset.rel) || i < LIST_CAP; }
         b.style.display = hit ? '' : 'none';
         if(hit) shown++;
       });
@@ -984,19 +1191,30 @@ $('#btnNote').onclick = () => {
     filterPdf();
   }
   $('#pdfPick').querySelectorAll('[data-rel]').forEach(b=>b.onclick=()=>{
-    $('#pdfPick').querySelectorAll('[data-rel]').forEach(x=>x.classList.remove('on'));
-    b.classList.add('on'); EXPORT.target = b.dataset.rel;
+    const rel = b.dataset.rel;
+    const on = EXPORT.targets.has(rel);
+    if(on) EXPORT.targets.delete(rel); else EXPORT.targets.add(rel);
+    b.classList.toggle('on', !on);
+    const ck = b.querySelector('.ck');
+    if(ck) ck.textContent = !on ? '✓' : '＋';
+    syncPickCount();
   });
   $('#expNo').onclick = () => $('#veil').classList.remove('on');
   $('#expGo').onclick = async () => {
     const useModel = $('#useModel').checked;
+    const targets = [...EXPORT.targets];
+    if(!targets.length){ toast('先选至少一份讲义'); return; }
     $('#expGo').disabled = true; $('#expGo').textContent = '生成中…';
     try{
       const j = await (await fetch('/api/note/export',{method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({code:CHAT.code, target:EXPORT.target, title:'附页：选中的对话', items, use_model:useModel})})).json();
+        body:JSON.stringify({code:CHAT.code, targets, title:'附页：选中的对话', items, use_model:useModel})})).json();
       $('#veil').classList.remove('on');
       if(j.ok){
-        toast(`${j.file} 已生成（${j.pages_before} → ${j.pages_after} 页）`,'去读附页',()=>openReader(j.rel, j.file, CHAT.code, j.pages_after));
+        const done = (j.results||[]).filter(r=>r.ok);
+        const first = done[0] || {};
+        const tail = j.failed ? ('（'+j.failed+' 份没成）') : '';
+        toast(`${j.count||done.length} 份已追加附页${tail} · 首份 ${first.file||''} ${first.pages_before} → ${first.pages_after} 页`,
+          '去读附页', () => openReader(first.rel, first.file, CHAT.code, first.pages_after));
         refreshUsage();
       }else toast('没生成：'+(j.error||'未知错误'));
     }catch(e){ $('#veil').classList.remove('on'); toast('请求失败：'+e); }
