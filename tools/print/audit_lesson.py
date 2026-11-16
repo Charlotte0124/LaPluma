@@ -342,6 +342,7 @@ def audit_one(path: str, light: bool = False) -> dict:
     n = doc.page_count
     chars = 0
     imgs = 0
+    broken_imgs = 0
     footer_hit = 0
     texts = []
     for i in range(n):
@@ -349,7 +350,13 @@ def audit_one(path: str, light: bool = False) -> dict:
         t = p.get_text("text")
         texts.append(t)
         chars += len(t)
-        imgs += len(p.get_images(full=True))
+        found = p.get_images(full=True)
+        imgs += len(found)
+        # 破图判据（2026-11-16 加）：图文件丢失时 Chrome 会画一个 14×16 的「缺图图标」，
+        # 原来只数张数，于是「图全丢了」也报 6 图、看起来是绿的。宽高 < 32 就计入破图。
+        for im in found:
+            if im[2] < 32 or im[3] < 32:
+                broken_imgs += 1
         clip = pymupdf.Rect(0, p.rect.height - 40, p.rect.width, p.rect.height)
         lines = [l.strip() for l in p.get_text("text", clip=clip).splitlines() if l.strip()]
         if lines and FOOTER_RE.search(lines[-1]):
@@ -368,6 +375,8 @@ def audit_one(path: str, light: bool = False) -> dict:
     doc.close()
 
     fails, warns = [], []
+    if broken_imgs:
+        fails.append(f"{broken_imgs} 张图是破图（宽高 < 32px，Chrome 缺图图标）：图文件没找到",)
     if light:
         if luma < TH["light_luma"]:
             fails.append(f"非浅色底(亮度{luma})")
