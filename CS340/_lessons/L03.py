@@ -9,7 +9,7 @@ LESSON = {
     "out": "L03_进程与内核_讲义.pdf",
     "sub": "课件讲义 · 中英对照 ｜ 每个知识点标课件页码 ｜ 从内核视角看 fork/exec，再走通中断与信号",
     "meta": [
-        ("源课件", "L03_ProcessAndKernel.pdf，57 页（Xuan Xie，MUST；部分素材来自 Subrota Kumar Mondal）"),
+        ("源课件", "L03_ProcessAndKernel.pdf，57 页"),
         ("正文来源", "课件文本层直抽（判定 mixed，305 字符/页），未走 OCR"),
         ("图", "按页裁自原 PDF，未重绘、未改图内文字"),
         ("页码口径", "「课件 p.N」指源 PDF 的页序（共 57 页）"),

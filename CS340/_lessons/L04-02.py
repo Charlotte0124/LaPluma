@@ -9,7 +9,7 @@ LESSON = {
     "out": "L04-02_进程组织与调度二_讲义.pdf",
     "sub": "课件讲义 · 中英对照 ｜ 每个知识点标课件页码 ｜ 四种经典算法 + 优先级与实时调度，算例全给",
     "meta": [
-        ("源课件", "L04_ProcessOrganizationAndScheduling-02.pdf，99 页（Xuan Xie，MUST）"),
+        ("源课件", "L04_ProcessOrganizationAndScheduling-02.pdf，99 页"),
         ("正文来源", "课件文本层直抽（判定 text，297 字符/页），未走 OCR"),
         ("图", "按页裁自原 PDF，未重绘、未改图内文字"),
         ("页码口径", "「课件 p.N」指源 PDF 的页序（共 99 页）"),

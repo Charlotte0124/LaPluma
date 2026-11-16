@@ -9,7 +9,7 @@ LESSON = {
     "out": "L04-01_进程组织与调度一_讲义.pdf",
     "sub": "课件讲义 · 中英对照 ｜ 每个知识点标课件页码 ｜ 状态、前后台、开机链、僵尸与上下文切换",
     "meta": [
-        ("源课件", "L04_ProcessOrganizationAndScheduling-01.pdf，68 页（Xuan Xie，MUST）"),
+        ("源课件", "L04_ProcessOrganizationAndScheduling-01.pdf，68 页"),
         ("正文来源", "课件文本层直抽（判定 mixed，311 字符/页），未走 OCR"),
         ("图", "按页裁自原 PDF，未重绘、未改图内文字"),
         ("页码口径", "「课件 p.N」指源 PDF 的页序（共 68 页）"),

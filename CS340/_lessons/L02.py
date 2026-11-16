@@ -9,7 +9,7 @@ LESSON = {
     "out": "L02_进程的基本管理_讲义.pdf",
     "sub": "课件讲义 · 中英对照 ｜ 每个知识点标课件页码 ｜ fork 与 exec 的每个细节都回到原页",
     "meta": [
-        ("源课件", "L02_BasicProcessManagement.pdf，58 页（Xuan Xie，MUST；部分素材来自 Subrota Kumar Mondal）"),
+        ("源课件", "L02_BasicProcessManagement.pdf，58 页"),
         ("正文来源", "课件文本层直抽（判定 mixed，304 字符/页），未走 OCR"),
         ("图", "按页裁自原 PDF，未重绘、未改图内文字"),
         ("页码口径", "「课件 p.N」指源 PDF 的页序（共 58 页）"),

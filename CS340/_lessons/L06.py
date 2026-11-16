@@ -76,7 +76,7 @@ LESSON = {
     "out": "L06_线程_讲义.pdf",
     "sub": "讲义 · 练习型 ｜ 代码 + 例题运算 + 结构图 ｜ 从「一个进程一条执行流」走到 pthread 的互斥与同步",
     "meta": [
-        ("源课件", "L06_Light-WeightProcesses_Threads.pdf，48 页（Xuan Xie，MUST；部分素材来自 Subrota Kumar Mondal）"),
+        ("源课件", "L06_Light-WeightProcesses_Threads.pdf，48 页"),
         ("本讲口径", "以代码与推演为主：每节至少一段可跑代码或一道带数的例题，理论只解释为什么这么写"),
         ("图", "结构图按课件概念自绘（不再按页裁原图），所以没有外部图片依赖"),
         ("页码口径", "「课件 p.N」指源 PDF 的页序（共 48 页），不是幻灯片编号"),
