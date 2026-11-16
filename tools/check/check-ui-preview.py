@@ -14,6 +14,8 @@ r"""check-ui-preview.py — 界面改动必须先有预览图（2026-11-16 立�
           （2026-11-16 修正：原来比的是「提交时间先后」，会把「先出图、后改码」这一正确
             流程判红；改成看**同一次提交里带了什么**。代价是：如果图与码分成两个提交，
             会红 —— 规矩因此写成「预览稿/截图与界面改动放同一个提交」。）
+          例外：提交信息带 `[ui-noshow]`（声明本次 ui 改动无可见变化，例如只改了缓存头/
+            接口速度），不判红，但记黄要求人工看一眼——不靠它来「洗绿」。
     B 红：docs\预览 里的 png 没在 README.md 登记（孤儿图，别人不知道它解决什么）；
           或预览目录存在却一张图都没有；或缺 README.md。
     C 黄：工作区里 ui\ 有未提交改动，而 docs\预览 没有 —— 正在改界面，图还没出。
@@ -69,6 +71,11 @@ def commit_files(repo, rev):
     return [line.strip() for line in out.splitlines() if line.strip()]
 
 
+def commit_msg(repo, rev):
+    rc, out, _ = git(repo, 'log', '-1', '--format=%B', rev)
+    return out if rc == 0 else ''
+
+
 def fmt(ts):
     return time.strftime('%Y-%m-%d %H:%M', time.localtime(ts)) if ts else '（无提交记录）'
 
@@ -96,8 +103,13 @@ def run(root):
         touched = [f for f in files if f.startswith('docs/预览') or f.startswith('docs/资产')]
         note.append('最后一次界面提交 %s（%s）带图 %d 个' % (rev[:7] or '?', fmt(t_ui), len(touched)))
         if not touched:
-            red.append('A 界面提交 %s（%s）里没带图：预览稿或真实截图要与界面改动放同一个提交'
-                       % (rev[:7] or '?', fmt(t_ui)))
+            msg = commit_msg(root, rev)
+            if 'ui-noshow' in msg:
+                yel.append('A 界面提交 %s 自己声明「无可见改动」（[ui-noshow]）：没带图，请人工确认'
+                           % (rev[:7] or '?'))
+            else:
+                red.append('A 界面提交 %s（%s）里没带图：预览稿或真实截图要与界面改动放同一个提交'
+                           % (rev[:7] or '?', fmt(t_ui)))
 
     # —— B：孤儿图 / 空目录 / 缺登记
     if os.path.isdir(prev_dir):
@@ -208,6 +220,12 @@ def selftest():
         _commit(repo, 'step3c', when=1700000400)
         r, y, _ = run(repo)
         steps.append(('图与码同一提交 → 绿', not r, r))
+
+        # 3d) 只改服务代码、提交信息声明 [ui-noshow] → 期望不红、只黄
+        _w(os.path.join(repo, 'ui', 'server.py'), '# 只改缓存头\n')
+        _commit(repo, 'step3d 改缓存头 [ui-noshow]', when=1700000500)
+        r, y, _ = run(repo)
+        steps.append(('声明无可见改动 → 黄不红', (not r) and any(x.startswith('A') for x in y), r + y))
 
         # 4) 界面有未提交改动 → 期望黄 C（不算红）
         _w(os.path.join(repo, 'ui', 'index.html'), '<b>v3</b>')
