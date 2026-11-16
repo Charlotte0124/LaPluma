@@ -29,6 +29,11 @@ desktop.ini
 # 本地用量日志（2026-11-16）
 _logs/
 
+# 打包产物（2026-11-17）：exe 体积大且可重建，不入库；只入库 tools\build 里的 spec 与脚本
+dist/
+.build/
+*.spec.bak
+
 
 # 交接卡是本机状态（PID / 本地路径 / 端口），不进公开库
 _交接-*.md

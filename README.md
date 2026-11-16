@@ -11,7 +11,7 @@
 
 <div align="center">
 
-<a href="https://github.com/Charlotte0124/LaPluma/releases/latest"><img src="https://img.shields.io/badge/⬇_下载_v1.8.0-C8202C?style=for-the-badge&logo=windows&logoColor=white" height="40" alt="下载"></a>
+<a href="https://github.com/Charlotte0124/LaPluma/releases/latest"><img src="https://img.shields.io/badge/⬇_下载_v1.8.1-C8202C?style=for-the-badge&logo=windows&logoColor=white" height="40" alt="下载"></a>
 &nbsp;
 <a href="一键启动.ps1"><img src="https://img.shields.io/badge/▶_一键启动-2F7D4F?style=for-the-badge&logo=powershell&logoColor=white" height="40" alt="一键启动"></a>
 &nbsp;
@@ -25,7 +25,7 @@
 
 ![license](https://img.shields.io/badge/license-MIT-171714?style=flat-square)
 ![python](https://img.shields.io/badge/python-3.12-171714?style=flat-square)
-![version](https://img.shields.io/badge/version-1.8.0-171714?style=flat-square)
+![version](https://img.shields.io/badge/version-1.8.1-171714?style=flat-square)
 ![gates](https://img.shields.io/badge/三道门-绿才出门-C8202C?style=flat-square)
 ![offline](https://img.shields.io/badge/离线可用-不需要_API_key-2F7D4F?style=flat-square)
 
@@ -78,7 +78,16 @@
 
 **它不解决的问题**：内容是否正确、类比是否恰当、例题数字是否算对，脚本无法判定——这一步必须由人复核。每份成品的页脚固定印有「本内容由 AI 生成，请自行核实重要信息」。
 
-**从源码运行（当前唯一方式）**
+**直接运行（Windows，最简单）**
+
+从 [Releases](https://github.com/Charlotte0124/LaPluma/releases/latest) 下载 `LaPluma.exe`（约 101 MB），双击运行：
+控制台会打印本机地址，浏览器自动打开界面。首次启动要解包，慢几秒。
+
+- 你放进去的课程、生成的 PDF 与日志都在 **exe 旁边**；配置在 `%USERPROFILE%\.pluma`
+- 自带示例课程 `DEMO`（2 讲），不配密钥也能出 PDF；要换成自己的课，在 exe 旁边建 `<课程代码>\_lessons\` 并在 `courses.json` 里登记
+- 需要本机 Chrome 或 Edge（打印 PDF 用），无需另装
+
+**从源码运行**
 
 ```powershell
 git clone https://github.com/Charlotte0124/LaPluma.git
@@ -210,12 +219,12 @@ A/B/C 三层可离线运行；仅「让模型撰写新内容」时才需要 D �
 <!-- 最近更新:begin（由 tools/sync-readme.py 生成，别手改） -->
 | 版本 | 日期 | 这一版做了什么 |
 |:--|:--|:--|
+| **v1.8.1** | 11-17 | 推出单文件 exe（LaPluma.exe）；修好打包后才暴露的三处问题 |
 | **v1.8.0** | 11-17 | 搜索课程与课件（放大镜 / Ctrl+K）· 导出可选分册或合订本 · 笔记可一次加到多份讲义 · 生成可多选讲次 |
 | **v1.7.0** | 11-17 | 一键上线按钮 · 余额不足的人话提示 · 讲义多时列表更清爽 |
 | **v1.6.0** | 11-17 | 新增《桃花源记》示例与「范本 → 成品」对照 · 界面截图全部换成示例课程 |
 | **v1.5.0** | 11-16 | 四个分页 + 深色主题 · 会话可勾选消息、讲次可多选 |
-| **v1.4.0** | 11-16 | 新增「成品形态」：单本 / 合订本 |
-| — | — | 更早的 9 个版本 → [CHANGELOG](CHANGELOG.md) |
+| — | — | 更早的 10 个版本 → [CHANGELOG](CHANGELOG.md) |
 <!-- 最近更新:end -->
 
 ## 目录

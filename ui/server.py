@@ -42,11 +42,17 @@ def _pick_default_course() -> str:
     try:
         with open(paths.data_or_res("courses.json"), "r", encoding="utf-8-sig") as _f:
             _keys = [k for k in json.load(_f).keys() if not k.startswith("_")]
+        # 2026-11-17 打包后真撞到：exe 只带示例课程 DEMO，courses.json 第一个键却是 CS340（真实课程
+        #   不入公开仓），于是默认课程指向一个不存在的目录，界面看着像空的。先挑目录真存在的，
+        #   都不存在才退回第一个键。
+        for k in _keys:
+            if os.path.isdir(paths.course_dir(k)):
+                return k
         if _keys:
             return _keys[0]
     except Exception:  # noqa: BLE001
         pass
-    return "CS340"
+    return "DEMO"
 
 
 DEFAULT_COURSE = _pick_default_course()
@@ -67,7 +73,7 @@ HOST, PORT = "127.0.0.1", 8765
 #   每次打开/刷新阅读器都全量重传（本机无感，平板走 WiFi 明显）。
 #   index.html 必须仍走 no-store（改完界面要能立刻看到新版）。
 _STATIC_ETAG = {}
-VERSION = "1.8.0"
+VERSION = "1.8.1"
 BOOK_NAME = DEFAULT_COURSE + "_九讲合订本_讲义.pdf"
 
 # ---------- 主机上线（局域网 + 8 位访问码）----------
@@ -336,12 +342,26 @@ def _pages(pdf_path: str) -> int:
 
 
 def safe_join(*parts):
-    """拼一个可读文件的绝对路径；两根（数据根 / 资源根）以内才算合法。"""
-    p = os.path.abspath(os.path.join(ROOT, *parts))
+    """拼一个可读文件的绝对路径；两根以内才算合法。
+
+    2026-11-17 打包后真撞到：以前只拼数据根（ROOT），exe 里示例课程 DEMO 住在资源根
+    （_MEIPASS），于是「读 D02」直接 FileNotFound——阅读页打不开、笔记副本也写不出来。
+    现在按「数据根优先、资源根回落」，按**真实存在**选，不按前缀选。
+    """
+    rel = os.path.join(*parts)
+    cands = []
     for root in (paths.DATA_ROOT, paths.RES_ROOT):
-        if root and p.startswith(os.path.abspath(root) + os.sep):
+        if not root:
+            continue
+        p = os.path.abspath(os.path.join(root, rel))
+        if p.startswith(os.path.abspath(root) + os.sep):
+            cands.append(p)
+    if not cands:
+        raise PermissionError("路径越界")
+    for p in cands:
+        if os.path.isfile(p):
             return p
-    raise PermissionError("路径越界")
+    return cands[0]      # 都不存在：回数据根，交给调用方报「文件不存在」
 
 
 def course_pdfs(code: str) -> list:
@@ -562,6 +582,12 @@ def build_note_pdf(target_rel: str, title: str, blocks: list) -> dict:
         raise FileNotFoundError(src)
     out = os.path.join(os.path.dirname(src),
                        os.path.splitext(os.path.basename(src))[0] + "_附笔记.pdf")
+    # 2026-11-17：源在资源根（exe 里的示例课程，只读）时，副本必须写到数据根，
+    #   否则要么写不进去，要么写到临时目录一关就没了。
+    if paths.RES_ROOT and os.path.abspath(src).startswith(os.path.abspath(paths.RES_ROOT) + os.sep):
+        out_dir = os.path.join(ROOT, os.path.dirname(rel_out(src)))
+        os.makedirs(out_dir, exist_ok=True)
+        out = os.path.join(out_dir, os.path.splitext(os.path.basename(src))[0] + "_附笔记.pdf")
     doc = pymupdf.open(src)
     before = doc.page_count
     w, h = doc[0].rect.width, doc[0].rect.height
