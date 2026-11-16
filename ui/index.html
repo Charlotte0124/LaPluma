@@ -63,6 +63,15 @@
   .qi.fail{border-color:#e9c7c4;background:#fdf5f4}
   .qi.fail .st{color:var(--red)}
   .log{margin-top:10px;background:#12120f;color:#d9d4c6;border-radius:10px;padding:12px;font-family:Consolas,monospace;font-size:11.5px;line-height:1.7;max-height:220px;overflow:auto;white-space:pre-wrap;display:none}
+.ask-a{margin-top:12px;background:#12120f;border:1px solid var(--line);border-radius:10px;padding:14px}
+.ask-q{color:var(--faint);font-size:12.5px;margin-bottom:8px}
+.ask-text{color:#e9e5d8;font-size:13px;line-height:1.85}
+.ask-meta{margin-top:10px;color:var(--faint);font-size:11.5px}
+.ask-a details{margin-top:12px;border-top:1px solid var(--line);padding-top:10px}
+.ask-a summary{cursor:pointer;font-size:12px;color:var(--faint)}
+.ask-a ol{margin:10px 0 0 18px;padding:0;color:#cfcabb;font-size:12px;line-height:1.7}
+.ask-a li{margin-bottom:8px}
+.ask-a small{color:var(--faint)}
   footer{margin-top:34px;padding-top:16px;border-top:1px solid var(--line);display:flex;justify-content:space-between;font-size:12px;color:var(--faint);gap:14px;flex-wrap:wrap}
   .aibadge{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);background:#fff;border-radius:999px;padding:6px 13px;font-size:11.5px;color:var(--sub)}
   .aibadge i{width:13px;height:13px;border:1px solid var(--faint);border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:8px;font-style:normal}
@@ -150,6 +159,13 @@
           <div class="opt" data-mode="repo"><b>推送到仓库</b><small>本仓提交即推送</small></div>
         </div>
         <div class="fld"><code id="outPath">CS340/01_讲义</code><span style="font-size:11.5px;color:var(--faint)">保存目录</span></div>
+        <p class="note-s" id="dirFix" style="display:none;color:#b4332c">保存目录在配置里是乱码（出现过 ?），已临时退回默认目录；请到「设置」里重填。</p>
+        <h3 style="margin-top:16px">成品形态</h3>
+        <p class="hint">单本＝一讲一份 PDF（默认）；合订本＝全部讲合成一本，去掉各讲自带的封面与目录。</p>
+        <div class="opts" id="formOpts">
+          <div class="opt on" data-form="single"><b>单本</b><small>一讲一份</small></div>
+          <div class="opt" data-form="book"><b>合订本</b><small>全部讲一本</small></div>
+        </div>
         <div class="tools">
           <select id="courseSel"></select>
           <select id="lessonSel"></select>
@@ -168,6 +184,21 @@
         <div class="kv"><span>估算花费</span><b id="mCost">—</b></div>
         <p class="note-s">不填 key 也能出 PDF：已有数据走本地渲染，不需要模型。只有「写新内容」才用得到。</p>
       </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-h"><h2>问课件</h2><span style="font-size:12px;color:var(--faint)">只按这一讲的内容回答，并标出处</span></div>
+    <div class="card">
+      <p class="hint">检索在这一讲的内容数据里做（不联网、不跳讲），命中的节号与课件页码会自动带进回答。
+        没配 API 钥匙时也能看到「命中了哪几段」，只是不出回答。</p>
+      <div class="tools">
+        <select id="askLesson"></select>
+        <input id="askQ" placeholder="例如：信号量初值 0 时 down 会怎样" style="flex:1;min-width:220px">
+        <button class="btn primary" id="btnAsk">提问</button>
+      </div>
+      <div class="ask-a" id="askA" style="display:none"></div>
+      <div class="log" id="askLog"></div>
     </div>
   </section>
 
@@ -192,12 +223,13 @@
 
 <script>
 const $=s=>document.querySelector(s);
-let B={}, MODE='local', TAB='all', Q=[], MODEL='deepseek-flash';
+let B={}, MODE='local', FORM='single', TAB='all', Q=[], MODEL='deepseek-flash';
 
 async function boot(){
   const r=await fetch('/api/bootstrap'); B=await r.json();
   MODEL=B.model; $('#ver').textContent='v'+B.version;
   $('#mModel').textContent=B.model;
+  if($('#dirFix')) $('#dirFix').style.display = B.save_dir_fixed ? 'block' : 'none';
   render(); fillSelects(); refreshUsage();
   $('#outPath').textContent=B.save_dir;
   const apiOk=B.configured;
@@ -239,17 +271,26 @@ function fillSelects(){
 }
 function syncLessons(){
   const c=B.courses.find(x=>x.code===$('#courseSel').value)||B.courses[0];
-  $('#lessonSel').innerHTML=(c?c.lessons:[]).map(n=>`<option>${n}</option>`).join('')||'<option value="">（没有可生成的数据）</option>';
+  const opts=(c?c.lessons:[]).map(n=>`<option>${n}</option>`).join('')||'<option value="">（没有可生成的数据）</option>';
+  $('#lessonSel').innerHTML=opts;
+  if($('#askLesson')) $('#askLesson').innerHTML=opts;
 }
 $('#courseSel').onchange=syncLessons;
 document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
   document.querySelectorAll('.tab').forEach(x=>x.classList.remove('on'));
   t.classList.add('on'); TAB=t.dataset.tab; render();
 });
-document.querySelectorAll('.opt').forEach(o=>o.onclick=()=>{
-  document.querySelectorAll('.opt').forEach(x=>x.classList.remove('on'));
+// 两组选项分开管：输出位置（local/repo）与成品形态（single/book）；混在一起会把 MODE 写成 undefined
+document.querySelectorAll('.opt[data-mode]').forEach(o=>o.onclick=()=>{
+  document.querySelectorAll('.opt[data-mode]').forEach(x=>x.classList.remove('on'));
   o.classList.add('on'); MODE=o.dataset.mode;
   $('#outPath').textContent= MODE==='local'? B.save_dir : '生成后本仓提交（会先跑敏感扫描）';
+});
+document.querySelectorAll('.opt[data-form]').forEach(o=>o.onclick=()=>{
+  document.querySelectorAll('.opt[data-form]').forEach(x=>x.classList.remove('on'));
+  o.classList.add('on'); FORM=o.dataset.form;
+  // 合订本是全部讲合成一本，讲次选择就没意义了
+  $('#lessonSel').disabled = FORM==='book';
 });
 function openDrawer(c){
   $('#drCode').textContent=c.code+(c.en?' · '+c.en:'');
@@ -273,8 +314,12 @@ function renderQueue(){
 }
 $('#btnGen').onclick=()=>{
   const no=$('#lessonSel').value, course=$('#courseSel').value;
+  if(FORM==='book'){
+    if(!course) return;
+    return disclaimer(()=>runGenerate(course,'', 'book'));
+  }
   if(!no) return;
-  disclaimer(()=>runGenerate(course,no));
+  disclaimer(()=>runGenerate(course,no,FORM));
 };
 function disclaimer(cb){
   $('#dlg').innerHTML=`
@@ -291,13 +336,15 @@ function disclaimer(cb){
   const close=()=>$('#veil').classList.remove('on');
   $('#dlgNo').onclick=close; $('#dlgYes').onclick=()=>{close();cb();};
 }
-async function runGenerate(course,no){
-  const item={course,lesson:no,st:'run'}; Q.unshift(item); renderQueue();
-  const log=$('#log'); log.style.display='block'; log.textContent='正在生成 '+no+' …';
+async function runGenerate(course,no,form){
+  form=form||'single';
+  const label= form==='book' ? '合订本' : no;
+  const item={course,lesson:label,st:'run'}; Q.unshift(item); renderQueue();
+  const log=$('#log'); log.style.display='block'; log.textContent='正在生成 '+label+' …';
   $('#btnGen').disabled=true;
   try{
     const r=await fetch('/api/generate',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({course,lesson:no,mode:MODE,save_dir:B.save_dir})});
+      body:JSON.stringify({course,lesson:no,form,mode:MODE,save_dir:B.save_dir})});
     const j=await r.json();
     log.textContent=(j.ok?'成功（'+j.seconds+'s）\n\n':'失败\n\n')+(j.log||j.error||'');
     if(j.ok){
@@ -310,6 +357,38 @@ async function runGenerate(course,no){
   }catch(e){ item.st='fail'; item.msg='请求失败'; renderQueue(); log.textContent='请求失败：'+e; }
   $('#btnGen').disabled=false;
 }
+// ---- 问课件 ----
+$('#btnAsk').onclick=async()=>{
+  const course=$('#courseSel').value, no=$('#askLesson').value, q=$('#askQ').value.trim();
+  const log=$('#askLog'), box=$('#askA');
+  box.style.display='none'; log.style.display='block';
+  if(q.length<2){ log.textContent='先把问题写长一点（至少两个字）。'; return; }
+  if(!no){ log.textContent='这一门还没有可提问的讲次。'; return; }
+  log.textContent='正在检索并回答…';
+  $('#btnAsk').disabled=true;
+  try{
+    const r=await fetch('/api/ask',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({course,lesson:no,question:q})});
+    const j=await r.json();
+    const refs=(j.refs||[]).map(x=>`<li>§${x.sec} ${x.title} · ${x.kind}`+
+      (x.pages&&x.pages.length?` · 课件 p.${x.pages.join('、p.')}`:'')+
+      `<br><small>${x.text}</small></li>`).join('');
+    if(j.ok){
+      log.style.display='none'; box.style.display='block';
+      box.innerHTML=`<div class="ask-q">${q}</div>`+
+        `<div class="ask-text">${j.answer.replace(/</g,'&lt;').replace(/\n/g,'<br>')}</div>`+
+        `<div class="ask-meta">${j.model} · ${j.seconds}s · 命中 ${(j.refs||[]).length} 段</div>`+
+        (refs?`<details><summary>命中的片段（核对用）</summary><ol>${refs}</ol></details>`:'');
+      refreshUsage();
+    }else{
+      log.textContent=(j.error||'失败');
+      if(refs){ box.style.display='block';
+        box.innerHTML=`<details open><summary>已检索到的片段（没生成回答）</summary><ol>${refs}</ol></details>`; }
+    }
+  }catch(e){ log.textContent='请求失败：'+e; }
+  $('#btnAsk').disabled=false;
+};
+
 async function refreshUsage(){
   const r=await fetch('/api/bootstrap'); B=await r.json();
   const u=B.usage||{};

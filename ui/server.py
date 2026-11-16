@@ -32,7 +32,8 @@ CFG_PATH = os.path.join(USER_DIR, "api.json")
 FAV_PATH = os.path.join(USER_DIR, "favorites.json")
 USAGE_PATH = os.path.join(LOG_DIR, "usage.jsonl")
 HOST, PORT = "127.0.0.1", 8765
-VERSION = "1.2.0"
+VERSION = "1.4.0"
+BOOK_NAME = "CS340_九讲合订本_讲义.pdf"
 
 sys.path.insert(0, API_DIR)
 try:
@@ -68,14 +69,21 @@ def _write_json(path, obj):
 
 def load_cfg():
     cfg = _read_json(CFG_PATH)
+    default_dir = os.path.join("CS340", "01_讲义")
     out = {
         "provider": cfg.get("provider", "DeepSeek"),
         "base_url": cfg.get("base_url", "https://api.deepseek.com"),
         "model": cfg.get("model", "deepseek-flash"),
         "api_key": cfg.get("api_key", ""),
-        "save_dir": cfg.get("save_dir", os.path.join("CS340", "01_讲义")),
+        "save_dir": cfg.get("save_dir") or default_dir,
         "wizard_done": bool(cfg.get("wizard_done", False)),
+        "save_dir_fixed": False,
     }
+    # 2026-11-16 实际撞到：某个写入环节把「讲义」写成了 ??，之后每次生成都往 CS340/01_?? 里放。
+    # 路径里出现问号就认为被编码破坏，退回默认目录并在界面上说明。
+    if "?" in out["save_dir"] or "\ufffd" in out["save_dir"]:
+        out["save_dir"] = default_dir
+        out["save_dir_fixed"] = True
     # 本机没填 key 时，走 D 层的三级回退（环境变量 / PRTS secrets）
     if not out["api_key"] and api_client is not None:
         try:
@@ -213,6 +221,7 @@ class Handler(BaseHTTPRequestHandler):
                     "configured": bool(cfg["api_key"]), "wizard_done": cfg["wizard_done"],
                     "model": cfg["model"], "models": MODELS,
                     "save_dir": cfg["save_dir"], "save_dir_abs": os.path.abspath(os.path.join(ROOT, cfg["save_dir"])),
+                    "save_dir_fixed": cfg.get("save_dir_fixed", False),
                     "courses": discover_courses(), "usage": usage_summary(),
                 })
             if u.path == "/api/balance":
@@ -250,7 +259,11 @@ class Handler(BaseHTTPRequestHandler):
                 cfg = load_cfg()
                 for k in ("model", "save_dir", "base_url", "provider"):
                     if body.get(k):
-                        cfg[k] = str(body[k])
+                        v = str(body[k])
+                        if k == "save_dir" and ("?" in v or "\ufffd" in v):
+                            return self._json({"ok": False,
+                                               "error": "保存目录里有 ? 或乱码字符，像是编码坏了；请重填"}, 400)
+                        cfg[k] = v
                 if body.get("api_key"):
                     key = str(body["api_key"]).strip()
                     if not key.startswith("sk-"):
@@ -272,11 +285,23 @@ class Handler(BaseHTTPRequestHandler):
             if u.path == "/api/generate":
                 no = str(body.get("lesson", "")).strip()
                 course = str(body.get("course", "CS340")).strip()
+                form = str(body.get("form", "single")).strip() or "single"
+                t0 = time.time()
+                if form == "book":
+                    # 合订本：默认全部讲，按讲号顺序（B 口径：去掉各讲封面与目录）
+                    p = subprocess.run([sys.executable, os.path.join(ROOT, "engine", "_book.py")],
+                                       cwd=ROOT, capture_output=True, text=True,
+                                       encoding="utf-8", errors="replace", timeout=600)
+                    log = (p.stdout or "") + (p.stderr or "")
+                    copied = ""
+                    if p.returncode == 0:
+                        copied = self._copy_out(course, "CS340_九讲合订本", str(body.get("save_dir") or ""))
+                    return self._json({"ok": p.returncode == 0, "log": log, "form": "book",
+                                       "seconds": round(time.time() - t0, 1), "copied": copied})
                 avail = sorted(x[:-3] for x in os.listdir(os.path.join(ROOT, course, "_lessons"))
                                if x.endswith(".py")) if os.path.isdir(os.path.join(ROOT, course, "_lessons")) else []
                 if no not in avail:
                     return self._json({"ok": False, "error": "没有这一讲：%s" % no}, 400)
-                t0 = time.time()
                 p = subprocess.run([sys.executable, os.path.join(ROOT, "engine", "_make.py"), no],
                                    cwd=ROOT, capture_output=True, text=True,
                                    encoding="utf-8", errors="replace", timeout=300)
@@ -284,8 +309,42 @@ class Handler(BaseHTTPRequestHandler):
                 copied = ""
                 if p.returncode == 0 and body.get("save_dir"):
                     copied = self._copy_out(course, no, str(body["save_dir"]))
-                return self._json({"ok": p.returncode == 0, "log": log,
+                return self._json({"ok": p.returncode == 0, "log": log, "form": "single",
                                    "seconds": round(time.time() - t0, 1), "copied": copied})
+            if u.path == "/api/ask":
+                # 问课件：只在这一讲的内容数据里找片段（不联网、不跨讲），再交给模型回答
+                import importlib.util as _ilu
+                no = str(body.get("lesson", "")).strip()
+                course = str(body.get("course", "CS340")).strip()
+                question = str(body.get("question", "")).strip()
+                if not (2 <= len(question) <= 500):
+                    return self._json({"ok": False, "error": "问题长度要在 2–500 字之间"}, 400)
+                path = os.path.join(ROOT, "engine", "_ask.py")
+                if not os.path.isfile(path):
+                    return self._json({"ok": False, "error": "缺少 engine/_ask.py"}, 500)
+                cfg = load_cfg()
+                spec = _ilu.spec_from_file_location("pluma_ask", path)
+                mod = _ilu.module_from_spec(spec)
+                spec.loader.exec_module(mod)
+                try:
+                    lesson = mod.builder.load(no)
+                except Exception as e:  # noqa: BLE001
+                    return self._json({"ok": False, "error": "读不到这一讲的数据：%r" % e}, 400)
+                picked = mod.search(lesson, question)
+                refs = [{"sec": r["sec"], "title": r["title"], "kind": r["kind"],
+                         "pages": r["pages"], "text": r["text"][:160]} for r in picked]
+                if api_client is None or not cfg["api_key"]:
+                    return self._json({"ok": False, "need_key": True, "refs": refs,
+                                       "error": "没配置 API 钥匙，不能真问。上方设置里填 sk- 开头的 key；"
+                                                "已检索到的片段在下面可以直接看。"})
+                t0 = time.time()
+                try:
+                    out = mod.answer(lesson, question, model=cfg["model"])
+                except Exception as e:  # noqa: BLE001
+                    return self._json({"ok": False, "error": "模型调用失败：%s" % e, "refs": refs}, 502)
+                log_usage(out.get("model", cfg["model"]), out.get("usage", {}))
+                return self._json({"ok": True, "answer": out["text"], "model": out["model"],
+                                   "seconds": round(time.time() - t0, 1), "refs": refs})
             return self._json({"ok": False, "error": "无此路由"}, 404)
         except subprocess.TimeoutExpired:
             return self._json({"ok": False, "error": "生成超时（>300 s）"}, 504)
@@ -294,14 +353,21 @@ class Handler(BaseHTTPRequestHandler):
 
     def _copy_out(self, course, no, dest):
         """成功后把成品复制到用户选的目录（dest 可在仓内，也可绝对路径）。"""
+        if not dest:
+            return ""
         src_dir = os.path.join(ROOT, course, "01_讲义")
         hit = [f for f in os.listdir(src_dir) if f.startswith(no + "_") and f.endswith(".pdf")]
         if not hit:
             return ""
         dst = dest if os.path.isabs(dest) else os.path.join(ROOT, dest)
+        src = os.path.join(src_dir, hit[0])
+        target = os.path.join(dst, hit[0])
+        # 保存目录就是仓内默认目录时，源就是目标：再 copy2 一次会报「文件被占用」
+        if os.path.abspath(src) == os.path.abspath(target):
+            return target
         os.makedirs(dst, exist_ok=True)
-        shutil.copy2(os.path.join(src_dir, hit[0]), os.path.join(dst, hit[0]))
-        return os.path.join(dst, hit[0])
+        shutil.copy2(src, target)
+        return target
 
 
 def main() -> int:
