@@ -27,7 +27,7 @@
 ![python](https://img.shields.io/badge/python-3.12-171714?style=flat-square)
 ![version](https://img.shields.io/badge/version-1.8.1-171714?style=flat-square)
 ![gates](https://img.shields.io/badge/三道门-绿才出门-C8202C?style=flat-square)
-![offline](https://img.shields.io/badge/离线可用-不需要_API_key-2F7D4F?style=flat-square)
+![offline](https://img.shields.io/badge/出_PDF-不需要密钥-2F7D4F?style=flat-square)
 
 </div>
 
@@ -57,9 +57,9 @@
 
 **三种使用方式**：
 
-1. **已有数据 → 出 PDF**：不需要任何 API 密钥，全程离线。
+1. **已有内容数据 → 出 PDF**：只要这一讲的 `LESSON` 数据在，不需要任何 API 密钥，全程离线。
 2. **改内容 → 重跑一条命令**：改那一讲的 `LESSON` 数据，`python engine\_make.py <讲号>`。
-3. **让模型起草新内容（可选）**：配置 DeepSeek 密钥后走 D 层；不配置也不影响前两种。
+3. **需要密钥的只有几件**：问课件、让模型整理笔记、让模型撰写新内容。不配也不影响上面两种。
 
 | 我想… | 去哪 |
 |:--|:--|
@@ -84,7 +84,7 @@
 控制台会打印本机地址，浏览器自动打开界面。首次启动要解包，慢几秒。
 
 - 你放进去的课程、生成的 PDF 与日志都在 **exe 旁边**；配置在 `%USERPROFILE%\.pluma`
-- 自带示例课程 `DEMO`（2 讲），不配密钥也能出 PDF；要换成自己的课，在 exe 旁边建 `<课程代码>\_lessons\` 并在 `courses.json` 里登记
+- 自带示例课程 `DEMO`（2 讲），内容数据齐备，**不配密钥也能出 PDF**；要换成自己的课，在 exe 旁边建 `<课程代码>\_lessons\` 并在 `courses.json` 里登记
 - 需要本机 Chrome 或 Edge（打印 PDF 用），无需另装
 
 **从源码运行**
@@ -210,6 +210,7 @@ A/B/C 三层可离线运行；仅「让模型撰写新内容」时才需要 D �
 
 - 模型：仅保留两档 —— DeepSeek 4.1 Flash（默认，快且省）/ 4.1 Pro（质量更高）；接口 id 为 `deepseek-flash` / `deepseek-v4-pro`，设置中可随时切换
 - 密钥读取顺序：`PLUMA_API_KEY` 环境变量 → `%USERPROFILE%\.pluma\api.json` → PRTS 侧 secrets → 界面填写
+- **什么时候必须有密钥**：问课件（`/api/ask`）、让模型整理笔记（导出笔记里的勾选项）、让模型撰写新内容。**只出 PDF 不需要**；但生成前提是那一讲的内容数据（`_lessons\<讲号>.py`）已经存在
 - **余额**取自接口真实数值（`/user/balance`）；**花费**按 token 单价估算，界面明确标注「估」，不作为账单
 
 ## 最近更新
