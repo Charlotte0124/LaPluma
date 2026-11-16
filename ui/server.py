@@ -47,8 +47,12 @@ PRICE = {
     "deepseek-v4-pro": {"in": 2.0, "out": 8.0},
 }
 MODELS = [
-    {"id": "deepseek-flash", "name": "DeepSeek Flash", "note": "快、便宜；日常生成够用"},
-    {"id": "deepseek-v4-pro", "name": "DeepSeek V4 Pro", "note": "更强；长推导、结构复杂的讲次"},
+    # 2026-11-16 用户定：只留这两档（4.1 Flash / 4.1 Pro）。
+    # 注意 id 不能改：接口 GET /models 实测只返回 deepseek-flash 与 deepseek-v4-pro
+    # （python api\client.py --check 可复验），把 id 换成带 4.1 的写法会让 /chat/completions 直接 400。
+    # 「4.1」只是给人看的档名，改的是 name，不改 id。
+    {"id": "deepseek-flash", "name": "DeepSeek 4.1 Flash", "note": "快、便宜；日常生成够用"},
+    {"id": "deepseek-v4-pro", "name": "DeepSeek 4.1 Pro", "note": "更强；长推导、结构复杂的讲次"},
 ]
 
 

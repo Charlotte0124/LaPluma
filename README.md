@@ -52,7 +52,7 @@ cd LaPluma
 python engine\_make.py L01
 ```
 
-**第一次打开会走配置向导**：选模型版本（Flash / V4 Pro）→ 填 API 钥匙（可跳过）→ 选保存目录 → 完成。之后随时在右上「设置」里改。
+**第一次打开会走配置向导**：选模型版本（4.1 Flash / 4.1 Pro，只有两档）→ 填 API 钥匙（可跳过）→ 选保存目录 → 完成。之后随时在右上「设置」里改。
 
 ## 界面
 
@@ -111,7 +111,7 @@ A/B/C 三层离线可跑；只有「让 AI 写新内容」才需要 D。
 
 ## 模型与用量
 
-- 模型：`deepseek-flash`（默认，快省）、`deepseek-v4-pro`（更强）
+- 模型：只留两档 —— DeepSeek 4.1 Flash（默认，快省）/ 4.1 Pro（更强）；接口 id 仍是 `deepseek-flash` / `deepseek-v4-pro`，设置里随时可换
 - 密钥读取顺序：`PLUMA_API_KEY` 环境变量 → `%USERPROFILE%\.pluma\api.json` → PRTS 侧 secrets → 界面手填
 - **余额**是接口读的真数（`/user/balance`）；**花费**按 token 单价估算，界面写明「估」，不是账单
 

@@ -224,17 +224,19 @@
 <script>
 const $=s=>document.querySelector(s);
 let B={}, MODE='local', FORM='single', TAB='all', Q=[], MODEL='deepseek-flash';
+// 发给接口的是 id（deepseek-flash / deepseek-v4-pro），界面上显示的是档名（DeepSeek 4.1 Flash / 4.1 Pro）
+function mname(id){ const m=(B.models||[]).find(x=>x.id===id); return m?m.name:id; }
 
 async function boot(){
   const r=await fetch('/api/bootstrap'); B=await r.json();
   MODEL=B.model; $('#ver').textContent='v'+B.version;
-  $('#mModel').textContent=B.model;
+  $('#mModel').textContent=mname(B.model);
   if($('#dirFix')) $('#dirFix').style.display = B.save_dir_fixed ? 'block' : 'none';
   render(); fillSelects(); refreshUsage();
   $('#outPath').textContent=B.save_dir;
   const apiOk=B.configured;
   $('#dot').className='dot '+(apiOk?'ok':'no');
-  $('#status').textContent=apiOk?'模型已配置 · '+B.model:'未配置模型（不影响出 PDF）';
+  $('#status').textContent=apiOk?'模型已配置 · '+mname(B.model):'未配置模型（不影响出 PDF）';
   if(!B.wizard_done) setTimeout(()=>wizard(0),500);
   if(/wizard=1/.test(location.search)) setTimeout(()=>wizard(0),300);
   if(/settings=1/.test(location.search)) setTimeout(()=>$('#btnSet').click(),300);
@@ -377,7 +379,7 @@ $('#btnAsk').onclick=async()=>{
       log.style.display='none'; box.style.display='block';
       box.innerHTML=`<div class="ask-q">${q}</div>`+
         `<div class="ask-text">${j.answer.replace(/</g,'&lt;').replace(/\n/g,'<br>')}</div>`+
-        `<div class="ask-meta">${j.model} · ${j.seconds}s · 命中 ${(j.refs||[]).length} 段</div>`+
+        `<div class="ask-meta">${mname(j.model)} · ${j.seconds}s · 命中 ${(j.refs||[]).length} 段</div>`+
         (refs?`<details><summary>命中的片段（核对用）</summary><ol>${refs}</ol></details>`:'');
       refreshUsage();
     }else{
@@ -413,7 +415,7 @@ function wizard(step){
   let body='';
   if(step===0){
     body=`<h4>先选模型版本</h4>
-      <p class="note-s">选哪个都能出 PDF；区别只在「让 AI 写新内容」时的质量和花费。以后可在设置里改。</p>
+      <p class="note-s">只有两档：选哪个都能出 PDF，区别只在「让 AI 写新内容」时的质量和花费。以后随时可在设置里改。</p>
       <div class="pick">
         ${B.models.map(m=>`<div class="p ${W.model===m.id?'on':''}" data-m="${m.id}"><b>${m.name}</b><small>${m.note}</small></div>`).join('')}
       </div>`;
@@ -466,8 +468,8 @@ function wizard(step){
 $('#btnSet').onclick=()=>{
   $('#dlg').innerHTML=`
     <div class="eb">Settings</div><h4>设置</h4>
-    <p class="note-s" style="margin-bottom:14px">改动即刻写本机配置；密钥只留在本机。</p>
-    <div style="font-size:12.5px;color:#6c6a63;margin-bottom:6px">模型版本</div>
+    <p class="note-s" style="margin-bottom:14px">改动即刻写本机配置；密钥只留在本机。模型随时可换，改完下一次提问/生成即生效。</p>
+    <div style="font-size:12.5px;color:#6c6a63;margin-bottom:6px">模型版本（只有这两档，随时可改）</div>
     <select id="sModel" style="width:100%;margin-bottom:12px">
       ${B.models.map(m=>`<option value="${m.id}" ${m.id===MODEL?'selected':''}>${m.name} — ${m.note}</option>`).join('')}
     </select>

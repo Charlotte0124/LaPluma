@@ -24,6 +24,9 @@ import urllib.request
 
 DEFAULT_BASE = "https://api.deepseek.com"
 DEFAULT_MODEL = "deepseek-flash"
+# 接口 GET /models 实测只给这两个 id（python api\client.py --check 可复验）。
+# 界面把它叫作 DeepSeek 4.1 Flash / 4.1 Pro，但发请求时用的必须是下面这两个 id，
+# 写成 deepseek-4.1-flash 之类会被服务端拒。
 MODELS = ("deepseek-flash", "deepseek-v4-pro")
 
 USER_CFG = os.path.join(os.path.expanduser("~"), ".pluma", "api.json")
