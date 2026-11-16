@@ -359,6 +359,7 @@ def course_pdfs(code: str) -> list:
                 continue
             seen.add(fn)
             out.append((os.path.join(d, fn), fn))
+    out.sort(key=lambda x: nat_key(x[1]))     # 讲号自然序：D2 在 D10 前（合订本拼的顺序靠它）
     return out
 
 
@@ -372,6 +373,27 @@ def rel_out(path: str) -> str:
         if root and ap.startswith(os.path.abspath(root) + os.sep):
             return os.path.relpath(ap, root).replace(os.sep, "/")
     return os.path.basename(ap)
+
+
+def nat_key(name: str):
+    """自然序（D2 在 D10 前）——与前端 sortFiles 同一口径，否则导出顺序会不一致。"""
+    m = re.match(r"^([A-Za-z]*)(\d+)", name or "")
+    if m:
+        return (m.group(1).upper(), int(m.group(2)), name)
+    return ((name or "").upper(), 0, name or "")
+
+
+def merge_pdfs(files: list) -> bytes:
+    """把几份 PDF 按给定顺序拼成一本（每讲自己的封面页保留，不猜内部结构）。"""
+    import pymupdf
+    out = pymupdf.open()
+    try:
+        for full, _fn in files:
+            with pymupdf.open(full) as doc:
+                out.insert_pdf(doc)
+        return out.tobytes(garbage=4, deflate=True)
+    finally:
+        out.close()
 
 
 # ---------- 笔记（按「课程 + 具体文档」落盘）----------
@@ -788,20 +810,24 @@ class Handler(BaseHTTPRequestHandler):
                             picked.append((by_name[base], base))
                     if not picked:
                         return self._json({"ok": False, "error": "选中的文件不在这门课的成品里"}, 400)
-                    if len(picked) == 1:
-                        return self._file(picked[0][0], inline=False)
-                    buf = io.BytesIO()
-                    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
-                        for full, fn in picked:
-                            z.write(full, fn)
-                    return self._bytes(buf.getvalue(),
-                                       "%s_讲义_选%d份.zip" % (_safe_code(code), len(picked)),
-                                       "application/zip")
+                else:
+                    picked = list(files)
+                # 合订本：把选中的几份按讲号拼成一本（2026-11-17 用户要「合订本导出也支持」）
+                if str(q.get("form", [""])[0]) == "book":
+                    try:
+                        data = merge_pdfs(picked)
+                    except Exception as e:  # noqa: BLE001
+                        return self._json({"ok": False, "error": "拼合订本失败：%s" % e}, 500)
+                    return self._bytes(data, "%s_合订本_%d讲.pdf" % (_safe_code(code), len(picked)),
+                                       "application/pdf")
+                if len(picked) == 1:
+                    return self._file(picked[0][0], inline=False)
                 buf = io.BytesIO()
                 with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
-                    for full, fn in files:
+                    for full, fn in picked:
                         z.write(full, fn)
-                return self._bytes(buf.getvalue(), "%s_讲义_%d份.zip" % (_safe_code(code), len(files)),
+                return self._bytes(buf.getvalue(),
+                                   "%s_讲义_选%d份.zip" % (_safe_code(code), len(picked)),
                                    "application/zip")
             if u.path == "/api/pdf":
                 rel = q.get("p", [""])[0]
