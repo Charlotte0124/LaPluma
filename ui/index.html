@@ -108,10 +108,17 @@ nav a.on{background:var(--ink);color:var(--bg)}
 .x{position:absolute;right:14px;top:14px;border:1px solid var(--line);background:var(--card);border-radius:8px;
    padding:4px 10px;font-size:11.5px;cursor:pointer;color:var(--sub)}
 .files{flex:1;overflow:auto}
-.f{display:grid;grid-template-columns:1fr 62px 60px;gap:10px;align-items:center;padding:11px 22px;border-bottom:1px solid var(--line2);
+/* 2026-11-17 压测（一门课 120 份讲义）：没有搜索就只能滚（实测 7992 px = 12 屏），所以加一条常驻查找条 */
+.dr-find{padding:9px 22px;border-bottom:1px solid var(--line2);background:var(--card2);display:flex;gap:10px;align-items:center}
+.dr-find input{flex:1;min-width:0;border:1px solid var(--line);background:var(--card);border-radius:8px;padding:7px 10px;font-size:12.5px;outline:none}
+.dr-find input:focus{border-color:var(--ink)}
+.dr-find .n{font-family:Consolas,monospace;font-size:11px;color:var(--faint);white-space:nowrap}
+.f{display:grid;grid-template-columns:1fr 56px 60px;gap:10px;align-items:center;padding:11px 22px;border-bottom:1px solid var(--line2);
    font-size:12.5px;cursor:pointer;transition:.14s}
 .f:hover{background:var(--card2)}
-.f .n span{display:block;font-family:Consolas,monospace;font-size:10px;color:var(--faint);margin-top:2px}
+/* 2026-11-17：每行原来还印一遍完整相对路径（课程/01_讲义/同名.pdf），120 份时纯噪音；改成单行截断、完整路径进 title */
+.f .n{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.f .n span{display:none}
 .f .pg{font-family:Consolas,monospace;font-size:11px;color:var(--sub);text-align:right}
 .f .op{font-size:11.5px;color:var(--faint);text-align:right}
 .f:hover .op{color:var(--ink)}
@@ -128,10 +135,12 @@ nav a.on{background:var(--ink);color:var(--bg)}
 .opt{flex:1;border:1px solid var(--line);border-radius:10px;padding:10px 12px;cursor:pointer;font-size:12.5px;transition:.16s}
 .opt:hover{border-color:var(--sub)}
 .opt.on{border-color:var(--ink);box-shadow:inset 0 0 0 1px var(--ink)}
-.opt b{display:block;font-size:12.5px;margin-bottom:2px}
+.opt b{display:block;font-size:12.5px;margin-bottom:2px;font-weight:600}
 .opt small{font-size:11px;color:var(--faint)}
 .fld{display:flex;justify-content:space-between;align-items:center;gap:10px;background:var(--card2);border:1px solid var(--line2);
      border-radius:9px;padding:8px 11px;font-family:Consolas,monospace;font-size:11.5px;color:var(--sub)}
+/* 2026-11-17：<code> 自带的 UA 样式是 font-family:monospace（= Courier New），会把 .fld 的 Consolas 盖掉 */
+.fld code{font-family:inherit;font-size:inherit}
 .tools{display:flex;gap:8px;margin:14px 0 0;flex-wrap:wrap}
 .tools select{flex:1;min-width:130px;border:1px solid var(--line);background:var(--card);border-radius:9px;padding:8px 10px;font-size:12.5px;outline:none}
 .queue{margin-top:12px;display:flex;flex-direction:column;gap:6px}
@@ -279,20 +288,23 @@ nav a.on{background:var(--ink);color:var(--bg)}
 .term .hl{color:#fff;background:#2b2b28;border-radius:4px;padding:1px 6px}
 .term .dim{color:#6f6c66}
 .term .off{color:#e2565c}
-.pad{background:var(--card);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:30px 26px;
+/* 2026-11-17 修：这块是「上线页右边那个平板预览」，原来叫 .pad —— 与生成页的 .card pad 撞名，
+   导致生成页两张卡被套上 display:flex / align-items:center / text-align:center / min-height:280px，
+   整卡居中、键值不再右贴。改名 .device，生成页的 .card.pad 不再受牵连。 */
+.device{background:var(--card);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:30px 26px;
   display:flex;flex-direction:column;align-items:center;text-align:center;justify-content:center;min-height:280px}
-.pad .lg{display:flex;align-items:center;gap:8px;font-size:15px;font-weight:600}
-.pad .lg em{font-style:italic;font-weight:400;color:var(--faint);font-family:Georgia,serif;font-size:13.5px}
-.pad .addr{font-size:11.5px;color:var(--faint);font-family:Consolas,monospace;margin:7px 0 20px}
-.pad .ask{font-size:12.5px;color:var(--sub);margin-bottom:12px}
+.device .lg{display:flex;align-items:center;gap:8px;font-size:15px;font-weight:600}
+.device .lg em{font-style:italic;font-weight:400;color:var(--faint);font-family:Georgia,serif;font-size:13.5px}
+.device .addr{font-size:11.5px;color:var(--faint);font-family:Consolas,monospace;margin:7px 0 20px}
+.device .ask{font-size:12.5px;color:var(--sub);margin-bottom:12px}
 .digits{display:flex;gap:7px;margin-bottom:14px}
 .digits input{width:36px;height:44px;text-align:center;font-size:17px;font-family:Consolas,monospace;border:1.4px solid var(--line);
   background:var(--card);color:var(--ink);border-radius:9px;outline:none;transition:.16s}
 .digits input:focus{border-color:var(--ink);box-shadow:0 0 0 3px rgba(128,128,128,.12)}
 .digits.bad input{border-color:var(--red);animation:shake .3s ease}
 @keyframes shake{25%{transform:translateX(-3px)}75%{transform:translateX(3px)}}
-.pad .go{width:100%;border:1px solid var(--ink);background:var(--ink);color:var(--bg);border-radius:9px;padding:10px;font-size:13px;font-weight:500}
-.pad .fine{font-size:11.5px;color:var(--faint);line-height:1.7;margin-top:13px}
+.device .go{width:100%;border:1px solid var(--ink);background:var(--ink);color:var(--bg);border-radius:9px;padding:10px;font-size:13px;font-weight:500}
+.device .fine{font-size:11.5px;color:var(--faint);line-height:1.7;margin-top:13px}
 .notes3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:14px}
 .notes3 .rcard{margin:0}
 .notes3 h6{margin:0 0 6px;font-size:12.5px;font-weight:600;display:flex;align-items:center;gap:7px}
@@ -501,9 +513,11 @@ footer{max-width:1080px;margin:26px auto 0;padding:0 16px;display:flex;align-ite
   <div class="page" id="page-host">
     <div class="hero" style="padding:22px 0 12px"><h1 style="font-size:24px">主机上线</h1>
       <p style="font-size:13px">这台电脑跑服务，同一 WiFi 的平板/手机输入 8 位访问码打开；数据都在本机。</p></div>
+    <!-- 2026-11-17：一键上线开关（R93）——不用敲命令、不用重开软件 -->
+    <div id="lanCard"></div>
     <div class="host-grid">
       <div class="term" id="term"></div>
-      <div class="pad">
+      <div class="device">
         <div class="lg">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M4 20c6-1 9-4 11-9 1.4-3.4 2-6 2-7-2 0-5 .5-8 2C5 8 3.6 12.4 4 20z"/><path d="M4 20c2-4 5-6 9-8"/></svg>
           羽毛笔 <em>La Pluma</em>
@@ -538,6 +552,7 @@ footer{max-width:1080px;margin:26px auto 0;padding:0 16px;display:flex;align-ite
     <h3 id="drTitle"></h3>
     <p id="drDesc"></p>
   </div>
+  <div class="dr-find"><input id="drFind" placeholder="找讲义：讲号或关键词" autocomplete="off"><span class="n" id="drCount"></span></div>
   <div class="files" id="drFiles"></div>
   <div class="dr-f" id="drFoot"></div>
   <div class="dr-ask">
@@ -655,28 +670,57 @@ document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
 });
 
 /* ---------- 抽屉 ---------- */
-function openDrawer(c){
-  DRAGGED = c;
-  $('#drCode').textContent = c.code + (c.en?' · '+c.en:'');
-  $('#drTitle').textContent = c.title; $('#drDesc').textContent = c.desc;
-  $('#drFiles').innerHTML = c.files.length ? c.files.map(f=>`
-    <div class="f" data-pdf="${esc(f.rel)}" data-name="${esc(f.name)}">
-      <div class="n">${esc(f.name)}<span>${esc(f.rel)}</span></div>
+/* 2026-11-17：一门课 120 份讲义时的三个真问题——
+   ① 讲号按字符串排序：D100 会排到 D10 前面（图里分得出来）② 每行重复印一遍路径 ③ 长名字换行把行高撞成鼽齿。
+   现在：自然排序（D2 在 D10 前）+ 单行截断 + 常驻搜索框 + 计数。 */
+function natKey(s){
+  const m = String(s).match(/^([A-Za-z]*)(\d+)/);
+  return m ? [m[1].toUpperCase(), parseInt(m[2],10), String(s)] : [String(s).toUpperCase(), 0, String(s)];
+}
+function sortFiles(files){
+  return (files||[]).slice().sort((a,b)=>{
+    const ka = natKey(a.name), kb = natKey(b.name);
+    if(ka[0]!==kb[0]) return ka[0] < kb[0] ? -1 : 1;
+    if(ka[1]!==kb[1]) return ka[1]-kb[1];
+    return ka[2] < kb[2] ? -1 : (ka[2] > kb[2] ? 1 : 0);
+  });
+}
+function renderFiles(){
+  const c = DRAGGED; if(!c) return;
+  const kw = ($('#drFind').value||'').trim().toLowerCase();
+  const all = sortFiles(c.files);
+  const list = kw ? all.filter(f=>String(f.name).toLowerCase().includes(kw)) : all;
+  $('#drCount').textContent = kw ? (list.length+' / '+all.length) : (all.length+' 份');
+  $('#drFiles').innerHTML = list.length ? list.map(f=>`
+    <div class="f" data-pdf="${esc(f.rel)}" data-name="${esc(f.name)}" title="${esc(f.rel)}">
+      <div class="n">${esc(f.name)}</div>
       <div class="pg">${f.pages} p</div><div class="op">在软件里读 →</div>
-    </div>`).join('') : '<div class="empty">这一门还没有成品。</div>';
-  $('#drFoot').textContent = c.files.length + ' FILES · 点击在软件里打开（可写笔记）';
+    </div>`).join('') : '<div class="empty">'+(kw?'没有匹配的讲义':'这一门还没有成品。')+'</div>';
   $('#drFiles').querySelectorAll('[data-pdf]').forEach(el=>el.onclick = () => {
     $('#drawer').classList.remove('on');
     openReader(el.dataset.pdf, el.dataset.name, c.code);
   });
+}
+function openDrawer(c){
+  DRAGGED = c;
+  $('#drCode').textContent = c.code + (c.en?' · '+c.en:'');
+  $('#drTitle').textContent = c.title; $('#drDesc').textContent = c.desc;
+  $('#drFind').value = '';
+  renderFiles();
+  $('#drFoot').textContent = (c.files||[]).length + ' FILES · 点击在软件里打开（可写笔记）';
   $('#drawer').classList.add('on');
 }
+$('#drFind').oninput = renderFiles;
 $('#drClose').onclick = () => $('#drawer').classList.remove('on');
 $('#drAsk').onclick = () => { const c=DRAGGED; $('#drawer').classList.remove('on'); openChat(c); };
 
 /* ---------- 生成 ---------- */
 function fillSelects(){
-  $('#courseSel').innerHTML = (B.courses||[]).map(c=>`<option value="${esc(c.code)}">${esc(c.title)}</option>`).join('');
+  // 2026-11-17：默认课程排第一（以前按字母序，PLUMA_COURSE=DEMO 时下拉框仍停在 CS340，
+  //   截图里出现「保存目录 DEMO\01_讲义 但课程选的是操作系统」这种不一致）。
+  const d = B.default;
+  const list = (B.courses||[]).slice().sort((a,b)=>((a.code===d)?-1:0) - ((b.code===d)?-1:0));
+  $('#courseSel').innerHTML = list.map(c=>`<option value="${esc(c.code)}">${esc(c.title)}</option>`).join('');
   syncLessons();
 }
 function syncLessons(){
@@ -813,6 +857,30 @@ $('#selAll').onchange = e => {
   CHAT.sel = e.target.checked ? new Set(CHAT.messages.map((_,i)=>i)) : new Set();
   renderChat();
 };
+/* ---------- 余额不足（R94，2026-11-17）----------
+   实测过：余额 0 时 /api/ask 以前只回「模型调用失败：HTTP Error 402: Payment Required」，
+   界面当普通失败消息显示——用户看不出是钱的问题。现在单独一个人话弹窗，给出余额真数、
+   本次估算、去哪充，并留一条不花钱的退路。 */
+function moneyDialog(j){
+  const bal = (j.balance && j.balance.ok) ? ('¥'+j.balance.balance) : ('读不到（'+(j.balance&&j.balance.error||'接口没回')+'）');
+  $('#dlg').innerHTML = `
+    <div class="eb">Balance</div><h4>余额不足，这一问没法答</h4>
+    <p class="desc">接口回的是「Insufficient Balance」。账户余额 ${esc(bal)}，这次提问的大致花费见下。</p>
+    <div class="kv"><span>账户余额</span><b>${esc(bal)}</b></div>
+    <div class="kv"><span>本次估算</span><b>${esc(j.cost_est||'约 ¥0.02')}（估）</b></div>
+    <div class="kv"><span>当前模型</span><b>${esc(mname(j.model||MODEL))}</b></div>
+    <p class="note-s">充值到账后回来点「去充值并重试」；也可以先只看已经检索到的片段，不花钱。</p>
+    <div class="acts"><button class="btn ghost" id="balSee">先看检索片段</button>
+      <button class="btn" id="balGo">去充值并重试</button></div>`;
+  $('#veil').classList.add('on');
+  $('#balSee').onclick = () => $('#veil').classList.remove('on');
+  $('#balGo').onclick = () => {
+    window.open(j.topup || 'https://platform.deepseek.com/top_up', '_blank');
+    $('#veil').classList.remove('on');
+    toast('充完回来说一声，重问一次就行');
+  };
+}
+
 $('#btnSend').onclick = async () => {
   const q = $('#chatQ').value.trim();
   if(q.length<2){ $('#chatQ').focus(); return; }
@@ -832,6 +900,9 @@ $('#btnSend').onclick = async () => {
       await saveMsg({role:'user', text:q});
       await saveMsg({role:'a', text:j.answer, refs:j.refs||[], meta:cite});
       refreshUsage();
+    }else if(j.need_money){
+      moneyDialog(j);
+      CHAT.messages.push({role:'a', text:'（余额不足，这一问没发出去；充值后重问一次即可）', refs:j.refs||[]});
     }else{
       CHAT.messages.push({role:'a', text:'（没拿到回答）'+(j.error||''), refs:j.refs||[]});
     }
@@ -877,13 +948,36 @@ $('#btnNote').onclick = () => {
     <div class="selcap">已选 <b>${items.length} 条</b>：${items.filter(x=>x.role==='user').length} 个问题 · ${items.filter(x=>x.role!=='user').length} 个回答 · 来自 <b>${esc(CHAT.code)}</b>${CHAT.lens.size?' · '+[...CHAT.lens].join(' / '):''}</div>
     <div class="prev">${rows}</div>
     <div class="pickpdf">追加到哪份讲义末尾（可选一份）</div>
-    <div class="pdfs" id="pdfPick">${files.map(f=>`<button data-rel="${esc(f.rel)}" class="${f.rel===EXPORT.target?'on':''}">
+    ${files.length>8?`<div class="dr-find" style="padding:0 0 8px;background:transparent;border:0">
+      <input id="pdfFind" placeholder="找讲义：讲号或关键词" autocomplete="off">
+      <span class="n" id="pdfCount">${files.length} 份</span></div>`:''}
+    <div class="pdfs" id="pdfPick">${sortFiles(files).map(f=>`<button data-rel="${esc(f.rel)}" data-name="${esc(f.name)}" style="${f.rel===EXPORT.target?'':'display:none'}" class="${f.rel===EXPORT.target?'on':''}">
         ${esc(f.name)}<b>${f.pages} p</b></button>`).join('') || '<div class="empty">这一门还没有 PDF：先去生成页出一份。</div>'}</div>
     <label class="chk"><input type="checkbox" id="useModel">让模型整理成笔记（花 token；不勾则本地整理，不花钱）</label>
     <p class="fine">页脚固定印「本内容由 AI 生成，请自行核实重要信息」；新页从原讲义末尾续，旧页码不动。</p>
     <div class="acts"><button class="btn ghost" id="expNo">取消</button>
       <button class="btn" id="expGo" ${files.length?'':'disabled'}>生成并追加</button></div>`;
   $('#veil').classList.add('on');
+  /* 2026-11-17：一份课 120 份讲义时，挑选区只能滚 190 px；超过 8 份先只显示默认选中的那份，
+     输入关键词才把匹配的摆出来（输入框为空时至少把已选中那份保住，不让人以为列表空了）。 */
+  if($('#pdfFind')){
+    const filterPdf = () => {
+      const kw = ($('#pdfFind').value||'').trim().toLowerCase();
+      let shown = 0;
+      const LIST_CAP = 12;   // 没输关键词时最多摆 12 份，避免 120 份一开就铺成一面墙
+      $('#pdfPick').querySelectorAll('[data-rel]').forEach((b, i)=>{
+        let hit;
+        if(kw){ hit = String(b.dataset.name||'').toLowerCase().includes(kw); }
+        else { hit = (b.dataset.rel===EXPORT.target) || i < LIST_CAP; }
+        b.style.display = hit ? '' : 'none';
+        if(hit) shown++;
+      });
+      $('#pdfCount').textContent = kw ? (shown+' / '+files.length)
+        : (files.length+' 份 · 先摆前 '+LIST_CAP+'，输入关键词缩小');
+    };
+    $('#pdfFind').oninput = filterPdf;
+    filterPdf();
+  }
   $('#pdfPick').querySelectorAll('[data-rel]').forEach(b=>b.onclick=()=>{
     $('#pdfPick').querySelectorAll('[data-rel]').forEach(x=>x.classList.remove('on'));
     b.classList.add('on'); EXPORT.target = b.dataset.rel;
@@ -1101,12 +1195,58 @@ $('#expBtn').onclick = async () => {
 };
 
 /* ---------- 10：上线 ---------- */
+/* 2026-11-17（R93）：界面上直接开关上线，不再把命令丢给用户。
+   两态都画出来：没开时告诉你点一下就行，开了就把地址与访问码摆出来、顺手能复制。 */
+function lanCard(h){
+  const c2 = (h.code||'').replace(/(\d{4})(\d{4})/, '$1 $2');
+  const host = esc(String(h.url_lan||'').replace('http://',''));
+  if(h.lan){
+    return `<div class="card" style="padding:16px 20px;display:flex;align-items:center;gap:18px;margin:0 0 14px">
+      <div style="flex:1">
+        <div style="font-size:13.5px;font-weight:600;display:flex;align-items:center;gap:7px">
+          <i class="dot ok"></i>已上线 · <span class="mono" style="font-weight:400;font-size:12.5px">${host}</span></div>
+        <p style="margin:6px 0 0;font-size:11.8px;color:var(--sub);line-height:1.75">
+          平板连同一 WiFi，打开上面的地址，输一次访问码即可。点「关闭上线」或关掉窗口就断。</p>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <span class="mono" style="font-size:15px;letter-spacing:.16em;border:1px solid var(--line);
+          border-radius:9px;padding:7px 12px;background:var(--card2)">${esc(c2)}</span>
+        <button class="btn ghost" id="lanCopy" style="padding:8px 14px">复制</button>
+        <button class="btn ghost" id="lanOff" style="padding:8px 14px">关闭上线</button>
+      </div></div>`;
+  }
+  return `<div class="card" style="padding:16px 20px;display:flex;align-items:center;gap:18px;margin:0 0 14px">
+      <div style="flex:1">
+        <div style="font-size:13.5px;font-weight:600;display:flex;align-items:center;gap:7px">
+          <i class="dot no"></i>这台电脑现在没上线</div>
+        <p style="margin:6px 0 0;font-size:11.8px;color:var(--sub);line-height:1.75">
+          上线后，同一 WiFi 的平板/手机输一次访问码就能用。不用敲命令、不用重开软件；关掉窗口就自动断。</p>
+      </div>
+      <button class="btn" id="lanOn" style="padding:9px 20px">一键上线</button></div>`;
+}
+async function setLan(on){
+  try{
+    const j = await (await fetch('/api/lan',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({on:!!on})})).json();
+    if(!j.ok){ toast('没开成：'+(j.error||'未知原因')); return; }
+    await renderHost();
+    toast(on ? ('已上线 · '+String(j.url_lan||'').replace('http://','')) : '已关闭上线，平板立刻打不开');
+  }catch(e){ toast('请求失败：'+e); }
+}
+
 async function renderHost(){
   let h = {lan:false};
   try{ h = await (await fetch('/api/host')).json(); }catch(e){}
   const code = (h.code||'').replace(/(\d{4})(\d{4})/, '$1 $2');
+  $('#lanCard').innerHTML = lanCard(h);
+  if($('#lanOn')) $('#lanOn').onclick = () => setLan(true);
+  if($('#lanOff')) $('#lanOff').onclick = () => setLan(false);
+  if($('#lanCopy')) $('#lanCopy').onclick = async () => {
+    try{ await navigator.clipboard.writeText(code); toast('访问码已复制'); }
+    catch(e){ toast('复制失败，手抄一下：'+code); }
+  };
   $('#term').innerHTML = h.lan ? `
-    <div><span class="ps">PS</span> .\\一键启动.ps1 -Lan</div>
+    <div><span class="ps">PS</span> 一键上线（界面上的按钮）</div>
     <div class="name">羽毛笔 La Pluma v${esc(B.version||'')} · 主机已上线</div>
     <div><span class="k">本机</span><span class="v">${esc(h.url_local)}</span></div>
     <div><span class="k">局域网</span><span class="hl">${esc(h.url_lan)}</span> <span class="dim">← 平板 / 手机用这个</span></div>
@@ -1116,16 +1256,16 @@ async function renderHost(){
   : `<div><span class="ps">PS</span> .\\一键启动.ps1</div>
     <div class="name">羽毛笔 La Pluma v${esc(B.version||'')} · 只在本机</div>
     <div><span class="k">本机</span><span class="v">${esc(h.url_local)}</span></div>
-    <div><span class="k">局域网</span><span class="off">未上线</span> <span class="dim">← 要给平板用，加 --lan 重跑</span></div>
+    <div><span class="k">局域网</span><span class="off">未上线</span> <span class="dim">← 点上面的「一键上线」</span></div>
     <div><span class="k">访问码</span><span class="off">—</span></div>
     <div style="margin-top:10px"><span class="dim">只监听 127.0.0.1：同网的其他设备打不开，也不需要访问码。</span></div>
-    <div><span class="dim">要上线：python ui\\server.py --lan</span></div>`;
+    <div><span class="dim">要上线：点上面的「一键上线」</span></div>`;
   $('#padAddr').innerHTML = h.lan
     ? '<i class="dot ok"></i>' + esc(String(h.url_lan||'').replace('http://','')) + ' · 主机在线'
     : '<i class="dot no"></i>未上线：平板现在打不开';
   $('#padFine').innerHTML = h.lan
-    ? '访问码每次启动都换；这台电脑关掉或关窗口，平板立刻打不开。'
-    : '要让平板打开：先在电脑上 <span class="mono">python ui\\server.py --lan</span>，再回这一页看码。';
+    ? '访问码每次上线都会换；这台电脑关掉或关窗口，平板立刻打不开。'
+    : '要让平板打开：在电脑上点上面的「一键上线」，再回这一页看码。';
 }
 const dg = [...document.querySelectorAll('#digits input')];
 dg.forEach((b,i)=>{
@@ -1276,6 +1416,9 @@ $('#btnTut').onclick = showTut;
   if(sp.get('page')==='generate') showPage('generate');
   if(sp.get('page')==='host'){ showPage('host'); renderHost(); }
   if(/wizard=1/.test(location.search)) setTimeout(()=>wizard(0), 400);
+  // 2026-11-17：截图 / 回归要能拨一拨状态（比如公开仓截图不能出现真实课程，
+  //   需要临时滤掉非示例课）。模块作用域的东西外部拿不到，带 ?dbg 时挂一个小口子。
+  if(DBG) window.__pluma = { B, render, showPage, openDrawer, renderHost, fillSelects, state:()=>({B, MODE, FORM}) };
   if(/settings=1/.test(location.search)) setTimeout(()=>$('#btnSet').click(), 400);
   if(/open=1/.test(location.search)) setTimeout(()=>{ const c=document.querySelector('.course'); if(c) c.click(); }, 700);
   const mc = location.search.match(/chat=([A-Za-z0-9_-]+)/);

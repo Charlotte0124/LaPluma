@@ -64,7 +64,7 @@ HOST, PORT = "127.0.0.1", 8765
 #   每次打开/刷新阅读器都全量重传（本机无感，平板走 WiFi 明显）。
 #   index.html 必须仍走 no-store（改完界面要能立刻看到新版）。
 _STATIC_ETAG = {}
-VERSION = "1.6.0"
+VERSION = "1.7.0"
 BOOK_NAME = DEFAULT_COURSE + "_九讲合订本_讲义.pdf"
 
 # ---------- 主机上线（局域网 + 8 位访问码）----------
@@ -398,6 +398,52 @@ def host_state() -> dict:
             "pdfjs": os.path.isdir(PDFJS_DIR)}
 
 
+# ---------- 运行时开关上线（2026-11-17 用户定：不许敲命令重开软件）----------
+# 做法的取舍：本机那个 socket 一直只绑 127.0.0.1（不动它，本机永远用最短路径）；
+#   点「一键上线」时在**局域网地址**上再起一个监听，关掉时就 shutdown。
+#   为什么不直接绑 0.0.0.0：那会让 Windows 防火墙在**每次启动**都问一次；
+#   而现在只在用户真的点「一键上线」时才碰外部网络，提示出现在该出现的时刻。
+_LAN_SRV = None
+_LAN_LOCK = threading.Lock()
+
+
+def start_lan() -> dict:
+    """开上线：在局域网 IP 上起第二个监听。已开则幂等返回。"""
+    global _LAN_SRV, LAN, ACCESS_CODE
+    with _LAN_LOCK:
+        if _LAN_SRV is not None:
+            return host_state()
+        ip = lan_ip()
+        if not ip or ip.startswith("127."):
+            raise RuntimeError("这台电脑没有局域网地址（没连 WiFi / 网线？）")
+        ACCESS_CODE = new_access_code()
+        srv = ThreadingHTTPServer((ip, PORT), Handler)
+        LAN = True
+        _LAN_SRV = srv
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        try:
+            _write_json(HOST_PATH, {"code": ACCESS_CODE, "at": time.strftime("%Y-%m-%d %H:%M"),
+                                   "port": PORT, "ip": ip})
+        except Exception:  # noqa: BLE001
+            pass
+    return host_state()
+
+
+def stop_lan() -> dict:
+    """关上线：停掉第二个监听，访问码作废（已发出去的 cookie 下次就没用了）。"""
+    global _LAN_SRV, LAN, ACCESS_CODE
+    with _LAN_LOCK:
+        srv = _LAN_SRV
+        _LAN_SRV = None
+        LAN = False
+        ACCESS_CODE = ""
+        if srv is not None:
+            threading.Thread(target=srv.shutdown, daemon=True).start()
+            threading.Thread(target=srv.server_close, daemon=True).start()
+    return host_state()
+
+
+
 FONT_CANDIDATES = [
     r"C:\Windows\Fonts\msyh.ttc",
     r"C:\Windows\Fonts\msyh.ttf",
@@ -645,7 +691,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({
                     "ok": True, "version": VERSION,
                     "configured": bool(cfg["api_key"]), "wizard_done": cfg["wizard_done"],
-                    "model": cfg["model"], "models": MODELS,
+                    "model": cfg["model"], "models": MODELS, "default": DEFAULT_COURSE,
                     "save_dir": cfg["save_dir"], "save_dir_abs": os.path.abspath(os.path.join(ROOT, cfg["save_dir"])),
                     "save_dir_fixed": cfg.get("save_dir_fixed", False),
                     "courses": discover_courses(), "usage": usage_summary(),
@@ -684,6 +730,16 @@ class Handler(BaseHTTPRequestHandler):
         except Exception:  # noqa: BLE001
             body = {}
         try:
+            if u.path == "/api/lan":
+                # 2026-11-17：界面上的「一键上线 / 关闭上线」走这里。
+                # 只接本机：上线开关本身就是个对外暴露的动作，不能让局域网里的人帮你开。
+                if self.client_address[0] not in ("127.0.0.1", "::1"):
+                    return self._json({"ok": False, "error": "只能在这台电脑上开关上线"}, 403)
+                try:
+                    st = start_lan() if body.get("on") else stop_lan()
+                except Exception as e:  # noqa: BLE001
+                    return self._json({"ok": False, "error": str(e)}, 400)
+                return self._json(dict(ok=True, **st))
             if u.path == "/api/access":
                 # 平板输码：对一次就给 12 小时的 cookie；码本身只在本机打印
                 if not LAN:
@@ -906,6 +962,16 @@ class Handler(BaseHTTPRequestHandler):
                 try:
                     out = api_client.chat(msgs, model=cfg["model"])
                 except Exception as e:  # noqa: BLE001
+                    # 2026-11-17：余额不足不能再混成一条普通失败。
+                    #   实测：余额 0 时原来界面只看到「模型调用失败：HTTP Error 402: Payment Required」，
+                    #   用户既不知道是钱的问题，也不知道去那里充。现在单独返回 need_money + 余额真数。
+                    if api_client is not None and isinstance(e, getattr(api_client, "BalanceError", ())):
+                        return self._json({"ok": False, "need_money": True,
+                                           "error": "余额不足，这一问没法答",
+                                           "balance": _balance_now(cfg), "model": cfg["model"],
+                                           "cost_est": "约 ¥0.02",
+                                           "topup": "https://platform.deepseek.com/top_up",
+                                           "refs": refs})
                     return self._json({"ok": False, "error": "模型调用失败：%s" % e, "refs": refs}, 502)
                 log_usage(out.get("model", cfg["model"]), out.get("usage", {}))
                 return self._json({"ok": True, "answer": out["text"], "model": out["model"],
@@ -937,14 +1003,29 @@ class Handler(BaseHTTPRequestHandler):
         return target
 
 
+def _balance_now(cfg) -> dict:
+    """读一次真实余额；读不到就明说读不到，不编数字。"""
+    if api_client is None or not cfg.get("api_key"):
+        return {"ok": False, "error": "未配置 key"}
+    try:
+        body = api_client._get(cfg["base_url"].rstrip("/") + "/user/balance", cfg["api_key"])
+        infos = body.get("balance_infos", [])
+        cny = next((x for x in infos if x.get("currency") == "CNY"), None)
+        return {"ok": True, "available": body.get("is_available"),
+                "balance": (cny or {}).get("total_balance", "0.00")}
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "error": str(e)}
+
+
 def main() -> int:
-    global HOST, PORT, LAN, ACCESS_CODE
+    global PORT
     argv = sys.argv[1:]
     # 冻结后（exe）先把两根与 engine\ tools\print\ api\ 挂上 sys.path；源码下是幂等的
     paths.bootstrap()
+    # 2026-11-17：--lan 不再自己绑 0.0.0.0，改成与「一键上线」走同一条路（start_lan），
+    #   这样启动就上线与点按钮上线行为一致，关闭按钮也不会只能对一半有效。
+    want_lan = ("--lan" in argv) or ("-lan" in argv)
     for i, a in enumerate(argv):
-        if a == "--lan" or a == "-lan":
-            LAN = True
         if a == "--port" and i + 1 < len(argv):
             PORT = int(argv[i + 1])
     # 2026-11-16 真撞到：Windows 允许两个进程同时绑 8765，先启的那个偷偷接着应答，
@@ -964,24 +1045,20 @@ def main() -> int:
         print("  先查：Get-NetTCPConnection -LocalPort %d -State Listen" % PORT)
         print("  或换端口：python ui\\server.py --port %d" % (PORT + 1))
         return 4
-    if LAN:
-        HOST = "0.0.0.0"
-        ACCESS_CODE = new_access_code()
-        try:
-            _write_json(HOST_PATH, {"code": ACCESS_CODE, "at": time.strftime("%Y-%m-%d %H:%M"),
-                                   "port": PORT, "ip": lan_ip()})
-        except Exception:  # noqa: BLE001
-            pass
-    srv = ThreadingHTTPServer((HOST, PORT), Handler)
+    srv = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
     local = "http://127.0.0.1:%d/" % PORT
     print("羽毛笔 La Pluma v%s · 界面已启动" % VERSION)
     print("  本机    %s" % local)
-    if LAN:
-        print("  局域网  http://%s:%d/   ← 平板 / 手机用这个" % (lan_ip(), PORT))
-        print("  访问码  %s %s   ← 只给对一次（12 小时）" % (ACCESS_CODE[:4], ACCESS_CODE[4:]))
-        print("  （本机自己打开不用输码；关掉这个窗口就断，不是云端）")
+    if want_lan:
+        try:
+            st = start_lan()
+            print("  局域网  %s   ← 平板 / 手机用这个" % st["url_lan"])
+            print("  访问码  %s %s   ← 只给对一次（12 小时）" % (st["code"][:4], st["code"][4:]))
+            print("  （本机自己打开不用输码；关掉这个窗口就断，不是云端）")
+        except Exception as e:  # noqa: BLE001
+            print("  上线没开成：%s；继续只在本机。" % e)
     else:
-        print("  （Ctrl+C 停止；只监听本机，不对外。要让平板打开：加 --lan 重跑）")
+        print("  （Ctrl+C 停止；现在只监听本机。要给平板用：界面「上线」页点「一键上线」，或加 --lan）")
     if "--no-browser" not in argv:
         threading.Timer(0.6, lambda: webbrowser.open(local)).start()
     try:

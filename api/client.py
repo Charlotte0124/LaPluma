@@ -24,6 +24,33 @@ import urllib.request
 
 DEFAULT_BASE = "https://api.deepseek.com"
 DEFAULT_MODEL = "deepseek-flash"
+
+
+class BalanceError(RuntimeError):
+    """钱不够（接口 402 / Insufficient Balance）。
+
+    2026-11-17：以前这也被当普通 HTTPError 抛上去，界面就只显示
+    「模型调用失败：HTTP Error 402: Payment Required」——用户看不出是余额问题。
+    现在单独一类，上层（ui\\server.py 的 /api/ask）能直接换成「人话弹窗」。
+    """
+
+    def __init__(self, status: int = 402, detail: str = ""):
+        self.status = status
+        self.detail = detail
+        super().__init__("余额不足（HTTP %s）：%s" % (status, detail or "Insufficient Balance"))
+
+
+def _looks_broke(status: int, body: str) -> bool:
+    """认得出「余额 / 额度不够」的几种写法。"""
+    low = (body or "").lower()
+    if status == 402:
+        return True
+    for k in ("insufficient balance", "insufficient_quota", "exceeded your current quota",
+              "余额不足", "额度不足"):
+        if k in low:
+            return True
+    return False
+
 # 接口 GET /models 实测只给这两个 id（python api\client.py --check 可复验）。
 # 界面把它叫作 DeepSeek 4.1 Flash / 4.1 Pro，但发请求时用的必须是下面这两个 id，
 # 写成 deepseek-4.1-flash 之类会被服务端拒。
@@ -82,8 +109,23 @@ def _post(url: str, payload: dict, key: str, timeout: int = 90) -> dict:
         headers={"Content-Type": "application/json", "Authorization": "Bearer " + key},
         method="POST",
     )
-    with urllib.request.urlopen(req, timeout=timeout) as r:
-        return json.loads(r.read().decode("utf-8"))
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return json.loads(r.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        raw = ""
+        try:
+            raw = e.read().decode("utf-8", "replace")[:400]
+        except Exception:  # noqa: BLE001
+            pass
+        if _looks_broke(e.code, raw):
+            msg = raw
+            try:
+                msg = json.loads(raw).get("error", {}).get("message", raw)
+            except Exception:  # noqa: BLE001
+                pass
+            raise BalanceError(e.code, str(msg)[:120]) from e
+        raise
 
 
 def _get(url: str, key: str, timeout: int = 20) -> dict:
