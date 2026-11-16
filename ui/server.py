@@ -763,8 +763,9 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(dict(ok=True, **load_session(q.get("code", [DEFAULT_COURSE])[0])))
             if u.path == "/api/export":
                 # 导出成品到本机下载目录（浏览器下载夹）：
-                #   ?p=<相对路径>  → 单份（等同于 /api/pdf?dl=1）
-                #   ?course=<课程> → 整门打包成一个 zip（多份逐个下载会被浏览器拦）
+                #   ?p=<相对路径>              → 单份（等同于 /api/pdf?dl=1）
+                #   ?course=<课程>              → 整门全部成品，打成一个 zip
+                #   ?course=<课程>&sel=<rel>…   → 只打包选中的几份（sel 可重复；只选 1 份就直接给 PDF）
                 # 为什么走下载而不是「拷到某个目录」：桌面上有下载夹，平板上也拿得到；
                 # 拷到一个用户还得先去找的目录，反而多一道。
                 rel = q.get("p", [""])[0]
@@ -776,6 +777,26 @@ class Handler(BaseHTTPRequestHandler):
                 files = course_pdfs(code)
                 if not files:
                     return self._json({"ok": False, "error": "这一门还没有成品，先去生成页出一份"}, 404)
+                sel = [x for x in (q.get("sel") or []) if x]
+                if sel:
+                    # 只认这一门 01_讲义 下的文件：按文件名比对，路径绕不出去
+                    by_name = {fn: full for full, fn in files}
+                    picked = []
+                    for r in sel:
+                        base = os.path.basename(str(r).replace("\\", "/"))
+                        if base in by_name and base not in [fn for _, fn in picked]:
+                            picked.append((by_name[base], base))
+                    if not picked:
+                        return self._json({"ok": False, "error": "选中的文件不在这门课的成品里"}, 400)
+                    if len(picked) == 1:
+                        return self._file(picked[0][0], inline=False)
+                    buf = io.BytesIO()
+                    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+                        for full, fn in picked:
+                            z.write(full, fn)
+                    return self._bytes(buf.getvalue(),
+                                       "%s_讲义_选%d份.zip" % (_safe_code(code), len(picked)),
+                                       "application/zip")
                 buf = io.BytesIO()
                 with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
                     for full, fn in files:

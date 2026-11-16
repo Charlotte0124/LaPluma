@@ -233,6 +233,11 @@ nav a.on{background:var(--ink);color:var(--bg)}
    font-size:12px;letter-spacing:.04em;transition:.16s}
 .lens button:hover{border-color:var(--sub);color:var(--ink)}
 .lens button.on{background:var(--chipon);color:var(--chipon-ink);border-color:var(--chipon)}
+/* 2026-11-17：生成页的讲次从单选下拉改成多选 chips（用户：「开始生成也是可以多选生成哪几个」） */
+.lsn-h{display:flex;align-items:center;justify-content:space-between;font-size:12.5px;color:var(--sub);margin:14px 0 8px}
+.lsn-h .n{font-size:11.5px;color:var(--faint);margin-left:7px}
+.lsn button{font-family:Consolas,monospace;padding:5px 12px}
+.lsn.dim{opacity:.45;pointer-events:none}
 
 /* 弹窗 */
 .veil{position:fixed;inset:0;background:rgba(10,10,9,.42);backdrop-filter:blur(2px);display:none;align-items:flex-start;
@@ -447,10 +452,15 @@ footer{max-width:1080px;margin:26px auto 0;padding:0 16px;display:flex;align-ite
           <div class="opt on" data-form="single"><b>单本</b><small>一讲一份</small></div>
           <div class="opt" data-form="book"><b>合订本</b><small>全部讲一本</small></div>
         </div>
-        <div class="tools">
-          <select id="courseSel"></select>
-          <select id="lessonSel"></select>
+        <div class="tools"><select id="courseSel"></select></div>
+        <div class="lsn-h">
+          <span>要生成的讲次<span class="n" id="lsnCnt">可多选</span></span>
+          <button class="btn ghost" id="lsnAll" style="padding:3px 12px;font-size:11.5px">全选</button>
+        </div>
+        <div class="lens lsn" id="lessonPick"></div>
+        <div class="tools" style="margin-top:12px">
           <button class="btn" id="btnGen">开始生成</button>
+          <span class="hint" id="genHint" style="border:0;margin:0;padding:0">勾一讲或多讲；合订本模式不用勾（全部讲合一本）。</span>
         </div>
         <div class="queue" id="queue"></div>
         <div class="log" id="log"></div>
@@ -763,11 +773,61 @@ function exportPdf(rel){
   downloadUrl('/api/export?p=' + encodeURIComponent(rel));
   toast('已开始下载：' + String(rel).split('/').pop());
 }
+/* 2026-11-17 用户纠：「课程的导出 PDF 是让你选择全部还是自己多选，再导出」——
+   所以卡片那个按钮不再直接下 zip，而是先开一个勾选弹窗（默认全选）。
+   只勾一份就直接下那份 PDF；勾多份打成一个 zip（连续多次下载会被浏览器拦）。 */
 function exportCourse(c){
   if(!c) return;
-  if(!(c.files||[]).length){ toast('这一门还没有成品，先去生成页出一份'); return; }
-  downloadUrl('/api/export?course=' + encodeURIComponent(c.code));
-  toast('已开始打包下载：' + c.code + ' · ' + c.files.length + ' 份讲义');
+  const files = sortFiles(c.files || []);
+  if(!files.length){ toast('这一门还没有成品，先去生成页出一份'); return; }
+  const sel = new Set(files.map(f => f.rel));      // 默认全选
+  $('#dlg').innerHTML = `
+    <div class="eb">Export PDF</div><h4>导出 PDF · ${esc(c.title)}</h4>
+    <p class="desc">勾要导出的讲义：只勾一份就直接下这份 PDF，勾多份打成一个 zip。保存到浏览器的下载文件夹。</p>
+    <div class="pickpdf">这一门共 ${files.length} 份<span id="exCnt" style="color:var(--faint);font-size:11.5px;margin-left:7px"></span>
+      <button class="btn ghost" id="exAll" style="float:right;padding:2px 10px;font-size:11.5px;margin-top:-3px">全选 / 全不选</button></div>
+    <div class="pdfs" id="exList">${files.map(f=>`<button data-rel="${esc(f.rel)}" data-name="${esc(f.name)}" class="on">
+        <span class="ck" style="font-family:Consolas,monospace;color:var(--faint);font-size:11.5px">✓</span>${esc(f.name)}<b>${f.pages} p</b></button>`).join('')}</div>
+    <p class="fine">合订本导出（把几讲并成一本）还没做，要合订本请去「生成」页选合订本重新生成。</p>
+    <div class="acts"><button class="btn ghost" id="exNo">取消</button>
+      <button class="btn" id="exGo">导出</button></div>`;
+  $('#veil').classList.add('on');
+  const sync = () => {
+    const n = sel.size;
+    $('#exCnt').textContent = '已选 ' + n + ' 份';
+    const go = $('#exGo');
+    go.disabled = n === 0;
+    go.textContent = n === 0 ? '导出' : (n === 1 ? '导出这 1 份' : ('导出 ' + n + ' 份（打包 zip）'));
+  };
+  $('#exList').querySelectorAll('[data-rel]').forEach(b=>b.onclick=()=>{
+    const rel = b.dataset.rel, on = sel.has(rel);
+    if(on) sel.delete(rel); else sel.add(rel);
+    b.classList.toggle('on', !on);
+    const ck = b.querySelector('.ck'); if(ck) ck.textContent = !on ? '✓' : '＋';
+    sync();
+  });
+  $('#exAll').onclick = () => {
+    const all = sel.size === files.length;
+    sel.clear(); if(!all) files.forEach(f=>sel.add(f.rel));
+    $('#exList').querySelectorAll('[data-rel]').forEach(b=>{
+      const on = sel.has(b.dataset.rel);
+      b.classList.toggle('on', on);
+      const ck = b.querySelector('.ck'); if(ck) ck.textContent = on ? '✓' : '＋';
+    });
+    sync();
+  };
+  $('#exNo').onclick = () => $('#veil').classList.remove('on');
+  $('#exGo').onclick = () => {
+    const pick = files.filter(f => sel.has(f.rel)).map(f => f.rel);
+    if(!pick.length) return;
+    let url = '/api/export?course=' + encodeURIComponent(c.code);
+    pick.forEach(r => { url += '&sel=' + encodeURIComponent(r); });
+    downloadUrl(url);
+    $('#veil').classList.remove('on');
+    toast(pick.length === 1 ? ('已开始下载：' + String(pick[0]).split('/').pop())
+                            : ('已开始打包下载：' + c.code + ' · ' + pick.length + ' 份讲义'));
+  };
+  sync();
 }
 function findHits(kw){
   const lc = kw.toLowerCase();
@@ -925,11 +985,42 @@ function fillSelects(){
   $('#courseSel').innerHTML = list.map(c=>`<option value="${esc(c.code)}">${esc(c.title)}</option>`).join('');
   syncLessons();
 }
+/* 2026-11-17：生成页讲次改多选（用户：「开始生成也是可以多选生成哪几个的」）。
+   LESSON_SEL 存勾中的讲号；换课程就清空，合订本模式下整块置灰（合订本 = 全部讲）。 */
+let LESSON_SEL = new Set();
 function syncLessons(){
   const c = (B.courses||[]).find(x=>x.code===$('#courseSel').value) || (B.courses||[])[0];
-  const opts = (c?c.lessons:[]).map(n=>`<option>${esc(n)}</option>`).join('') || '<option value="">（没有可生成的数据）</option>';
-  $('#lessonSel').innerHTML = opts;
+  const les = (c ? c.lessons : []) || [];
+  LESSON_SEL = new Set();
+  $('#lessonPick').innerHTML = les.map(n=>`<button data-lsn="${esc(n)}">${esc(n)}</button>`).join('')
+    || '<span class="hint" style="border:0;padding:0;margin:0">这一门没有可生成的数据（缺 `_lessons`）</span>';
+  $('#lessonPick').querySelectorAll('[data-lsn]').forEach(b=>b.onclick=()=>{
+    const k = b.dataset.lsn;
+    LESSON_SEL.has(k) ? LESSON_SEL.delete(k) : LESSON_SEL.add(k);
+    b.classList.toggle('on', LESSON_SEL.has(k));
+    syncLsnCnt();
+  });
+  syncLsnCnt();
 }
+function syncLsnCnt(){
+  const all = $('#lessonPick').querySelectorAll('[data-lsn]').length;
+  const n = LESSON_SEL.size;
+  $('#lsnCnt').textContent = FORM==='book' ? '合订本 = 全部讲' : ('可多选' + (n ? ' · 已选 '+n+'/'+all : ''));
+  $('#lsnAll').style.display = (FORM==='book' || !all) ? 'none' : '';
+  $('#lsnAll').textContent = (all && n === all) ? '全不选' : '全选';
+  $('#lessonPick').classList.toggle('dim', FORM==='book');
+  const go = $('#btnGen');
+  go.textContent = FORM==='book' ? '生成合订本' : (n ? ('开始生成（'+n+' 讲）') : '开始生成');
+  go.disabled = FORM==='book' ? false : (n === 0);
+}
+$('#lsnAll').onclick = () => {
+  const btns = $('#lessonPick').querySelectorAll('[data-lsn]');
+  const allOn = LESSON_SEL.size === btns.length && btns.length > 0;
+  LESSON_SEL.clear();
+  if(!allOn) btns.forEach(b=>LESSON_SEL.add(b.dataset.lsn));
+  btns.forEach(b=>b.classList.toggle('on', LESSON_SEL.has(b.dataset.lsn)));
+  syncLsnCnt();
+};
 $('#courseSel').onchange = syncLessons;
 document.querySelectorAll('.opt[data-mode]').forEach(o=>o.onclick=()=>{
   document.querySelectorAll('.opt[data-mode]').forEach(x=>x.classList.remove('on'));
@@ -939,17 +1030,33 @@ document.querySelectorAll('.opt[data-mode]').forEach(o=>o.onclick=()=>{
 document.querySelectorAll('.opt[data-form]').forEach(o=>o.onclick=()=>{
   document.querySelectorAll('.opt[data-form]').forEach(x=>x.classList.remove('on'));
   o.classList.add('on'); FORM=o.dataset.form;
-  $('#lessonSel').disabled = FORM==='book';
+  syncLsnCnt();
 });
 function renderQueue(){
   $('#queue').innerHTML = Q.map(q=>`<div class="qi ${q.st}"><span>${esc(q.course)} · ${esc(q.lesson)}</span>
-    <span class="st">${q.st==='run'?'生成中…':(q.st==='fail'?'失败：'+esc(q.msg||'看日志'):'完成')}</span></div>`).join('');
+    <span class="st">${q.st==='run'?'生成中…':(q.st==='wait'?'排队中…':(q.st==='fail'?'失败：'+esc(q.msg||'看日志'):'完成'))}</span></div>`).join('');
+}
+/* 批量生成：一次请求一讲（后端接口就是按讲走的），前端串行排队；
+   队列里先把所有勾中的讲摆成「排队中」，跑一讲改一讲，完的消失。 */
+let GEN_BUSY = false;
+async function runBatch(course, lessons, form){
+  GEN_BUSY = true; $('#btnGen').disabled = true;
+  const items = lessons.map(no => ({course, lesson:(form==='book' ? '合订本' : no), st:'wait'}));
+  Q = items.slice(); renderQueue();
+  try{
+    for(let i=0;i<lessons.length;i++){
+      await runGenerate(course, lessons[i], form, items[i]);
+    }
+  } finally { GEN_BUSY = false; $('#btnGen').disabled = false; syncLsnCnt(); }
 }
 $('#btnGen').onclick = () => {
-  const no = $('#lessonSel').value, course = $('#courseSel').value;
-  if(FORM==='book'){ if(!course) return; return disclaimer(()=>runGenerate(course,'','book')); }
-  if(!no) return;
-  disclaimer(()=>runGenerate(course,no,FORM));
+  if(GEN_BUSY) return;
+  const course = $('#courseSel').value;
+  if(!course) return;
+  if(FORM==='book') return disclaimer(()=>runBatch(course, [''], 'book'));
+  const list = [...LESSON_SEL];
+  if(!list.length){ toast('先勾要生成的讲次（可多选）'); return; }
+  disclaimer(()=>runBatch(course, list, 'single'));
 };
 function disclaimer(cb){
   $('#dlg').innerHTML = `
@@ -966,10 +1073,13 @@ function disclaimer(cb){
   const close = () => $('#veil').classList.remove('on');
   $('#dlgNo').onclick = close; $('#dlgYes').onclick = () => { close(); cb(); };
 }
-async function runGenerate(course, no, form){
+async function runGenerate(course, no, form, preset){
   form = form || 'single';
   const label = form==='book' ? '合订本' : no;
-  const item = {course, lesson:label, st:'run'}; Q.unshift(item); renderQueue();
+  let item = preset;
+  if(item) item.st = 'run';
+  else { item = {course, lesson:label, st:'run'}; Q.unshift(item); }
+  renderQueue();
   const log = $('#log'); log.style.display='block'; log.textContent = '正在生成 '+label+' …';
   $('#btnGen').disabled = true;
   try{
@@ -979,7 +1089,8 @@ async function runGenerate(course, no, form){
     if(j.ok){ Q = Q.filter(q=>q!==item); renderQueue(); B = await (await fetch('/api/bootstrap')).json(); render(); refreshUsage(); }
     else { item.st='fail'; item.msg=(j.error||'').slice(0,40); renderQueue(); }
   }catch(e){ item.st='fail'; item.msg='请求失败'; renderQueue(); log.textContent='请求失败：'+e; }
-  $('#btnGen').disabled = false;
+  // 批量里（preset 不为空）不由单讲解开按钮，否则排队中途按钮看着可点
+  if(!preset) $('#btnGen').disabled = false;
 }
 
 /* ---------- 会话 ---------- */
