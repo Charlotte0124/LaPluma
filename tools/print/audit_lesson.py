@@ -258,7 +258,9 @@ def content_audit(path: str, draft: bool = False) -> dict:
             fails.append("自测答案里没有「回看 §x」（错题回不去原节）")
 
     # 10–11 段落过长 / 表格列数过多
-    long_p = [strip_tags(p).strip() for p in re.findall(r"<p[^>]*>(.*?)</p>", html, re.S)
+    # 2026-11-16 修：原来写 <p[^>]*>，会把 <pre class="code"> 也当成 <p>（代码整块被算成一个「段落」，
+    # 于是每讲都报 7–8 段超长）。改成只匹配真正的 <p>——<p> 或 <p 加属性。
+    long_p = [strip_tags(p).strip() for p in re.findall(r"<p(?:\s[^>]*)?>(.*?)</p>", html, re.S)
               if 'class="src"' not in html[max(0, html.find(p) - 40):html.find(p)]]
     long_p = [p for p in long_p if len(p) > CONTENT_TH["para_chars"]]
     if long_p:
@@ -297,11 +299,13 @@ def _rel(path: str) -> str:
 
 
 def body_start_pages(doc) -> list[tuple[int, str]]:
-    """找出「页面第一行是正文段落」的页（＝这一节被切到上一页去了）。
+    """找出「页面第一行不是标题/图注/表头/公式」的页（＝这一节被切到上一页去了）。
 
-    按字体判，不按字号：正文是 Microsoft YaHei 10.5pt；h2 编号 11pt、h3 11.2pt、
-    公式是 Cambria Math 10.4pt、表头/图注 8.4–9.4pt——这些起页都算正常，只有 YaHei 10.5 算违规。
     2026-11-16 加：用户要求「章节不能一部分落在两页」，这条判据就是它的机器判法。
+    2026-11-16 收紧（L05 实测）：原来只认 YaHei 10.5 正文，漏掉了三类真断裂——
+      例题题面（YaHei-Bold 10.0）、代码块（Consolas 8.9）、结构图里的字（YaHei 8.1）；
+    现在改成「白名单」：页首只允许 h2 标题、h3、图注/表头（YaHei 8.3–9.5）、公式（Cambria/Math），
+    其余一律算「页从中间开始」。宁可红也要看得见，跳过 ≠ 通过。
     """
     bad = []
     for i, page in enumerate(doc, 1):
@@ -317,8 +321,17 @@ def body_start_pages(doc) -> list[tuple[int, str]]:
             span = max((s for s in line["spans"] if s["text"].strip()),
                        key=lambda s: s["size"])
             text = "".join(s["text"] for s in line["spans"]).strip()
-            if ("YaHei" in span["font"] or "Source Han" in span["font"]) \
-                    and 10.45 <= span["size"] <= 10.7 and text[:2] not in ("符号", "中文"):
+            font, size = span["font"], span["size"]
+            ok = False
+            if "Bold" in font and 13.0 <= size <= 15.5:
+                ok = True                                     # h2 标题
+            elif "Bold" in font and 10.8 <= size <= 11.5:
+                ok = True                                     # h2 编号 / h3
+            elif "Cambria" in font or "Math" in font:
+                ok = True                                     # 公式
+            elif ("YaHei" in font or "Source Han" in font) and 8.3 <= size <= 9.5:
+                ok = True                                     # 图注 / 表头
+            if not ok and text[:2] not in ("符号", "中文"):
                 bad.append((i, text[:40]))
             break
     return bad

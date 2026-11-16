@@ -42,7 +42,9 @@ CSS = """
   p,li{break-inside:avoid}
   section.sec{break-inside:avoid}
   p,li{orphans:2; widows:2}
-  figure,.eq,.note,blockquote,table.sym{break-inside:avoid}
+  figure,.eq,.note,blockquote,table.sym,pre.code,.eg{break-inside:avoid}
+  .eg .ask{break-after:avoid}
+  h3{break-after:avoid}
   tr{break-inside:avoid}
   table{break-inside:auto}
   .cover{height:calc(297mm - 31mm); display:flex; flex-direction:column; justify-content:center;
