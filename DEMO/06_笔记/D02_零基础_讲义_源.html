@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark" data-reader="大学">
+
+<head>
+<meta charset="utf-8">
+<meta name="out" content="D02_桃花源记_讲义.pdf">
+
+<title>D02 桃花源记 · 讲义</title>
+<style>
+  :root{
+    --bg:#0E0E0C; --card:#161614; --text:#F4F1E6; --dim:#A8A498;
+    --mute:#6E6B61; --line:#2A2A24; --amber:#E7C246; --code:#121210;
+  }
+  *{box-sizing:border-box}
+  html{background:var(--bg)}
+  body{
+    margin:0; padding:0; background:transparent; color:var(--text);
+    font-family:"Microsoft YaHei","Source Han Sans SC","PingFang SC",system-ui,sans-serif;
+    font-size:10.5pt; line-height:1.78;
+    -webkit-print-color-adjust:exact; print-color-adjust:exact;
+  }
+  @page{size:A4; margin:15mm 16mm 16mm}
+  h2,h3{break-after:avoid}
+  h2{break-before:page}
+  .lec{margin:3.4mm 0; padding:2mm 0 2mm 4mm; border-left:2px solid var(--line);
+       color:var(--text); font-size:10.3pt}
+  .lec b:first-child{color:var(--amber)}
+  .pb{break-before:page}
+  p,li{break-inside:avoid}
+  section.sec{break-inside:avoid}
+  p,li{orphans:2; widows:2}
+  figure,.eq,.note,blockquote,table.sym,pre.code,.eg{break-inside:avoid}
+  .eg .ask{break-after:avoid}
+  h3{break-after:avoid}
+  tr{break-inside:avoid}
+  table{break-inside:auto}
+  .cover{height:calc(297mm - 31mm); display:flex; flex-direction:column; justify-content:center;
+         break-after:page}
+  .cover .kicker{color:var(--amber); font-size:9pt; letter-spacing:.14em}
+  .cover h1{font-size:26pt; line-height:1.3; margin:5mm 0 3mm; font-weight:600}
+  .cover .sub{color:var(--dim); font-size:10.5pt; line-height:1.9; margin-bottom:12mm}
+  .meta{border:1px solid var(--line); border-radius:8px; background:var(--card); padding:5mm 6mm}
+  .meta .row{display:grid; grid-template-columns:24mm 1fr; gap:4mm; font-size:9.2pt;
+             color:var(--dim); padding:1.1mm 0}
+  .meta .row b{color:var(--text); font-weight:500}
+  .tocpage{break-after:page}
+  .toc{margin-top:2mm}
+  .toc .item{display:grid; grid-template-columns:9mm 1fr 10mm; gap:2mm; align-items:baseline;
+             padding:1.4mm 0; border-bottom:1px dotted var(--line)}
+  .toc .no{color:var(--amber); font-variant-numeric:tabular-nums}
+  .toc .t{color:var(--text)}
+  .toc .t small{color:var(--mute); font-size:8.4pt; margin-left:2.5mm; letter-spacing:.03em}
+  .toc .pg{color:var(--dim); font-variant-numeric:tabular-nums; text-align:right}
+  h2{display:grid; grid-template-columns:11mm 1fr; column-gap:4mm; align-items:baseline;
+     margin:7mm 0 3mm; padding-top:4mm; border-top:1px solid var(--line)}
+  h2 .no{grid-row:1; color:var(--amber); font-size:11pt; font-weight:600;
+         font-variant-numeric:tabular-nums}
+  h2 .zh{grid-column:2; font-size:14.5pt; font-weight:600; line-height:1.4}
+  h2 .en{grid-column:2; color:var(--mute); font-size:8.8pt; letter-spacing:.05em; margin-top:.8mm}
+  h3{font-size:11.2pt; font-weight:600; margin:6mm 0 1.5mm}
+  p{margin:2.6mm 0}
+  b,strong{font-weight:600}
+  em{font-style:normal; color:var(--amber)}
+  sub,sup{font-size:.74em; line-height:0}
+  ul,ol{margin:2.2mm 0; padding-left:5.5mm}
+  li{margin:1.4mm 0; list-style:none; position:relative; padding-left:4mm}
+  li::before{content:"–"; position:absolute; left:0; color:var(--mute)}
+  ol{counter-reset:n}
+  ol li{counter-increment:n}
+  ol li::before{content:counter(n) "."; color:var(--amber); font-variant-numeric:tabular-nums}
+  blockquote{margin:3.2mm 0; padding:3mm 4mm; background:var(--card); border-radius:8px;
+             border-left:2px solid var(--amber)}
+  blockquote .en{display:block; font-family:Georgia,"Times New Roman",serif; font-size:9.9pt;
+                 color:var(--text); line-height:1.7}
+  blockquote .ref{display:block; text-align:right; color:var(--mute); font-size:8.6pt; margin-top:1.2mm}
+  .eq{margin:3mm 0 0; padding:2.8mm 4mm; background:var(--code); border:1px solid var(--line);
+      border-radius:8px; font-family:"Cambria Math",Cambria,Georgia,"Times New Roman",serif;
+      font-size:10.4pt; line-height:2.05; white-space:pre-wrap; overflow-wrap:anywhere}
+  table.sym{width:100%; border-collapse:collapse; margin:0 0 3.4mm; font-size:8.8pt;
+            table-layout:fixed}
+  table.sym th{background:transparent; color:var(--mute); font-weight:600;
+               border:none; border-bottom:1px solid var(--line); padding:1.2mm 2.2mm; text-align:left}
+  table.sym td{border:none; border-bottom:1px dotted #22221C; padding:1.2mm 2.2mm;
+               color:var(--dim); vertical-align:top; overflow-wrap:anywhere}
+  table.sym td:first-child{color:var(--amber); white-space:nowrap}
+  .note{margin:3.2mm 0; padding:3mm 4mm; background:var(--card); border:1px solid var(--line);
+        border-radius:8px; font-size:9.7pt; color:var(--dim)}
+  .note .tag{display:inline-block; color:var(--amber); font-size:8.4pt; letter-spacing:.06em;
+             margin-right:2mm; border:1px solid var(--line); border-radius:5px; padding:.2mm 1.6mm}
+  figure{margin:3.6mm 0}
+  pre.code{margin:3mm 0; padding:3mm 4mm; background:#0F0F0D; border:1px solid var(--line);
+           border-left:3px solid var(--amber); border-radius:6px; overflow-wrap:anywhere;
+           white-space:pre-wrap; font-family:Consolas,"Courier New",monospace; font-size:8.9pt;
+           line-height:1.75; color:#E4E0D4}
+  pre.code .cap{display:block; color:var(--mute); font-size:8pt; margin-bottom:1.4mm;
+                font-family:"Microsoft YaHei",sans-serif}
+  .eg{margin:3.4mm 0; padding:3mm 4mm; background:var(--card); border:1px solid var(--line);
+      border-left:3px solid #8FA7B8; border-radius:8px; break-inside:avoid}
+  .eg .ask{font-weight:600; color:var(--text); margin-bottom:1.6mm; font-size:10pt}
+  .eg ol{margin:0; padding-left:6mm; font-size:9.3pt; line-height:1.8; color:var(--dim)}
+  .eg .a{margin-top:1.8mm; color:var(--amber); font-size:9.3pt}
+  figure.diagram{margin:3.6mm 0; text-align:center; break-inside:avoid}
+  figure.diagram svg{display:block; margin:0 auto; max-width:100%; height:auto}
+  figure img{display:block; margin:0 auto; width:auto; max-width:100%; max-height:66mm;
+             border:1px solid var(--line); border-radius:8px; background:#fff}
+  figcaption{color:var(--mute); font-size:8.6pt; margin-top:1.6mm; text-align:center}
+  table:not(.sym){width:100%; border-collapse:collapse; margin:3mm 0; font-size:9.2pt;
+                  table-layout:fixed}
+  table:not(.sym) th,table:not(.sym) td{border:1px solid var(--line); padding:1.8mm 2.2mm;
+                  text-align:left; vertical-align:top; overflow-wrap:anywhere}
+  table:not(.sym) th{background:var(--card); color:var(--dim); font-weight:600}
+  thead{display:table-header-group}
+  td .en{display:block; color:var(--mute); font-size:8.4pt}
+  .src{color:var(--mute); font-size:8.8pt}
+  .q{margin:3mm 0}
+  .q b{color:var(--amber)}
+  .ans{color:var(--dim); font-size:9.6pt; margin:1.6mm 0}
+  .self{margin-top:6mm; padding-top:3mm; border-top:1px solid var(--line)}
+  table.glossary td:first-child{white-space:nowrap}
+  table.glossary td,table.glossary th{padding:.7mm 2.2mm; font-size:8.4pt}
+  table.glossary td:nth-child(3){white-space:nowrap}
+</style>
+</head>
+<body>
+
+<section class="cover">
+  <div class="kicker">DEMO · LECTURE D02</div>
+  <h1>桃花源记</h1>
+  <div class="sub">The Peach Blossom Spring<br>
+  示例课程 ｜ 一篇文言散文怎么从「课件文字」变成「能核对的讲义」</div>
+  <div class="meta">
+    <div class="row"><b>篇目</b><span>陶渊明《桃花源记》（东晋，约 421 年）</span></div>
+    <div class="row"><b>读法</b><span>先看四段骨架 → 再逐句过字词 → 最后看「不复得路」这一笔为什么必须写</span></div>
+    <div class="row"><b>配套</b><span>原始课件 4 页（docs\示例\桃花源记-范本.pdf）→ 本讲义即加工后的成品</span></div>
+    <div class="row"><b>口径</b><span>原文按通行本录入；译文为教学改写，一处一译，不是唯一标准答案</span></div>
+  </div>
+</section>
+
+<section class="tocpage">
+  <h2 style="margin-top:0"><span class="no">·</span><span class="zh">目录</span><span class="en">CONTENTS</span></h2>
+  <div class="toc">
+    <div class="item"><span class="no">0</span><span class="t">本讲导读<small>Read Me First</small></span><span class="pg" data-head="本讲导读">·</span></div>
+    <div class="item"><span class="no">1</span><span class="t">陶渊明与这篇文章的位置<small>Author and Setting</small></span><span class="pg" data-head="陶渊明与这篇文章的位置">·</span></div>
+    <div class="item"><span class="no">2</span><span class="t">四段骨架与三条线索<small>Four Movements, Three Threads</small></span><span class="pg" data-head="四段骨架与三条线索">·</span></div>
+    <div class="item"><span class="no">3</span><span class="t">十二个字词：通假、古今异义、一词多义<small>Twelve Words That Trip You Up</small></span><span class="pg" data-head="十二个字词：通假、古今异义、一词多义">·</span></div>
+    <div class="item"><span class="no">4</span><span class="t">四句最容易译错的句子<small>Four Sentences, One Method</small></span><span class="pg" data-head="四句最容易译错的句子">·</span></div>
+    <div class="item"><span class="no">5</span><span class="t">写作手法：白描、虚实与留白<small>How It Is Written</small></span><span class="pg" data-head="写作手法：白描、虚实与留白">·</span></div>
+    <div class="item"><span class="no">6</span><span class="t">主题：为什么偏要「不复得路」<small>Why the Road Is Lost</small></span><span class="pg" data-head="主题：为什么偏要「不复得路」">·</span></div>
+  </div>
+</section>
+
+<section class="sec">
+<h2><span class="no">0</span><span class="zh">本讲导读</span><span class="en">Read Me First</span></h2>
+<p><b>这一节能解决什么。</b>让你在读原文之前知道它在讲什么事、为什么值得读——先有骨架，再抠字词，最后才谈主题。</p>
+<p><b>这一节不能解决什么。</b>不替你背文学史年代（记不住不影响读懂本文），也不给「标准答案式」的中心思想（central theme），只给判断依据。</p>
+<div class="note"><span class="tag">读法</span>把本文当成一个<b>叙事</b>来读：谁进了哪里、看到了什么、后来又怎样。三段都发生在「桃花源（Peach Blossom Spring）」里，第四段回到「找不到」，落点就在这个「找不到」上。</div>
+<p>本讲引用的页码都指原始课件（4 页版），你在纸面上能一页一页对回去，这就是「可核对」。</p>
+</section>
+
+<section class="sec">
+<h2><span class="no">1</span><span class="zh">陶渊明与这篇文章的位置</span><span class="en">Author and Setting</span></h2>
+<p class="lec"><b>讲法。</b>先说清作者与时代，再谈文章。依据是《宋书·隐逸传》与本文小序的说法（课件 p.1）：他做官做得不开心，辞了回乡下，写的东西多半跟田园、跟「另一种活法」有关。</p>
+<p>陶渊明（约 365—427），东晋末年到南朝宋初的人。他做过几任小官，最后一任是彭泽县令，只做了八十多天就辞了，理由写在《归去来兮辞》序里：不想为了五斗米向乡里小儿折腰。这不是清高姿态，是算过账的选择——当时的官场要站队、要应酬，他受不了。</p>
+<p>《桃花源（Peach Blossom Spring）记》常被认为写于他归隐之后。它不是凭空想出来的：战乱、赋役、人口流亡是那个时代的日常，所以他笔下那个「不知有汉，无论魏晋」的地方，本质是<b>把现实倒过来写</b>——外面越乱，里面越安稳。</p>
+<blockquote><span class="en">晋太元中，武陵人捕鱼为业。缘溪行，忘路之远近。</span>
+<span class="ref">课件 p.2 · 开篇一句，时代与主人公都在里面</span></blockquote>
+<div class="eg"><div class="ask">开篇写「晋太元中」，为什么把一个模糊的年号写清楚，却把主人公写成「捕鱼为业」的无名者？</div><ol><li>年号给的是<b>可信的坐标</b>：让读者以为这是真事，后面「不复得路」才有分量（课件 p.4）</li><li>不给姓名给职业，是因为他要的不是一个人，而是<b>一类人</b>——普通、无特权、随时可能被时代碾过去的那类</li><li>两件事合起来：用真实的外壳，装一个不可能的梦</li></ol><div class="a">答案：真年号 + 无名者 = 可信的外壳。这一点决定后文为什么必须写「不复得路」，见 §6。</div></div>
+</section>
+
+<section class="sec">
+<h2><span class="no">2</span><span class="zh">四段骨架与三条线索</span><span class="en">Four Movements, Three Threads</span></h2>
+<p class="lec"><b>讲法。</b>先把叙事顺序（narrative order）画出来，再谈细节。四段的段落大意（paragraph gist）我用一句话概括（课件 p.4），你读完可以自己改——改得动，说明你真读懂了；改不动，说明还在背。</p>
+<p>四段的段落大意我一句话一段，表在下面（课件 p.4）；表后的三条线索（narrative thread）用来把它们串起来（课件 p.2）。</p>
+<table>
+<tr><th style="width:8%">段</th><th style="width:52%">段落大意（一句话）</th><th style="width:40%">在文章里的作用</th></tr>
+<tr><td>一</td><td>渔人缘溪误入桃花林，穿过山口，见到村子</td><td>进入：把读者带进去</td></tr>
+<tr><td>二</td><td>村里人请他回家，说祖上避乱而来，不知外面的朝代</td><td>展开：交代这个地方为什么存在</td></tr>
+<tr><td>三</td><td>渔人出来后沿路做记号，太守派人去找，找不到</td><td>转折：记号失效，入口消失</td></tr>
+<tr><td>四</td><td>刘子骥想去，没去成，此后无人问津</td><td>收束：把「找不到」钉死</td></tr>
+</table>
+<p>三条线索贯穿全篇：一是<b>空间</b>线索，从溪到林到山到洞口到村，一路「越来越窄」，最后「豁然开朗」；二是<b>人物对话（dialogue）</b>，全靠问答交代背景，作者一次也没站出来解说；三是<b>记号</b>，处处志之是全文唯一一次「人想留住什么」，结果恰好在这一处失效。</p>
+<p>环境描写（setting）不是闲笔：桃花林写「芳草鲜美，落英缤纷」，进村写「土地平旷，屋舍俨然」，一外一内，先美后安，读者的安全感是被这两笔铺出来的。</p>
+<div class="eg"><div class="ask">如果把第三段「处处志之」删掉，故事还能讲完吗？</div><ol><li>能讲完，但会变成「偶然走丢」的奇闻，而不是「有人想回去、回不去」的悲剧</li><li>记号是全文唯一一次主动挽留；它失效，才说明桃花源（Peach Blossom Spring）不接受被安排</li><li>所以这一笔不是道具，是主题的一半</li></ol><div class="a">答案：删得掉，代价是把主题删掉了。判断依据：第四段「不复得路」靠的正是记号的失效。</div></div>
+</section>
+
+<section class="sec">
+<h2><span class="no">3</span><span class="zh">十二个字词：通假、古今异义、一词多义</span><span class="en">Twelve Words That Trip You Up</span></h2>
+<p class="lec"><b>讲法。</b>文言文（Classical Chinese）读不懂，九成不是语法问题，是字词。这一节只做一件事：把最容易按今义理解的十二个词挑出来，一个词给三样——句中义、今天的意思、凭什么这样判（课件 p.3）。</p>
+<p>先立三条判断依据，后面每个词都能套（课件 p.3）：①看搭配，「率妻子邑人」里「妻子」后面跟「邑人」，说明它跟人并列，只能是「妻子和儿女」；②看上下文，「绝境」前有「来此」，后有「不复出焉」，只能是「与世隔绝的地方」；③看句式，「渔人甚异之」里「异」带了宾语，只能是动词或意动用法（putative usage）。</p>
+<p>下面这张表是 §3 的整理，一栏是句中义，一栏是今天的意思（课件 p.3）：</p>
+<table>
+<tr><th style="width:10%">词</th><th style="width:45%">句中义（本文）</th><th style="width:45%">今天的意思 / 辨析</th></tr>
+<tr><td>妻子</td><td>妻子和儿女</td><td>今只指男子的配偶（古今异义（semantic shift））</td></tr>
+<tr><td>绝境</td><td>与世隔绝的地方</td><td>今多指走投无路的处境（古今异义）</td></tr>
+<tr><td>无论</td><td>不要说、更不必说</td><td>今是连词「不管」（古今异义）</td></tr>
+<tr><td>交通</td><td>交错相通</td><td>今指运输事业（古今异义）</td></tr>
+<tr><td>鲜美</td><td>鲜艳美丽</td><td>今多形容味道好（古今异义）</td></tr>
+<tr><td>俨然</td><td>整齐的样子</td><td>今多指「好像、宛然」</td></tr>
+<tr><td>寻</td><td>随即、不久（寻病终）</td><td>今是「寻找」（一词多义（polysemy））</td></tr>
+<tr><td>志</td><td>做记号（处处志之）/ 标记（寻向所志）</td><td>同字两义，一动词一名词</td></tr>
+<tr><td>要</td><td>同「邀」，邀请（通假字（phonetic loan character））</td><td>今为「需要、重要」</td></tr>
+<tr><td>具</td><td>同「俱」，全、都（通假字）</td><td>今为「具备、工具」</td></tr>
+<tr><td>异</td><td>认为……奇怪（意动用法）</td><td>今为「不同、奇异」</td></tr>
+<tr><td>穷</td><td>走到尽头（欲穷其林）</td><td>今多指「贫穷」</td></tr>
+</table>
+<div class="eg"><div class="ask">「率妻子邑人来此绝境，不复出焉」该怎么译？请先指出两个易错词，再给整句译文。</div><ol><li>易错词一：<b>妻子</b>——是「妻子和儿女」，不是配偶一人（依据：与「邑人」并列，课件 p.3）</li><li>易错词二：<b>绝境</b>——是「与世隔绝的地方」，不是「绝路」（依据：后句「不复出焉」）</li><li>整句：带着妻子儿女和同乡的人来到这个与世隔绝的地方，没有再出去过</li></ol><div class="a">答案：两个词都属古今异义；判断靠搭配与上下文，不靠猜。回看 §3 表第一、二行。</div></div>
+</section>
+
+<section class="sec">
+<h2><span class="no">4</span><span class="zh">四句最容易译错的句子</span><span class="en">Four Sentences, One Method</span></h2>
+<p class="lec"><b>讲法。</b>句子翻译（sentence translation）不考文采，考的是「逐字对上 + 语序调整 + 补出省略」。方法固定三步：先按词切分（断句（sentence segmentation）），再把每个词的句中义填进去，最后补主语、调语序（课件 p.3）。（句译见课件 p.3 的对照栏）</p>
+<p>四句都出自课件 p.2 的原文，逐句译法见课件 p.3 的对照欄；每题先切分、再填义（课件 p.3）。</p>
+<div class="eg"><div class="ask">「问今是何世，乃不知有汉，无论魏晋。」</div><ol><li>切分：问 / 今 / 是 / 何世 ‖ 乃 / 不知 / 有汉 ‖ 无论 / 魏晋</li><li>填义：是=这；乃=竟然；无论=不要说</li><li>成品：（他们）问现在是什么朝代，竟然不知道有过汉朝，更不必说魏晋了</li></ol><div class="a">答案：三处要点——「是」「乃」「无论」。少一处就扣一处，这是可数的。</div></div>
+<div class="eg"><div class="ask">「此人一一为具言所闻，皆叹惋。」</div><ol><li>切分：此人 / 一一 / 为 / 具言 / 所闻 ‖ 皆 / 叹惋</li><li>补省略：为（之）具言——「之」指村里人，翻译时要补出来</li><li>成品：这个人为他们详细说了自己所听到的事，（听的人）都感叹惋惜</li></ol><div class="a">答案：难点是省略宾语与「具言」的「具」（详细）。</div></div>
+<div class="eg"><div class="ask">「既出，得其船，便扶向路，处处志之。」</div><ol><li>切分：既 / 出 ‖ 得 / 其船 ‖ 便 / 扶 / 向路 ‖ 处处 / 志 / 之</li><li>填义：既=已经；扶=沿着；向=先前的；志=做记号</li><li>成品：（渔人）出来以后，找到他的船，就沿着先前的路（回去），处处做了记号</li></ol><div class="a">答案：四个词连起来才通——「扶向路」是「沿着来时的路」，不是「扶着路」。</div></div>
+<div class="eg"><div class="ask">「寻向所志，遂迷，不复得路。」</div><ol><li>切分：寻 / 向 / 所志 ‖ 遂 / 迷 ‖ 不复 / 得路</li><li>填义：寻=寻找；向=先前；所志=做的记号（名词性）</li><li>成品：寻找先前做的记号，竟然迷失了方向，再也找不到（通往桃花源（Peach Blossom Spring）的）路</li></ol><div class="a">答案：注意「志」在这里是名词（记号），与上句的动词用法不同——这正是一词多义（polysemy）。</div></div>
+</section>
+
+<section class="sec">
+<h2><span class="no">5</span><span class="zh">写作手法：白描、虚实与留白</span><span class="en">How It Is Written</span></h2>
+<p class="lec"><b>讲法。</b>这一节讲他「怎么写的」。三样手法，每样都给你指一处原文当证据（课件 p.2、p.4），你不同意可以拿别的原文反驳——这就是文学分析该有的样子。</p>
+<p>三样手法各有一处证据（课件 p.2、p.4），先给例子再给结论：</p>
+<ul>
+  <li><b>白描（plain sketch）</b>：不形容，只列名词与动作。「土地平旷，屋舍俨然，有良田美池桑竹之属」——一个形容词都没有，画面却全出来了。</li>
+  <li><b>虚实结合（real-and-imagined）</b>：年号、郡名、人名（刘子骥实有其人）都是实的，桃花源（Peach Blossom Spring）本身是虚的；实的外壳越硬，虚的部分越可信。</li>
+  <li><b>留白（deliberate blank）</b>：村里人「避秦时乱」之后几百年怎么过的，作者一个字没写；渔人出去后有没有人信他，也没写。空出来的地方，读者自己填。</li>
+</ul>
+<p>还有一处常被忽略的<b>详略（proportion of detail）</b>：进村前的路写得极细（溪、林、山、口、光），出村后的寻找写得极简（志之、寻向所志、遂迷）。详的让人身临其境，略的让失败来得干脆——这是作者在控制节奏。</p>
+<div class="eg"><div class="ask">「芳草鲜美，落英缤纷」这八个字，改写成「桃花开得很美，花瓣落了一地」好不好？</div><ol><li>不好在两点：一是变虚了，「鲜美」「缤纷」是直接给出的画面，改写后成了评价</li><li>二是失去了对仗与节奏，八个字两句，读起来像走路，改写后像说明文</li><li>结论：白描的力量来自具体与克制，不是来自华丽</li></ol><div class="a">答案：评价可以主观，理由要能指到字上。回看 §5 第一条。</div></div>
+</section>
+
+<section class="sec">
+<h2><span class="no">6</span><span class="zh">主题：为什么偏要「不复得路」</span><span class="en">Why the Road Is Lost</span></h2>
+<p class="lec"><b>讲法。</b>最后落到主题。我的判断：这篇文章的<b>中心思想（central theme）</b>不在「桃花源（Peach Blossom Spring）多好」，而在「回不去」。理由三条，都能从文本里指出来（课件 p.4）。</p>
+<p>第一条：<b>寄托（allegory）</b>的方向是现实（课件 p.4）。陶渊明写的不是旅游见闻，是他那个时代缺什么——没有战乱、没有赋役、老少各得其所。这些恰恰是东晋末年最缺的东西。</p>
+<p>第二条：记号失效是刻意的（课件 p.4）。渔人「处处志之」，太守「遣人随其往」，结果「遂迷」。如果作者想让读者相信桃花源存在，就该让他们找到；偏不，说明他要的不是「存在」，而是「不可复制」。</p>
+<p>第三条：结尾把可能性关死（课件 p.4）。「南阳刘子骥，高尚士也，闻之，欣然规往。未果，寻病终。后遂无问津者。」——连最该找到的人也失败了，于是世上不再有人找。这就是<b>世外桃源（hidden utopia）</b>这个词后来为什么总带一点遗憾。</p>
+<blockquote><span class="en">后遂无问津者。</span>
+<span class="ref">课件 p.4 · 全文最后五个字，把门关上了</span></blockquote>
+<div class="eg"><div class="ask">有人说：「既然回不去，那写它干什么？」用本文回答这个问题，要求指到具体句子。</div><ol><li>写它不是为了让人去，是为了让人知道自己缺什么——依据：村中「黄发垂髫，并怡然自乐」（课件 p.4）</li><li>回不去正好保证它不会被糟蹋：一旦能去，就会有人去、有人征税、有人争——依据：太守「遣人随其往」（课件 p.4）</li><li>所以「不复得路」不是败笔，是保护措施：理想只有不可达时才是理想</li></ol><div class="a">答案：三条都要指句子。回看 §6 第二、三条与「后遂无问津者」。</div></div>
+</section>
+
+<section class="sec">
+<h2><span class="no">7</span><span class="zh">本讲小结</span><span class="en">Takeaways</span></h2>
+<p class="lec"><b>讲法。</b>收口用一张表，每条都配一个能自己验的动作——不许只留「我觉得」。</p>
+<table>
+<tr><th style="width:22%">记住什么</th><th style="width:50%">一句话</th><th style="width:28%">怎么自查</th></tr>
+<tr><td>骨架</td><td>进入 → 展开 → 转折 → 收束，四段一件事</td><td>合上讲义，自己用一句话复述每一段</td></tr>
+<tr><td>字词</td><td>妻子 / 绝境 / 无论 / 交通 都是古今异义</td><td>翻回 §3 的表，遮住右列自己填</td></tr>
+<tr><td>译句</td><td>切分 → 填义 → 补省略、调语序</td><td>拿 §4 任一句，先切分再译</td></tr>
+<tr><td>主题</td><td>重点在「不复得路」，不在「桃花源多好」</td><td>指出三处原文，缺一处就还没读懂</td></tr>
+</table>
+<p>如果只带走一句：<b>这篇文章的力量来自「回不去」</b>；读文言文先过字词、再谈主题，顺序反了就只剩感想。</p>
+</section>
+
+<section class="sec">
+<h2><span class="no">8</span><span class="zh">自测</span><span class="en">Self-check</span></h2>
+<p class="lec"><b>讲法。</b>五题都不考背诵：给你一个判断任务，答案里写明回哪一节。</p>
+
+<div class="q"><b>Q1.</b> 「率妻子邑人来此绝境」中的「妻子」和「绝境」，分别是什么意思？判断依据是什么？</div>
+<div class="ans">答：妻子 = 妻子和儿女；绝境 = 与世隔绝的地方。依据是搭配（与「邑人」并列）与上下文（「不复出焉」）。回看 §3。</div>
+
+<div class="q"><b>Q2.</b> 把「既出，得其船，便扶向路，处处志之」译成现代汉语，并指出「扶」的意思。</div>
+<div class="ans">答：（渔人）出来以后，找到他的船，就沿着先前的路（回去），处处做了记号。「扶」= 沿着。回看 §4。</div>
+
+<div class="q"><b>Q3.</b> 本文用了哪三种手法？每种给一处原文当证据。</div>
+<div class="ans">答：白描（土地平旷，屋舍俨然）／虚实结合（晋太元中 + 虚构村落）／留白（避秦之后几百年怎么过的没写）。回看 §5。</div>
+
+<div class="q"><b>Q4.</b> 为什么作者一定要写「不复得路」？给出两条从原文出发的理由。</div>
+<div class="ans">答：记号失效说明理想不可复制；连刘子骥也「未果」，把可能性关死，保护了它不被现实消耗。回看 §6。</div>
+
+<div class="q"><b>Q5.</b> 「处处志之」与「寻向所志」的「志」，词性与意思有什么不同？</div>
+<div class="ans">答：前者是动词「做记号」，后者是名词「做的记号」——一词多义。回看 §3 表第八行。</div>
+</section>
+
+<section class="sec">
+<h2><span class="no">9</span><span class="zh">术语表</span><span class="en">Glossary</span></h2>
+<p class="lec"><b>讲法。</b>本讲用到的词，每个都标了英文与出处节——写作业、查资料都用得着。</p>
+
+<table class="glossary">
+  <colgroup><col style="width:20%"><col style="width:27%"><col style="width:15%"><col style="width:38%"></colgroup>
+  <thead><tr><th>中文</th><th>English</th><th>页码</th><th>备注</th></tr></thead>
+  <tbody>
+  <tr><td>桃花源</td><td>Peach Blossom Spring</td><td>本讲 §1</td><td>本文虚构的那个村子，后来成了「理想之地」的代称</td></tr>
+  <tr><td>文言文</td><td>Classical Chinese</td><td>本讲 §3</td><td>以先秦口语为基础、后来固定在书面上的汉语</td></tr>
+  <tr><td>通假字</td><td>phonetic loan character</td><td>本讲 §3</td><td>本该写甲字，借了同音或近音的乙字</td></tr>
+  <tr><td>古今异义</td><td>semantic shift</td><td>本讲 §3</td><td>同一个词，古今意思不同（妻子、绝境）</td></tr>
+  <tr><td>一词多义</td><td>polysemy</td><td>本讲 §3</td><td>一个字在不同句子里承担不同意思（志、寻）</td></tr>
+  <tr><td>词类活用</td><td>word-class shift</td><td>本讲 §3</td><td>词在句中临时改变词性</td></tr>
+  <tr><td>意动用法</td><td>putative usage</td><td>本讲 §3</td><td>「认为……怎么样」，如「渔人甚异之」</td></tr>
+  <tr><td>句子翻译</td><td>sentence translation</td><td>本讲 §4</td><td>逐字对上、补省略、调语序，三步走</td></tr>
+  <tr><td>断句</td><td>sentence segmentation</td><td>本讲 §4</td><td>按词与语法把句子切开，翻译前的第一步</td></tr>
+  <tr><td>白描</td><td>plain sketch</td><td>本讲 §5</td><td>不形容、只列名词与动作的写法</td></tr>
+  <tr><td>虚实结合</td><td>real-and-imagined</td><td>本讲 §5</td><td>真实年号人名与虚构地点互相支撑</td></tr>
+  <tr><td>留白</td><td>deliberate blank</td><td>本讲 §5</td><td>该写而故意不写，留给读者填</td></tr>
+  <tr><td>详略</td><td>proportion of detail</td><td>本讲 §5</td><td>哪里写细、哪里写粗，用来控制节奏</td></tr>
+  <tr><td>线索</td><td>narrative thread</td><td>本讲 §2</td><td>把全篇串起来的那条线（空间、对话、记号）</td></tr>
+  <tr><td>叙事顺序</td><td>narrative order</td><td>本讲 §2</td><td>事情按什么次序讲（本文按时间与空间并行）</td></tr>
+  <tr><td>环境描写</td><td>setting</td><td>本讲 §2</td><td>写地方与景物，用来铺情绪</td></tr>
+  <tr><td>人物对话</td><td>dialogue</td><td>本讲 §2</td><td>靠人物问答交代背景，作者不站出来解说</td></tr>
+  <tr><td>段落大意</td><td>paragraph gist</td><td>本讲 §2</td><td>一段一句话的概括</td></tr>
+  <tr><td>寄托</td><td>allegory</td><td>本讲 §6</td><td>借一个故事说现实里缺什么</td></tr>
+  <tr><td>世外桃源</td><td>hidden utopia</td><td>本讲 §6</td><td>本文衍生出的成语：不可再寻的理想之地</td></tr>
+  <tr><td>中心思想</td><td>central theme</td><td>本讲 §6</td><td>全篇要说的那句话，必须能被原文支持</td></tr>
+  <tr><td>课后练习</td><td>exercises</td><td>本讲 §4</td><td>照方法自己动手的题目，本讲放在讲义末尾</td></tr>
+  </tbody>
+</table>
+</section>
+
+<section class="sec">
+<h2><span class="no">10</span><span class="zh">附录</span><span class="en">Appendix</span></h2>
+<p class="lec"><b>讲法。</b>一张字词速查 + 一组常见误解，考前十分钟看这张就够。</p>
+
+<table class="sym">
+<tr><th>符号 / 缩写</th><th>读法·含义</th><th>出处</th></tr>
+<tr><td>妻子</td><td>妻子和儿女（古今异义）</td><td>本讲 §3</td></tr>
+<tr><td>绝境</td><td>与世隔绝的地方（古今异义）</td><td>本讲 §3</td></tr>
+<tr><td>无论</td><td>不要说，更不必说（古今异义）</td><td>本讲 §3</td></tr>
+<tr><td>交通</td><td>交错相通（古今异义）</td><td>本讲 §3</td></tr>
+<tr><td>要 / 具</td><td>同「邀」/ 同「俱」（通假字）</td><td>本讲 §3</td></tr>
+<tr><td>志</td><td>做记号（动）/ 记号（名）（一词多义）</td><td>本讲 §3</td></tr>
+<tr><td>异</td><td>认为……奇怪（意动）</td><td>本讲 §3</td></tr>
+</table>
+
+<h3>常见误解</h3>
+<ol>
+<li>以为「妻子」就是配偶：本文是「妻子和儿女」，写作时按今义用会扣分。</li>
+<li>以为主题是「向往美好生活」就完事：还要说清「为什么必须回不去」，否则等于没答。</li>
+<li>以为「寻病终」是「寻找病」：这里的「寻」是「不久」。</li>
+<li>以为段落大意可以随便写：大意要能被原文指认，改得动是因为读懂了，不是因为写得漂亮。</li>
+</ol>
+</section>
+
+
+</body>
+</html>
