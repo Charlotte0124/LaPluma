@@ -13,7 +13,7 @@
 
 <a href="https://github.com/Charlotte0124/LaPluma/releases/latest"><img src="https://img.shields.io/badge/⬇_下载_v1.8.0-C8202C?style=for-the-badge&logo=windows&logoColor=white" height="40" alt="下载"></a>
 &nbsp;
-<a href="一键启动.ps1"><img src="https://img.shields.io/badge/▶_一键启动-171714?style=for-the-badge&logo=powershell&logoColor=white" height="40" alt="一键启动"></a>
+<a href="一键启动.ps1"><img src="https://img.shields.io/badge/▶_一键启动-2F7D4F?style=for-the-badge&logo=powershell&logoColor=white" height="40" alt="一键启动"></a>
 &nbsp;
 <a href="docs/00-总索引.md"><img src="https://img.shields.io/badge/📖_文档-6C6A63?style=for-the-badge&logo=readthedocs&logoColor=white" height="40" alt="文档"></a>
 
