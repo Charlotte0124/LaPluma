@@ -9,7 +9,11 @@ r"""check-ui-preview.py — 界面改动必须先有预览图（2026-11-16 立�
     现在把规矩写成文件（AGENTS.md）+ 判据（本脚本），漏了就红。
 
 判据（红 = 规矩被破）：
-    A 红：ui\ 最后一次提交比 docs\预览 最后一次提交晚 —— 改了界面没带新预览图。
+    A 红：最后一次改动 ui\ 的提交里，既没带 docs\预览（设计稿/登记表）也没带 docs\资产（真实截图）
+          —— 改界面而没留图。
+          （2026-11-16 修正：原来比的是「提交时间先后」，会把「先出图、后改码」这一正确
+            流程判红；改成看**同一次提交里带了什么**。代价是：如果图与码分成两个提交，
+            会红 —— 规矩因此写成「预览稿/截图与界面改动放同一个提交」。）
     B 红：docs\预览 里的 png 没在 README.md 登记（孤儿图，别人不知道它解决什么）；
           或预览目录存在却一张图都没有；或缺 README.md。
     C 黄：工作区里 ui\ 有未提交改动，而 docs\预览 没有 —— 正在改界面，图还没出。
@@ -57,6 +61,14 @@ def dirty(repo, path):
     return bool(rc == 0 and out)
 
 
+def commit_files(repo, rev):
+    """某次提交动了哪些路径（相对仓根，正斜杠）。"""
+    rc, out, _ = git(repo, 'show', '--name-only', '--format=', rev)
+    if rc != 0 or not out:
+        return []
+    return [line.strip() for line in out.splitlines() if line.strip()]
+
+
 def fmt(ts):
     return time.strftime('%Y-%m-%d %H:%M', time.localtime(ts)) if ts else '（无提交记录）'
 
@@ -75,12 +87,17 @@ def run(root):
     t_prev = last_ts(root, PREV) if os.path.isdir(prev_dir) else None
     note.append('ui/ 最后提交 %s · docs\\预览 最后提交 %s' % (fmt(t_ui), fmt(t_prev)))
 
-    # —— A：改界面没带预览图
+    # —— A：最后一次改界面的提交里，有没有给图留痕（同提交必须带 docs\预览 或 docs\资产）
     if not os.path.isdir(prev_dir):
         red.append('A 没有 docs\\预览 目录：设计稿无处可放，等于这条规矩不存在')
-    elif t_ui and (t_prev is None or t_ui > t_prev):
-        red.append('A 改了界面没带新预览图：ui/ 最后提交 %s，晚于 docs\\预览 的 %s'
-                   % (fmt(t_ui), fmt(t_prev)))
+    elif t_ui:
+        rev = git(root, 'log', '-1', '--format=%H', '--', UI)[1]
+        files = [f.replace('\\', '/') for f in commit_files(root, rev)]
+        touched = [f for f in files if f.startswith('docs/预览') or f.startswith('docs/资产')]
+        note.append('最后一次界面提交 %s（%s）带图 %d 个' % (rev[:7] or '?', fmt(t_ui), len(touched)))
+        if not touched:
+            red.append('A 界面提交 %s（%s）里没带图：预览稿或真实截图要与界面改动放同一个提交'
+                       % (rev[:7] or '?', fmt(t_ui)))
 
     # —— B：孤儿图 / 空目录 / 缺登记
     if os.path.isdir(prev_dir):
@@ -182,7 +199,15 @@ def selftest():
         _w(os.path.join(repo, 'docs', '预览', 'README.md'), '01-a.png\n02-b.png\n')
         _commit(repo, 'step3b', when=1700000300)
         r, y, _ = run(repo)
-        steps.append(('登记该图后 → 红 B 消失', not r, r))
+        # 只验「B 消失」：A 还红是对的——上一次界面提交（step2）确实没带图
+        steps.append(('登记该图后 → 红 B 消失', not any(x.startswith('B') for x in r), r))
+
+        # 3c) 改界面且同提交带图 → 期望全绿（把 A 清掉，证明「图与码同一提交」能过）
+        _w(os.path.join(repo, 'ui', 'index.html'), '<b>v2b</b>')
+        _w(os.path.join(repo, 'docs', '预览', 'README.md'), '01-a.png\n02-b.png\n（v2b 对应）\n')
+        _commit(repo, 'step3c', when=1700000400)
+        r, y, _ = run(repo)
+        steps.append(('图与码同一提交 → 绿', not r, r))
 
         # 4) 界面有未提交改动 → 期望黄 C（不算红）
         _w(os.path.join(repo, 'ui', 'index.html'), '<b>v3</b>')
