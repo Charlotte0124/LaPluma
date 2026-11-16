@@ -20,30 +20,65 @@ CHANGELOG = os.path.join(ROOT, "CHANGELOG.md")
 README = os.path.join(ROOT, "README.md")
 BEGIN = "<!-- 最近更新:begin（由 tools/sync-readme.py 生成，别手改） -->"
 END = "<!-- 最近更新:end -->"
-LIMIT = 0        # 0 = 全部版本；2026-11-17 用户说「最近更新只显示最近五个版本」不够，改成全列
+LIMIT = 5        # 只列最近 5 个版本；更早的指向 CHANGELOG（用户 2026-11-17 定）
 
 
 def pick_rows(rows):
     return rows if not LIMIT else rows[:LIMIT]
 
 
+def brief(items: list[str]) -> str:
+    """从一版的条目里抽出「用户看得到的改动」：只取粗体功能名，去掉括号注，最多 4 个。
+
+    表是给用户看的，技术细节（类名撞车、根因、接口参数）一概不进来。
+    """
+    words = []
+    for it in items:
+        m = re.match(r"\*\*([^*]+)\*\*", it)
+        if not m:
+            continue
+        w = re.sub(r"（[^）]*）", "", m.group(1)).strip().rstrip("：:· ")
+        if w and w not in words:
+            words.append(w)
+        if len(words) >= 4:
+            break
+    if not words:
+        return (items[0][:40] if items else "").rstrip("…")
+    s = " · ".join(words)
+    return s + (" 等" if len(words) < len(items) else "")
+
+
 def parse(path: str) -> list[tuple[str, str, str]]:
+    """读出每个版本：版号、日期、给用户看的摘要。
+
+    摘要优先取 `<!-- 摘要：… -->`（手写、用户视角）；没写的版本才回退到从粗体功能名里凑。
+    """
     rows = []
     cur = None
     for line in io.open(path, encoding="utf-8"):
-        m = re.match(r"^##\s+(v[\d.]+)\s*·\s*(\d{4}-\d{2}-\d{2})\s*$", line.strip())
+        t = line.strip()
+        m = re.match(r"^##\s+(v[\d.]+)\s*·\s*(\d{4}-\d{2}-\d{2})\s*$", t)
         if m:
-            cur = [m.group(1), m.group(2), []]
+            cur = [m.group(1), m.group(2), [], ""]
             rows.append(cur)
             continue
-        if cur and line.strip().startswith("- "):
-            cur[2].append(line.strip()[2:].strip())
-    return [(v, d, "；".join(items[:2]) + ("…" if len(items) > 2 else "")) for v, d, items in rows]
+        if not cur:
+            continue
+        mb = re.match(r"^<!--\s*摘要[:：]\s*(.+?)\s*-->$", t)
+        if mb and not cur[3]:
+            cur[3] = mb.group(1)
+            continue
+        if t.startswith("- "):
+            cur[2].append(t[2:].strip())
+    return [(v, d, b or brief(items)) for v, d, items, b in rows]
 
 
 def render(rows) -> str:
     head = "| 版本 | 日期 | 这一版做了什么 |\n|:--|:--|:--|"
-    body = "\n".join("| **%s** | %s | %s |" % (v, d[5:], t) for v, d, t in pick_rows(rows))
+    shown = pick_rows(rows)
+    body = "\n".join("| **%s** | %s | %s |" % (v, d[5:], t) for v, d, t in shown)
+    if len(shown) < len(rows):
+        body += "\n| — | — | 更早的 %d 个版本 → [CHANGELOG](CHANGELOG.md) |" % (len(rows) - len(shown))
     return BEGIN + "\n" + head + "\n" + body + "\n" + END
 
 
