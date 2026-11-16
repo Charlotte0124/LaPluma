@@ -71,7 +71,7 @@ python ui\server.py      # http://127.0.0.1:8765/
 
 ```
 engine/            A 引擎（_build_讲义.py / _make.py / _split_long.py / _pagediag.py）
-CS340/_lessons/    B 内容数据（L01–L09，9 讲）
+CS340/_lessons/    B 内容数据（L01–L09，9 讲 / 166 页成品）
 CS340/06_笔记/     生成的讲义源（不入库）
 CS340/01_讲义/     生成的 PDF（不入库）
 tools/print/       C 内容门 / 版式门 / 打印 / KaTeX
