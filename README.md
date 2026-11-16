@@ -6,7 +6,7 @@
 
 [![MIT](https://img.shields.io/badge/license-MIT-171714?style=flat-square)](LICENSE)
 ![Python](https://img.shields.io/badge/python-3.12-171714?style=flat-square)
-![version](https://img.shields.io/badge/version-0.3.0-171714?style=flat-square)
+![version](https://img.shields.io/badge/version-1.0.0-171714?style=flat-square)
 ![gates](https://img.shields.io/badge/三道门-绿才出门-C8202C?style=flat-square)
 
 [快速开始](docs/使用/01-快速开始.md) · [怎么出一讲](docs/使用/02-生成一讲讲义.md) · [三道门](docs/使用/03-三道门.md) · [API 与密钥](docs/使用/04-API与密钥.md)

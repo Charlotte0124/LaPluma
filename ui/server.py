@@ -126,7 +126,7 @@ class Handler(BaseHTTPRequestHandler):
                     data.append(d)
                 return self._json({"ok": True, "courses": data, "lessons": lessons()})
             if u.path == "/api/health":
-                info = {"ok": True, "version": "0.3.0", "root": ROOT}
+                info = {"ok": True, "version": "1.0.0", "root": ROOT}
                 if api_client is not None:
                     try:
                         info["api"] = api_client.health()
