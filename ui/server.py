@@ -233,7 +233,9 @@ def dep_state() -> dict:
 
 def load_cfg():
     cfg = _read_json(CFG_PATH)
-    default_dir = os.path.join(DEFAULT_COURSE, "01_讲义")
+    # 2026-11-17 用户定：「删除 CS340 的字眼，那是课件」——真实课件名不该出现在界面上（截图、默认值）。
+    #   默认保存目录改成中性的 out\（软件目录下），生成物仍然写在 <课程>\01_讲义，这里只是多复制一份。
+    default_dir = "out"
     out = {
         "provider": cfg.get("provider", "DeepSeek"),
         "base_url": cfg.get("base_url", "https://api.deepseek.com"),
@@ -254,11 +256,16 @@ def load_cfg():
     #   旧逻辑直接拿 normpath 的第一段当相对目录首段，`F:\某处` 被当成 `F:` 去 ROOT 下找 → 永远
     #   判不存在 → 退回默认，于是「选了目录 / 填了绝对路径」都不生效。绝对路径只看它自己存不存在。
     _sd = out["save_dir"]
+    # 旧默认值（<当前默认课>/01_讲义）视为未定制，直接换成 out；用户自己填的绝对路径不动
+    if os.path.normcase(os.path.normpath(_sd)) == os.path.normcase(os.path.normpath(os.path.join(DEFAULT_COURSE, "01_讲义"))):
+        out["save_dir"] = default_dir
+        _sd = default_dir
     if os.path.isabs(_sd):
         if not os.path.isdir(_sd):
             out["save_dir"] = default_dir
             out["save_dir_fixed"] = True
-    else:
+    elif os.path.normcase(os.path.normpath(_sd)) != os.path.normcase(os.path.normpath(default_dir)):
+        # out\ 是默认值，允许暂不存在（_copy_out 会建）；其它相对目录不存在就退回默认
         _first = os.path.normpath(_sd).split(os.sep)[0]
         if _first and _first not in (".", "..") and not os.path.isdir(paths.data_or_res(_first)):
             out["save_dir"] = default_dir

@@ -189,11 +189,15 @@ nav a.on{background:var(--ink);color:var(--bg)}
      border-radius:9px;padding:8px 11px;font-family:Consolas,monospace;font-size:11.5px;color:var(--sub)}
 /* 2026-11-17：<code> 自带的 UA 样式是 font-family:monospace（= Courier New），会把 .fld 的 Consolas 盖掉 */
 .fld code{font-family:inherit;font-size:inherit}
-/* 2026-11-17：保存目录「选择文件夹」——向导第 3 步与设置页共用同一套观感 */
-.dirline{display:flex;gap:8px;align-items:stretch}
-.dirline input{flex:1;min-width:0}
-.pickbtn{white-space:nowrap;border:1px solid var(--line);background:var(--card2);border-radius:9px;padding:0 13px;
-         font-size:12.5px;color:var(--sub);display:inline-flex;align-items:center;gap:6px;transition:.16s;cursor:pointer}
+/* 2026-11-17：保存目录「选择文件夹」——向导第 3 步与设置页共用同一套观感。
+   2026-11-17 修：原来用 flex + align-items:stretch，按钮被自己的 52px 高撑歪（输入框只有 40px），
+   现改成 grid 两列 + 两边显式同高，观感与输入框齐平。 */
+.dirline{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;margin:0 0 2px}
+.dlg .dirline input[type=text]{margin:0}   /* 权重要比 .dlg input[type=text] 高：它自带 margin-bottom:12px，会把按钮挤低 6px */
+.dirline input{width:100%;min-width:0}
+.pickbtn{height:40px;padding:0 14px;border:1px solid var(--line);background:var(--card2);border-radius:9px;
+         font-size:12.5px;line-height:1;color:var(--sub);display:inline-flex;align-items:center;justify-content:center;
+         gap:6px;white-space:nowrap;transition:.16s;cursor:pointer}
 .pickbtn:hover{border-color:var(--ink);color:var(--ink)}
 .pickbtn.busy{opacity:.55;pointer-events:none}
 .pickfine{font-size:11.5px;color:var(--faint);margin:8px 0 0;line-height:1.7}
@@ -474,7 +478,7 @@ footer{max-width:1080px;margin:26px auto 0;padding:0 16px;display:flex;align-ite
           <div class="opt" data-mode="repo"><b>推送到仓库</b><small>本仓提交即推送</small></div>
         </div>
         <div class="fld pick" id="dirPick" title="点击选择保存目录（在这台电脑上弹系统对话框）">
-          <code id="outPath">CS340/01_讲义</code><span id="dirHint" style="font-size:11.5px;color:var(--faint)">保存目录 · 点击选择</span></div>
+          <code id="outPath">out</code><span id="dirHint" style="font-size:11.5px;color:var(--faint)">保存目录 · 点击选择</span></div>
         <p class="hint" id="dirFix" style="display:none;color:var(--red);border:0">保存目录在配置里是乱码（出现过 ?），已临时退回默认目录；请到「设置」里重填。</p>
         <h3 style="margin-top:16px">成品形态</h3>
         <p class="hint">单本＝一讲一份 PDF（默认）；合订本＝全部讲合成一本，去掉各讲自带的封面与目录。</p>
@@ -1415,7 +1419,7 @@ async function loadPdfjs(){
   return pdfjs;
 }
 async function openReader(rel, name, code, goPage){
-  RD.rel = rel; RD.name = name || rel.split('/').pop(); RD.code = code || RD.code || 'CS340';
+  RD.rel = rel; RD.name = name || rel.split('/').pop(); RD.code = code || RD.code || B.default || 'DEMO';
   RD.page = goPage || 1; RD.zoom = 1;
   $('#rTitle').textContent = RD.name;
   $('#rSub').textContent = rel;
@@ -1924,10 +1928,10 @@ document.addEventListener('keydown', e => {
   const mc = location.search.match(/chat=([A-Za-z0-9_-]+)/);
   if(mc) setTimeout(()=>{ const c=(B.courses||[]).find(x=>x.code===mc[1]); if(c) openChat(c); }, 500);
   const mp = sp.get('pdf');
-  if(mp) setTimeout(()=>openReader(mp, mp.split('/').pop(), sp.get('code')||'CS340', +sp.get('to')||1), 400);
+  if(mp) setTimeout(()=>openReader(mp, mp.split('/').pop(), sp.get('code')||B.default||'DEMO', +sp.get('to')||1), 400);
   // 截图/调试用：?note=1 打开会话、全选消息并弹出笔记窗
   if(sp.get('note')) setTimeout(async()=>{
-    const c = (B.courses||[]).find(x=>x.code === (sp.get('note')==='1' ? 'CS340' : sp.get('note')));
+    const c = (B.courses||[]).find(x=>x.code === (sp.get('note')==='1' ? (B.default||'DEMO') : sp.get('note')));
     if(!c) return;
     await openChat(c);
     CHAT.sel = new Set(CHAT.messages.map((_,i)=>i)); renderChat(); $('#btnNote').click();
