@@ -73,7 +73,7 @@ HOST, PORT = "127.0.0.1", 8765
 #   每次打开/刷新阅读器都全量重传（本机无感，平板走 WiFi 明显）。
 #   index.html 必须仍走 no-store（改完界面要能立刻看到新版）。
 _STATIC_ETAG = {}
-VERSION = "1.9.0"
+VERSION = "1.9.1"
 APP_NAME = "羽毛笔 La Pluma"
 BOOK_NAME = DEFAULT_COURSE + "_九讲合订本_讲义.pdf"
 
@@ -215,6 +215,22 @@ def _write_json(path, obj):
         json.dump(obj, f, ensure_ascii=False, indent=2)
 
 
+def dep_state() -> dict:
+    """依赖自检，给界面用（用户 2026-11-17：「如果打不开的话 就在向导那检测」）。
+
+    冻结成 exe 时运行环境都在包里，用户什么都不用装；源码版缺 pymupdf 就出不了 PDF
+    （能开界面、能看课，但「开始生成」与阅读会失败）。
+    """
+    st = {"frozen": bool(getattr(sys, "frozen", False)),
+          "python": "%d.%d.%d" % sys.version_info[:3], "pymupdf": ""}
+    try:
+        import pymupdf
+        st["pymupdf"] = getattr(pymupdf, "__version__", "ok")
+    except Exception:  # noqa: BLE001
+        st["pymupdf"] = ""
+    return st
+
+
 def load_cfg():
     cfg = _read_json(CFG_PATH)
     default_dir = os.path.join(DEFAULT_COURSE, "01_讲义")
@@ -234,10 +250,19 @@ def load_cfg():
         out["save_dir_fixed"] = True
     # 2026-11-17：换课程（示例课程 / 别人自己的课件）后，配置里存的旧课程目录会失效——
     #   以前会把 PDF 写到一个不存在的目录。现在目录不存在就退回当前课程的默认目录。
-    _first = os.path.normpath(out["save_dir"]).split(os.sep)[0]
-    if _first and _first not in (".", "..") and not os.path.isdir(paths.data_or_res(_first)):
-        out["save_dir"] = default_dir
-        out["save_dir_fixed"] = True
+    # 2026-11-17 补：绝对路径也要能用（用户「也可以填绝对路径」）。
+    #   旧逻辑直接拿 normpath 的第一段当相对目录首段，`F:\某处` 被当成 `F:` 去 ROOT 下找 → 永远
+    #   判不存在 → 退回默认，于是「选了目录 / 填了绝对路径」都不生效。绝对路径只看它自己存不存在。
+    _sd = out["save_dir"]
+    if os.path.isabs(_sd):
+        if not os.path.isdir(_sd):
+            out["save_dir"] = default_dir
+            out["save_dir_fixed"] = True
+    else:
+        _first = os.path.normpath(_sd).split(os.sep)[0]
+        if _first and _first not in (".", "..") and not os.path.isdir(paths.data_or_res(_first)):
+            out["save_dir"] = default_dir
+            out["save_dir_fixed"] = True
     # 本机没填 key 时，走 D 层的三级回退（环境变量 / PRTS secrets）
     if not out["api_key"] and api_client is not None:
         try:
@@ -815,6 +840,11 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(dict(ok=True, **load_notes(q.get("code", [DEFAULT_COURSE])[0],
                                                              q.get("doc", [""])[0])))
             if u.path == "/favicon.ico":
+                # 2026-11-17：以前回 204（空图标）——用户「软件图标还没有整上去」。
+                # 现在直接给 exe 那张 assets\lapluma.ico，标签页与书签都用它。
+                ico = paths.res("assets", "lapluma.ico")
+                if os.path.isfile(ico):
+                    return self._static(ico)
                 self.send_response(204)
                 self.send_header("Cache-Control", "max-age=86400")
                 self.end_headers()
@@ -829,6 +859,8 @@ class Handler(BaseHTTPRequestHandler):
                     "model": cfg["model"], "models": MODELS, "default": DEFAULT_COURSE,
                     "save_dir": cfg["save_dir"], "save_dir_abs": os.path.abspath(os.path.join(ROOT, cfg["save_dir"])),
                     "save_dir_fixed": cfg.get("save_dir_fixed", False),
+                    "data_root": paths.DATA_ROOT,
+                    "deps": dep_state(),
                     "courses": discover_courses(), "usage": usage_summary(),
                 })
             if u.path == "/api/balance":
@@ -1044,8 +1076,11 @@ class Handler(BaseHTTPRequestHandler):
                     return self._json({"ok": False,
                                        "error": "只能在运行软件的那台电脑上选目录；远程请到「设置」里手填路径"}, 403)
                 cfg0 = load_cfg()
-                initial = str(body.get("initial") or "").strip() \
-                    or os.path.abspath(os.path.join(ROOT, cfg0["save_dir"]))
+                # 2026-11-17 用户定「默认是在羽毛笔在的地方」：对话框从软件数据根打开
+                # （源码 = 仓根，exe = exe 旁边），不再从当前课程的 01_讲义 打开。
+                initial = str(body.get("initial") or "").strip() or paths.DATA_ROOT
+                if not os.path.isdir(initial):
+                    initial = paths.DATA_ROOT
                 try:
                     p = pick_directory(initial)
                 except Exception as e:  # noqa: BLE001

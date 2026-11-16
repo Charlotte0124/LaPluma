@@ -19,6 +19,8 @@ datas = [
     (os.path.join(ROOT, "tools"), "tools"),
     (os.path.join(ROOT, "api"), "api"),
     (os.path.join(ROOT, "DEMO"), "DEMO"),
+    # 2026-11-17：资产目录必须打进去——/favicon.ico 与窗口图标都读 assets\lapluma.ico
+    (os.path.join(ROOT, "assets"), "assets"),
     (os.path.join(ROOT, "courses.json"), "."),
     (os.path.join(ROOT, "paths.py"), "."),
 ]

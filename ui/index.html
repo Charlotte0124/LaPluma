@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>羽毛笔 La Pluma</title>
-<link rel="icon" href="data:,">
+<link rel="icon" href="/favicon.ico">
 <style>
 :root{
   --bg:#f2f1ee; --card:#fff; --card2:#faf9f7; --line:#e4e2dd; --line2:#efeeea;
@@ -189,6 +189,15 @@ nav a.on{background:var(--ink);color:var(--bg)}
      border-radius:9px;padding:8px 11px;font-family:Consolas,monospace;font-size:11.5px;color:var(--sub)}
 /* 2026-11-17：<code> 自带的 UA 样式是 font-family:monospace（= Courier New），会把 .fld 的 Consolas 盖掉 */
 .fld code{font-family:inherit;font-size:inherit}
+/* 2026-11-17：保存目录「选择文件夹」——向导第 3 步与设置页共用同一套观感 */
+.dirline{display:flex;gap:8px;align-items:stretch}
+.dirline input{flex:1;min-width:0}
+.pickbtn{white-space:nowrap;border:1px solid var(--line);background:var(--card2);border-radius:9px;padding:0 13px;
+         font-size:12.5px;color:var(--sub);display:inline-flex;align-items:center;gap:6px;transition:.16s;cursor:pointer}
+.pickbtn:hover{border-color:var(--ink);color:var(--ink)}
+.pickbtn.busy{opacity:.55;pointer-events:none}
+.pickfine{font-size:11.5px;color:var(--faint);margin:8px 0 0;line-height:1.7}
+.pickfine code{font-family:Consolas,"Cascadia Mono",monospace;background:var(--code);padding:1px 5px;border-radius:5px}
 .tools{display:flex;gap:8px;margin:14px 0 0;flex-wrap:wrap}
 .tools select{flex:1;min-width:130px;border:1px solid var(--line);background:var(--card);border-radius:9px;padding:8px 10px;font-size:12.5px;outline:none}
 .queue{margin-top:12px;display:flex;flex-direction:column;gap:6px}
@@ -1073,7 +1082,7 @@ $('#dirPick').onclick = async () => {
   box.classList.add('busy'); hint.textContent = '等你在系统对话框里选…';
   try{
     const j = await (await fetch('/api/pick-dir',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({initial:B.save_dir_abs || ''})})).json();
+      body:JSON.stringify({})})).json();
     if(!j.ok){
       hint.textContent = old;
       if(!j.canceled) toast('没选成：' + (j.error || '未知原因') + '（也可以到「设置」里手填路径）');
@@ -1704,6 +1713,50 @@ async function refreshUsage(){
   }catch(e){ $('#mBal').textContent = '读取失败'; }
 }
 
+/* ---------- 保存目录：选文件夹（2026-11-17 加）----------
+   用户原话：「底下填地址该可以选择文件夹的 默认是在羽毛笔在的地方」。
+   两处共用：向导第 3 步与设置页。对话框初始位置由服务端定（软件数据根），前端不传。 */
+const isAbsPath = v => /^[a-zA-Z]:[\\/]/.test((v||'').trim()) || /^\\\\/.test((v||'').trim());
+function dirAbs(v){
+  v = (v||'').trim();
+  if(!v) return '';
+  if(isAbsPath(v)) return v;
+  const root = B.data_root || '';
+  if(!root) return v;
+  return root + (/[\\/]$/.test(root) ? '' : '\\') + v.replace(/\//g, '\\');
+}
+/* 界面上只给「人能看懂且不泄露本机路径」的写法：相对路径就写相对（用户 2026-11-17：
+   「默认不要用真实地址」）。要看真实位置时点「选择文件夹」，对话框会从软件目录打开。 */
+function dirText(v){
+  v = (v||'').trim();
+  if(!v) return '（未设置）';
+  if(isAbsPath(v)) return v;
+  return v.replace(/\//g, '\\') + '（相对软件目录）';
+}
+async function pickDirInto(inpSel, btnSel, fineSel){
+  const inp = $(inpSel), btn = $(btnSel), fine = fineSel ? $(fineSel) : null;
+  if(!inp || !btn) return;
+  const old = btn.innerHTML;
+  btn.classList.add('busy'); btn.textContent = '等你在对话框里选…';
+  try{
+    const j = await (await fetch('/api/pick-dir',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({})})).json();
+    if(!j.ok){
+      if(!j.canceled) toast('没选成：' + (j.error || '未知原因'));
+      return;
+    }
+    inp.value = j.path;
+    if(fine) fine.innerHTML = '当前指向：<code>' + esc(dirText(j.path)) + '</code>';
+    toast('已选 ' + j.path);
+  }catch(e){ toast('请求失败：' + e); }
+  finally{ btn.classList.remove('busy'); btn.innerHTML = old; }
+}
+function bindDirLine(inpSel, btnSel, fineSel){
+  if($(btnSel)) $(btnSel).onclick = () => pickDirInto(inpSel, btnSel, fineSel);
+  if($(inpSel) && $(fineSel)){
+    $(inpSel).oninput = () => { $(fineSel).innerHTML = '当前指向：<code>' + esc(dirText($(inpSel).value)) + '</code>'; };
+  }
+}
 /* ---------- 向导 ---------- */
 let W = {step:0, model:null, key:'', dir:''};
 function wizard(step){
@@ -1714,6 +1767,14 @@ function wizard(step){
     <span>${step>=2?'<b>3 保存目录</b>':'3 保存目录'}</span>
     <span>${step>=3?'<b>4 完成</b>':'4 完成'}</span></div>`;
   let body = '';
+  // 2026-11-17：依赖自检（用户「如果打不开的话 就在向导那检测」）
+  // exe（frozen）里什么都有，不提示；源码版缺 pymupdf 就出不了 PDF——当场说清，并指向 CMD 教学。
+  let depWarn = '';
+  if(B.deps && !B.deps.frozen && !B.deps.pymupdf){
+    depWarn = `<p class="note-s" style="color:var(--red);border:1px solid var(--red);border-radius:9px;padding:8px 10px">`
+      + `⚠ 没检测到 pymupdf（当前 Python ${esc(B.deps.python||'')}）：能看课，但「开始生成」与阅读 PDF 会失败。`
+      + `装法：<b>docs\\使用\\07-装依赖-用CMD.md</b>（在 cmd 里粘一行 pip install），或用 <b>一键启动.bat</b> 重启让它自动装。</p>`;
+  }
   if(step===0){
     body = `<h4>先选模型版本</h4>
       <p class="note-s">只有两档：选哪个都能出 PDF，区别只在「让 AI 写新内容」时的质量和花费。以后随时可在设置里改。</p>
@@ -1725,8 +1786,10 @@ function wizard(step){
       <input type="password" id="wKey" placeholder="sk-…" autocomplete="off">`;
   }else if(step===2){
     body = `<h4>选保存目录</h4>
-      <p class="note-s">生成成功后成品复制到这里。相对路径以本仓为根，也可以填绝对路径。默认 ${esc(B.save_dir_abs||'')}</p>
-      <input type="text" id="wDir" value="${esc(B.save_dir||'')}">`;
+      <p class="note-s">生成的讲义会复制到这里。填相对路径就以软件目录为根，也可以直接填绝对路径。</p>
+      <div class="dirline"><input type="text" id="wDir" value="${esc(B.save_dir||'')}">
+        <button class="pickbtn" id="wPick">📁 选择文件夹…</button></div>
+      <p class="pickfine" id="wFine">当前指向：<code>${esc(dirText(B.save_dir))}</code></p>`;
   }else{
     body = `<h4>可以开始了</h4>
       <div class="kv"><span>模型</span><b>${esc(W.model?mname(W.model):mname(MODEL))}</b></div>
@@ -1734,7 +1797,7 @@ function wizard(step){
       <div class="kv"><span>保存目录</span><b>${esc(W.dir||B.save_dir||'')}</b></div>
       <p class="note-s">点「完成」会写入本机配置。想改随时点右上「设置」。</p>`;
   }
-  $('#dlg').innerHTML = `<div class="eb">首次配置</div>${steps}${body}
+  $('#dlg').innerHTML = `<div class="eb">首次配置</div>${steps}${depWarn}${body}
     <div class="acts">${step>0?'<button class="btn ghost" id="wBack">上一步</button>':''}
       ${step===1?'<button class="btn ghost" id="wSkip">跳过</button>':''}
       <button class="btn" id="wNext">${step===3?'完成':'下一步'}</button></div>`;
@@ -1745,6 +1808,7 @@ function wizard(step){
   });
   if($('#wBack')) $('#wBack').onclick = () => wizard(step-1);
   if($('#wSkip')) $('#wSkip').onclick = () => { W.key=''; wizard(2); };
+  bindDirLine('#wDir', '#wPick', '#wFine');
   $('#wNext').onclick = async () => {
     if(step===0){ W.model = W.model||MODEL; wizard(1); }
     else if(step===1){ W.key = ($('#wKey').value||'').trim(); wizard(2); }
@@ -1769,7 +1833,9 @@ $('#btnSet').onclick = () => {
     <div class="lbl">API 钥匙（留空表示不改）</div>
     <input type="password" id="sKey" placeholder="sk-…" autocomplete="off">
     <div class="lbl">保存目录</div>
-    <input type="text" id="sDir" value="${esc(B.save_dir||'')}">
+    <div class="dirline"><input type="text" id="sDir" value="${esc(B.save_dir||'')}">
+      <button class="pickbtn" id="sPick">📁 选择文件夹…</button></div>
+    <p class="pickfine" id="sFine">当前指向：<code>${esc(dirText(B.save_dir))}</code></p>
     <div class="kv"><span>账户余额</span><b id="sBal">读取中…</b></div>
     <div class="kv"><span>累计消耗（估）</span><b id="sCost">—</b></div>
     <div class="acts"><button class="btn ghost" id="sTut">重看教学</button><button class="btn" id="sSave">保存</button></div>`;
@@ -1781,6 +1847,7 @@ $('#btnSet').onclick = () => {
     $('#sCost').textContent = '¥'+(u.cost_est||0).toFixed(3)+'（估）· '+(u.calls||0)+' 次';
   })();
   $('#sTut').onclick = () => { closeVeil(); showTut(); };
+  bindDirLine('#sDir', '#sPick', '#sFine');
   $('#sSave').onclick = async () => {
     const payload = { model:$('#sModel').value, save_dir:$('#sDir').value.trim(), wizard_done:true };
     const k = $('#sKey').value.trim(); if(k) payload.api_key = k;
@@ -1846,7 +1913,9 @@ document.addEventListener('keydown', e => {
   if(sp.get('theme')) applyTheme(sp.get('theme'));
   if(sp.get('page')==='generate') showPage('generate');
   if(sp.get('page')==='host'){ showPage('host'); renderHost(); }
-  if(/wizard=1/.test(location.search)) setTimeout(()=>wizard(0), 400);
+  // 2026-11-17：?wizard=1 打开向导；?wizard=3 直接到第 3 步（截图与复现用，平时不带）
+  const wzN = sp.get('wizard');
+  if(wzN !== null) setTimeout(()=>wizard(Math.max(0, Math.min(3, (parseInt(wzN, 10) || 1) - 1))), 400);
   // 2026-11-17：截图 / 回归要能拨一拨状态（比如公开仓截图不能出现真实课程，
   //   需要临时滤掉非示例课）。模块作用域的东西外部拿不到，带 ?dbg 时挂一个小口子。
   if(DBG) window.__pluma = { B, render, showPage, openDrawer, renderHost, fillSelects, state:()=>({B, MODE, FORM}) };
