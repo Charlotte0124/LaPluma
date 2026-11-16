@@ -4,13 +4,13 @@
 
 <br>
 
-[![下载 v1.4.0](https://img.shields.io/badge/⬇_下载-v1.4.0-171714?style=for-the-badge)](https://github.com/Charlotte0124/LaPluma/releases/latest)
+[![下载 v1.5.0](https://img.shields.io/badge/⬇_下载-v1.5.0-171714?style=for-the-badge)](https://github.com/Charlotte0124/LaPluma/releases/latest)
 [![一键启动](https://img.shields.io/badge/▶_一键启动-一键启动.ps1-C8202C?style=for-the-badge)](一键启动.ps1)
 [![文档](https://img.shields.io/badge/📖_文档-总索引-6c6a63?style=for-the-badge)](docs/00-总索引.md)
 
 ![MIT](https://img.shields.io/badge/license-MIT-171714?style=flat-square)
 ![Python](https://img.shields.io/badge/python-3.12-171714?style=flat-square)
-![version](https://img.shields.io/badge/version-1.2.0-171714?style=flat-square)
+![version](https://img.shields.io/badge/version-1.5.0-171714?style=flat-square)
 ![gates](https://img.shields.io/badge/三道门-绿才出门-C8202C?style=flat-square)
 
 </div>
@@ -56,7 +56,7 @@ python engine\_make.py L01
 
 ## 界面
 
-界面现在是**两个分页 + 一条课件会话**：
+界面是**四个分页（课程 / 生成 / 阅读 / 上线）+ 一条课件会话**，白天黑夜两套主题：
 
 <div align="center">
 <img src="docs/资产/界面-主页.png" alt="课程页" width="820">
@@ -68,8 +68,12 @@ python engine\_make.py L01
 </div>
 
 - **课程**（分页一）：按目录自动识别；卡片右上 ☆ 收进收藏夹，顶部可切「全部 / 收藏」
-- **成品**：点课程 → 右侧抽屉列出这一门的 PDF → 点文件名直接打开
-- **会话**：抽屉底部「问这一门 →」 → 进这门课自己的会话，答案带节号与课件页码；跨课件要勾左边的开关
+- **成品**：点课程 → 右侧抽屉列出这一门的 PDF → 点文件名**在软件里读**（不再新开标签）
+- **阅读**（分页三）：应用内读 PDF，可翻页、缩放，右侧栏边读边记；深色下**页内文字跟着反相，位图（课件原图）保持原色**
+- **笔记**：记在当前页；「添加到这份 PDF」生成副本，把笔记作为附页追加到末尾（不动原件）
+- **会话**：抽屉底部「问这一门 →」 → 进这门课自己的会话，答案带节号与课件页码；讲次可多选，跨课件要勾开关
+- **导笔记**：勾几条消息 → 生成笔记 → 选一份讲义追加到末尾（默认本地整理，不花 token；想让它整理可勾选）
+- **上线**（分页四）：`\一键启动.ps1 -Lan` → 局域网地址 + **8 位访问码**；平板同一 WiFi 输码即用，数据都在本机
 - **生成**（分页二）：选课程与讲次 → 弹免责声明 → 开始；任务进队列，**成功后自动消失**，失败留红
 - **设置**：模型版本（只有 4.1 两档）、API 钥匙、保存目录、账户余额、累计 token 与估算花费
 - **改界面前先看图**：还没实现的稿在 [`docs/预览`](docs/预览/README.md)；改了 `ui\` 要跑 `python tools\check\check-ui-preview.py`，红＝改了界面没带预览图

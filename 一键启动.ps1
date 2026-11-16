@@ -1,6 +1,8 @@
 ﻿# 羽毛笔 La Pluma · 一键启动
 # 用法：右键 → 使用 PowerShell 运行；或在 PowerShell 里执行 .\一键启动.ps1
+#      .\一键启动.ps1 -Lan     # 上线：局域网 + 8 位访问码（平板同一 WiFi 用）
 # 做什么：查 Python → 装 pymupdf（缺才装）→ 起本地界面 → 打开浏览器
+param([switch]$Lan)
 $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = [Text.Encoding]::UTF8
 $root = Split-Path -Parent $MyInvocation.MyCommand.Definition
@@ -28,5 +30,12 @@ if ($LASTEXITCODE -ne 0) {
     }
 }
 
-Write-Host '启动界面：http://127.0.0.1:8765/  （Ctrl+C 停止）' -ForegroundColor Green
-& python "ui\server.py"
+if ($Lan) {
+    Write-Host '上线模式：局域网可访问，平板要输 8 位访问码（下面会打印）。' -ForegroundColor DarkGray
+    Write-Host '如打不开，第一次请在防火墙弹窗里选「专用网络」允许。' -ForegroundColor DarkGray
+    & python "ui\server.py" --lan
+} else {
+    Write-Host '启动界面：http://127.0.0.1:8765/  （Ctrl+C 停止）' -ForegroundColor Green
+    Write-Host '要让平板打开：.\一键启动.ps1 -Lan' -ForegroundColor DarkGray
+    & python "ui\server.py"
+}

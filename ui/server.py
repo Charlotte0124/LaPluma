@@ -33,8 +33,17 @@ CFG_PATH = os.path.join(USER_DIR, "api.json")
 FAV_PATH = os.path.join(USER_DIR, "favorites.json")
 USAGE_PATH = os.path.join(LOG_DIR, "usage.jsonl")
 HOST, PORT = "127.0.0.1", 8765
-VERSION = "1.4.0"
+VERSION = "1.5.0"
 BOOK_NAME = "CS340_九讲合订本_讲义.pdf"
+
+# ---------- 主机上线（局域网 + 8 位访问码）----------
+# 2026-11-16 用户定 A 方案：只在跑服务的这台电脑上线；同一 WiFi 的平板/手机用访问码打开。
+# 访问码在启动时生成一次，存 %USERPROFILE%\.pluma\host.json；重启就换新码。
+LAN = False            # main() 按 --lan 置 true：只有显式要上线才对外监听
+ACCESS_CODE = ""       # 8 位数字；LAN=False 时为空
+HOST_PATH = os.path.join(os.path.expanduser("~"), ".pluma", "host.json")
+NOTES_DIR = os.path.join(os.path.expanduser("~"), ".pluma", "notes")
+PDFJS_DIR = os.path.join(ROOT, "tools", "print", "pdfjs")
 
 sys.path.insert(0, API_DIR)
 try:
@@ -242,6 +251,156 @@ def safe_join(*parts):
     return p
 
 
+# ---------- 笔记（本机落盘，一个课件一个文件）----------
+def load_notes(code: str) -> dict:
+    d = _read_json(os.path.join(NOTES_DIR, _safe_code(code) + ".json"), {})
+    notes = d.get("notes") if isinstance(d, dict) else None
+    return {"code": code, "notes": notes if isinstance(notes, list) else []}
+
+
+def save_notes(code: str, notes: list) -> int:
+    os.makedirs(NOTES_DIR, exist_ok=True)
+    keep = [n for n in notes if isinstance(n, dict) and str(n.get("text") or "").strip()][-500:]
+    _write_json(os.path.join(NOTES_DIR, _safe_code(code) + ".json"),
+                {"code": code, "updated": time.strftime("%Y-%m-%d %H:%M"), "notes": keep})
+    return len(keep)
+
+
+# ---------- 主机上线 ----------
+def lan_ip() -> str:
+    """拿本机在局域网里的地址（不发包：连一个不可达地址只为读路由表）。"""
+    import socket
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(("192.0.2.1", 1))
+        return s.getsockname()[0]
+    except Exception:  # noqa: BLE001
+        try:
+            return socket.gethostbyname(socket.gethostname())
+        except Exception:  # noqa: BLE001
+            return "127.0.0.1"
+    finally:
+        s.close()
+
+
+def new_access_code() -> str:
+    """8 位数字访问码（避开首 0 以外的麻烦，直接用 8 位随机）。"""
+    import secrets
+    return "".join(secrets.choice("0123456789") for _ in range(8))
+
+
+def host_state() -> dict:
+    return {"lan": LAN, "ip": lan_ip() if LAN else "127.0.0.1", "port": PORT,
+            "code": ACCESS_CODE, "url_local": "http://127.0.0.1:%d/" % PORT,
+            "url_lan": ("http://%s:%d/" % (lan_ip(), PORT)) if LAN else "",
+            "pdfjs": os.path.isdir(PDFJS_DIR)}
+
+
+FONT_CANDIDATES = [
+    r"C:\Windows\Fonts\msyh.ttc",
+    r"C:\Windows\Fonts\msyh.ttf",
+    r"C:\Windows\Fonts\simhei.ttf",
+    r"C:\Windows\Fonts\simsun.ttc",
+]
+
+
+def _cjk_font() -> str:
+    for f in FONT_CANDIDATES:
+        if os.path.isfile(f):
+            return f
+    return ""
+
+
+def build_note_pdf(target_rel: str, title: str, blocks: list) -> dict:
+    """把笔记页追加到指定 PDF 末尾，另存为 <原名>_附笔记.pdf（不动原件）。
+
+    blocks: [{"h": "问题", "body": "..."}] —— 按顺序排，长段自动折行、放不下就开新页。
+    """
+    import pymupdf
+    src = safe_join(*target_rel.split("/"))
+    if not os.path.isfile(src):
+        raise FileNotFoundError(src)
+    out = os.path.join(os.path.dirname(src),
+                       os.path.splitext(os.path.basename(src))[0] + "_附笔记.pdf")
+    doc = pymupdf.open(src)
+    before = doc.page_count
+    w, h = doc[0].rect.width, doc[0].rect.height
+    font = _cjk_font()
+    margin, lh, fs = 56.0, 17.0, 10.5
+    page = doc.new_page(width=w, height=h)
+    y = margin
+    stamp = time.strftime("%Y-%m-%d %H:%M")
+    fontobj = None
+    if font:
+        try:
+            fontobj = pymupdf.Font(fontfile=font)
+        except Exception:  # noqa: BLE001
+            fontobj = None
+
+    def measure(s, size):
+        """真实字体量宽（之前用 helv × 1.9 估算，中文长行会溢出右边距）。"""
+        if fontobj is not None:
+            return fontobj.text_length(s, size)
+        return pymupdf.get_text_length(s, fontname="helv", fontsize=size)
+
+    def newpage():
+        nonlocal page, y
+        page = doc.new_page(width=w, height=h)
+        y = margin
+
+    def put(text, size=fs, gap=6.0, color=(0, 0, 0)):
+        """写一段，按真实字宽折行；本页放不下就翻页。"""
+        nonlocal y
+        if not font:
+            raise RuntimeError("没找到中文字体（msyh.ttc），不能写笔记页")
+        width = w - margin * 2
+        for raw in str(text).split("\n"):
+            line = raw
+            while line:
+                if measure(line, size) <= width:
+                    chunk, line = line, ""
+                else:
+                    lo, hi = 1, len(line)
+                    while lo < hi:                      # 二分找最长能放下的一段
+                        mid = (lo + hi + 1) // 2
+                        if measure(line[:mid], size) <= width:
+                            lo = mid
+                        else:
+                            hi = mid - 1
+                    chunk, line = line[:lo], line[lo:]
+                if y > h - margin - lh:
+                    newpage()
+                page.insert_text((margin, y), chunk, fontsize=size, fontfile=font,
+                                 fontname="cjk", color=color)
+                y += lh * (size / fs)
+        y += gap
+
+    put(title, size=16, gap=4, color=(0.09, 0.09, 0.08))
+    put("追加于 %s ｜ 原讲义 %d 页 ｜ 本页起为附页" % (stamp, before),
+        size=8.5, gap=10, color=(0.42, 0.41, 0.38))
+    if font:
+        page.draw_line(pymupdf.Point(margin, y - 4), pymupdf.Point(w - margin, y - 4),
+                       color=(0.85, 0.84, 0.81), width=0.6)
+    for b in blocks:
+        if not str(b.get("body") or "").strip():
+            continue
+        if b.get("h"):
+            put(str(b["h"]), size=10.5, gap=3, color=(0.09, 0.09, 0.08))
+        body = str(b["body"])
+        if body.startswith("出处："):
+            put(body, size=8.5, gap=9, color=(0.48, 0.47, 0.44))
+        else:
+            put(body, size=9.5, gap=9, color=(0.25, 0.24, 0.22))
+    # 页脚：与正本一致的口径
+    foot = "本内容由 AI 生成，请自行核实重要信息"
+    page.insert_text((margin, h - 26), foot, fontsize=7.5, fontfile=font, fontname="cjk",
+                     color=(0.62, 0.61, 0.58))
+    doc.save(out, deflate=True, garbage=3)
+    after = doc.page_count
+    doc.close()
+    return {"out": out, "name": os.path.basename(out), "pages_before": before, "pages_after": after}
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "LaPluma/1.2"
 
@@ -262,22 +421,75 @@ class Handler(BaseHTTPRequestHandler):
         if not os.path.isfile(path):
             return self._json({"ok": False, "error": "文件不存在"}, 404)
         ctype = mimetypes.guess_type(path)[0] or "application/octet-stream"
+        fn = os.path.basename(path)
+        # 2026-11-16 真撞到：中文文件名直接拼进 Content-Disposition，http.server 按 latin-1 编码报错，
+        # 结果同一个 socket 上先写 200 再写 500（响应头里夹了第二条状态行）——
+        # pdf.js 报 Failed to fetch，看着像「文件不存在」。所以 ASCII 回退 + RFC 5987 双写。
+        ascii_fn = fn.encode("ascii", "ignore").decode() or "file"
+        disp = '%s; filename="%s"; filename*=UTF-8\'\'%s' % (
+            "inline" if inline else "attachment", ascii_fn.replace('"', ""),
+            urllib.parse.quote(fn))
         self.send_response(200)
         self.send_header("Cache-Control", "no-store")  # 理由同上：本地工具不需要缓存
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(os.path.getsize(path)))
-        self.send_header("Content-Disposition",
-                         ('inline' if inline else 'attachment') + '; filename="%s"' %
-                         os.path.basename(path).replace('"', ""))
+        self.send_header("Content-Disposition", disp)
+        self.send_header("Accept-Ranges", "none")
         self.end_headers()
         with open(path, "rb") as f:
             shutil.copyfileobj(f, self.wfile)
+
+    # ---- 访问码（只在 --lan 时生效）----
+    def _authed(self):
+        if not LAN:
+            return True
+        if self.client_address[0] in ("127.0.0.1", "::1"):
+            return True
+        if not ACCESS_CODE:
+            return True
+        raw = self.headers.get("Cookie") or ""
+        for part in raw.split(";"):
+            k, _, v = part.strip().partition("=")
+            if k == "pluma_access" and v == ACCESS_CODE:
+                return True
+        return False
+
+    def _set_access_cookie(self):
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Set-Cookie", "pluma_access=%s; Path=/; Max-Age=43200; SameSite=Lax" % ACCESS_CODE)
+        self.send_header("Cache-Control", "no-store")
+        body = json.dumps({"ok": True}, ensure_ascii=False).encode("utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
 
     # ---- GET ----
     def do_GET(self):
         u = urllib.parse.urlparse(self.path)
         q = urllib.parse.parse_qs(u.query)
         try:
+            if not self._authed():
+                if u.path.startswith("/api/"):
+                    return self._json({"ok": False, "need_access": True,
+                                       "error": "需要访问码：在平板输一次就行"}, 401)
+                return self._file(os.path.join(UI_DIR, "access.html"))
+            if u.path in ("/access", "/access.html"):
+                return self._file(os.path.join(UI_DIR, "access.html"))
+            if u.path == "/pdfjs" or u.path.startswith("/pdfjs/"):
+                fn = os.path.basename(u.path)
+                if not fn:
+                    return self._json({"ok": False, "error": "缺文件名"}, 400)
+                return self._file(os.path.join(PDFJS_DIR, fn))
+            if u.path == "/api/host":
+                return self._json(dict(ok=True, **host_state()))
+            if u.path == "/api/notes":
+                return self._json(dict(ok=True, **load_notes(q.get("code", ["CS340"])[0])))
+            if u.path == "/favicon.ico":
+                self.send_response(204)
+                self.send_header("Cache-Control", "max-age=86400")
+                self.end_headers()
+                return None
             if u.path in ("/", "/index.html"):
                 return self._file(os.path.join(UI_DIR, "index.html"))
             if u.path == "/api/bootstrap":
@@ -324,6 +536,95 @@ class Handler(BaseHTTPRequestHandler):
         except Exception:  # noqa: BLE001
             body = {}
         try:
+            if u.path == "/api/access":
+                # 平板输码：对一次就给 12 小时的 cookie；码本身只在本机打印
+                if not LAN:
+                    return self._json({"ok": False, "error": "这台电脑没开上线模式（要用 --lan 启动）"}, 400)
+                if str(body.get("code") or "").strip() == ACCESS_CODE and ACCESS_CODE:
+                    return self._set_access_cookie()
+                return self._json({"ok": False, "error": "访问码不对"}, 403)
+            if not self._authed():
+                return self._json({"ok": False, "need_access": True, "error": "需要访问码"}, 401)
+            if u.path == "/api/notes":
+                code = str(body.get("code") or "CS340")
+                cur = load_notes(code)["notes"]
+                act = str(body.get("action") or "add")
+                if act == "add":
+                    note = body.get("note") or {}
+                    text = str(note.get("text") or "").strip()
+                    if not text:
+                        return self._json({"ok": False, "error": "空笔记"}, 400)
+                    cur.append({"p": int(note.get("p") or 1), "text": text[:2000],
+                                "at": time.strftime("%Y-%m-%d %H:%M"),
+                                "hhmm": time.strftime("%H:%M")})
+                elif act == "del":
+                    i = int(body.get("index", -1))
+                    if not (0 <= i < len(cur)):
+                        return self._json({"ok": False, "error": "没有这一条"}, 400)
+                    cur.pop(i)
+                elif act == "clear":
+                    cur = []
+                else:
+                    return self._json({"ok": False, "error": "未知动作：%s" % act}, 400)
+                n = save_notes(code, cur)
+                return self._json({"ok": True, "notes": cur, "count": n})
+            if u.path == "/api/note/export":
+                # 07：选中对话 / 侧栏笔记 → 整理成笔记页 → 追加到指定 PDF 末尾（另存副本）
+                code = str(body.get("code") or "CS340")
+                target = str(body.get("target") or "").strip()
+                if not target:
+                    return self._json({"ok": False, "error": "要选一份 PDF 作为追加目标"}, 400)
+                items = [x for x in (body.get("items") or []) if isinstance(x, dict)]
+                notes = [x for x in (body.get("notes") or []) if isinstance(x, dict)]
+                if not items and not notes:
+                    return self._json({"ok": False, "error": "没选对话，也没有笔记"}, 400)
+                title = str(body.get("title") or "附页：我的笔记").strip()[:80]
+                blocks = []
+
+                def _clean(t):
+                    # PDF 页上是纯文本：模型回的 **粗体** 与反引号要去掉
+                    return str(t or "").replace("```", "").replace("**", "").replace("`", "").strip()
+                if notes:
+                    for n in notes:
+                        blocks.append({"h": "p.%s · %s" % (n.get("p"), n.get("hhmm") or n.get("at") or ""),
+                                       "body": _clean(n.get("text"))})
+                if items:
+                    q = ""
+                    k = 0
+                    for it in items:
+                        txt = _clean(it.get("text"))
+                        if not txt:
+                            continue
+                        if str(it.get("role")) == "user":
+                            q = txt[:200]
+                            continue
+                        k += 1
+                        head = "问答 %d" % k + ("：" + q[:36] + ("…" if len(q) > 36 else "") if q else "")
+                        blocks.append({"h": head, "body": txt})
+                        meta = str(it.get("meta") or "")
+                        if meta:
+                            blocks.append({"body": "出处：" + meta})
+                        q = ""
+                if body.get("use_model"):
+                    cfg = load_cfg()
+                    if api_client is not None and cfg["api_key"]:
+                        try:
+                            raw = "\n\n".join((b.get("h") + "\n" if b.get("h") else "") + str(b.get("body"))
+                                               for b in blocks)
+                            msgs = [{"role": "system", "content": (
+                                "把下面的问答与笔记整理成一份学习笔记：保留结论、关键步骤与出处，"
+                                "不分客套话，用短段与分条，不超过 900 字。")},
+                                    {"role": "user", "content": raw[:8000]}]
+                            out = api_client.chat(msgs, model=cfg["model"])
+                            log_usage(out.get("model", cfg["model"]), out.get("usage", {}))
+                            blocks = [{"h": "整理稿（%s）" % cfg["model"], "body": out["text"]}] + blocks
+                        except Exception as e:  # noqa: BLE001
+                            blocks.insert(0, {"body": "（模型整理失败，下面保留原摘录：%s）" % e})
+                res = build_note_pdf(target, title, blocks)
+                rel = os.path.relpath(res["out"], ROOT).replace(os.sep, "/")
+                return self._json({"ok": True, "file": res["name"], "rel": rel,
+                                   "pages_before": res["pages_before"],
+                                   "pages_after": res["pages_after"], "out": res["out"]})
             if u.path == "/api/config":
                 cfg = load_cfg()
                 for k in ("model", "save_dir", "base_url", "provider"):
@@ -407,6 +708,8 @@ class Handler(BaseHTTPRequestHandler):
                 code = str(body.get("course") or "CS340").strip()
                 no = str(body.get("lesson") or "").strip()
                 allow_cross = bool(body.get("allow_cross"))
+                # 2026-11-16：讲次改成勾选多选（05），前端传 lessons 列表；空 = 整门课
+                only = [str(x).strip() for x in (body.get("lessons") or []) if str(x).strip()]
                 question = str(body.get("question") or "").strip()
                 history = body.get("history") or []
                 if not (2 <= len(question) <= 500):
@@ -415,6 +718,9 @@ class Handler(BaseHTTPRequestHandler):
                 if mod is None:
                     return self._json({"ok": False, "error": "缺少 engine/_ask.py"}, 500)
                 targets = [(code, no)] if no else [(code, x) for x in find_lesson(code)]
+                if only and not no:
+                    avail = set(find_lesson(code))
+                    targets = [(code, x) for x in only if x in avail] or targets
                 if allow_cross:
                     for c in discover_courses():
                         if c["code"] != code:
@@ -488,12 +794,50 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main() -> int:
+    global HOST, PORT, LAN, ACCESS_CODE
+    argv = sys.argv[1:]
+    for i, a in enumerate(argv):
+        if a == "--lan" or a == "-lan":
+            LAN = True
+        if a == "--port" and i + 1 < len(argv):
+            PORT = int(argv[i + 1])
+    # 2026-11-16 真撞到：Windows 允许两个进程同时绑 8765，先启的那个偷偷接着应答，
+    # 改完代码看着「没生效」/看到旧界面。启动前先探一下，占用就明说并用别的端口。
+    import socket as _sock
+    probe = _sock.socket(_sock.AF_INET, _sock.SOCK_STREAM)
+    busy = False
+    try:
+        probe.settimeout(0.4)
+        busy = probe.connect_ex(("127.0.0.1", PORT)) == 0
+    except Exception:  # noqa: BLE001
+        busy = False
+    finally:
+        probe.close()
+    if busy:
+        print("端口 %d 已经被占用（可能是上次没关掉的旧服务）。" % PORT)
+        print("  先查：Get-NetTCPConnection -LocalPort %d -State Listen" % PORT)
+        print("  或换端口：python ui\\server.py --port %d" % (PORT + 1))
+        return 4
+    if LAN:
+        HOST = "0.0.0.0"
+        ACCESS_CODE = new_access_code()
+        try:
+            _write_json(HOST_PATH, {"code": ACCESS_CODE, "at": time.strftime("%Y-%m-%d %H:%M"),
+                                   "port": PORT, "ip": lan_ip()})
+        except Exception:  # noqa: BLE001
+            pass
     srv = ThreadingHTTPServer((HOST, PORT), Handler)
-    url = "http://%s:%d/" % (HOST, PORT)
-    print("羽毛笔 La Pluma v%s · 界面已启动 %s" % (VERSION, url))
-    print("（Ctrl+C 停止；只监听本机，不对外）")
-    if "--no-browser" not in sys.argv:
-        threading.Timer(0.6, lambda: webbrowser.open(url)).start()
+    local = "http://127.0.0.1:%d/" % PORT
+    print("羽毛笔 La Pluma v%s · 界面已启动" % VERSION)
+    print("  本机    %s" % local)
+    if LAN:
+        print("  局域网  http://%s:%d/   ← 平板 / 手机用这个" % (lan_ip(), PORT))
+        print("  访问码  %s %s   ← 只给对一次（12 小时）" % (ACCESS_CODE[:4], ACCESS_CODE[4:]))
+        print("  （本机自己打开不用输码；关掉这个窗口就断，不是云端）")
+    else:
+        print("  （Ctrl+C 停止；只监听本机，不对外。要让平板打开：加 --lan 重跑）")
+    if "--no-browser" not in argv:
+        threading.Timer(0.6, lambda: webbrowser.open(local)).start()
     try:
         srv.serve_forever()
     except KeyboardInterrupt:
