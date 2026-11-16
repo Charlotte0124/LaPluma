@@ -38,6 +38,15 @@ def main(argv):
         lesson = builder.load(no)
         src = os.path.join(ROOT, 'CS340', '06_笔记', '%s_零基础_讲义_源.html' % no)
         html = builder.build(lesson)
+        if builder.MISSING:
+            print('缺图 %d 张：%s' % (len(builder.MISSING), '、'.join(builder.MISSING[:4])))
+            if builder.ASSETS:
+                print('  图片目录（%s）：%s' % (builder.ASSETS_FROM, builder.ASSETS))
+            else:
+                print('  没找到课件图目录。用这条指定：python tools\\assets.py --set %s "<课件图目录>"'
+                      % lesson['code'])
+            print('[停] 缺图不打——先补图或改讲法（把那张图换成自绘结构图）')
+            return 1
         html2, n = attach_first_per_section(html)
         html2, ns = split_long(html2)
         open(src, 'w', encoding='utf-8').write(html2)

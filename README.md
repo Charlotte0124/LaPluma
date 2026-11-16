@@ -1,10 +1,10 @@
-<div align="center">
+﻿<div align="center">
 
 <img src="docs/资产/产品介绍图.png" alt="羽毛笔 La Pluma · 写一次数据，出一份能核对的讲义" width="100%">
 
 <br>
 
-[![下载 v1.3.0](https://img.shields.io/badge/⬇_下载-v1.3.0-171714?style=for-the-badge)](https://github.com/Charlotte0124/LaPluma/releases/latest)
+[![下载 v1.3.1](https://img.shields.io/badge/⬇_下载-v1.3.1-171714?style=for-the-badge)](https://github.com/Charlotte0124/LaPluma/releases/latest)
 [![一键启动](https://img.shields.io/badge/▶_一键启动-一键启动.ps1-C8202C?style=for-the-badge)](一键启动.ps1)
 [![文档](https://img.shields.io/badge/📖_文档-总索引-6c6a63?style=for-the-badge)](docs/00-总索引.md)
 
@@ -121,11 +121,11 @@ A/B/C 三层离线可跑；只有「让 AI 写新内容」才需要 D。
 <!-- 最近更新:begin（由 tools/sync-readme.py 生成，别手改） -->
 | 版本 | 日期 | 这一版做了什么 |
 |:--|:--|:--|
+| **v1.3.1** | 11-16 | 引擎：`fig` 引用的课件原图改成可配置目录（`~/.pluma/assets.json` → `courses.json` → `PLUMA_ASSETS` → 仓内默认），找到就写绝对 `file://` URI；**找不到就报缺图并停**，不再产出「图是白条、门还报绿」的成品；新增 `tools/assets.py`：`--list` / `--check` / `--set` / `--unset`（本机配置，不入库）… |
 | **v1.3.0** | 11-16 | L06 / L08 / L09 重做为练习型：三讲共 54 页 / 25 段代码 / 33 道例题 / 12 张结构图（地址空间对照、create→join 时序、丢更新、条件变量往返；地址轴、调用栈、空闲链表、malloc 间隙；base/limit、段表、页表翻译、两级页表）；L05 排版返工：拆成 15 节、一节一页；块级不可拆（代码/例题/图/表），断点只落在节标题上… |
 | **v1.2.1** | 11-16 | L05 重做为练习型：17 页 / 7 段代码 / 11 道例题 / 4 张结构图（三类 IPC、竞争条件时间线、down·up 路径、环形缓冲）；修两个渲染 bug：长段拆分把 </p> 插进了代码块（正则把 <pre> 误当 <p>）；表格里的 ** 粗体没生效… |
 | **v1.2.0** | 11-16 | 讲义改口径：以代码、例题运算为主，理论只作铺垫；需要时配结构示意图；引擎新增三种块：代码（code）、例题（eg）、结构图（svg）；术语附英不再误入图与代码… |
 | **v1.1.0** | 11-16 | 新增首次配置向导（选模型 → 填 API 钥匙 → 选保存目录 → 完成），未配置时自动弹出；新增设置面板：模型版本、密钥、保存目录、账户余额、累计 token 与估算花费… |
-| **v1.0.0** | 11-16 | 补齐 L01「操作系统是什么」，九讲齐（9 份 / 166 页），三门全绿；版本定到 v1.0.0；主页横幅、界面截图重出 |
 <!-- 最近更新:end -->
 
 ## 目录

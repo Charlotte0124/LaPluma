@@ -19,6 +19,68 @@ import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
+# ── 课件图片目录（2026-11-16 加）──────────────────────────────────────────────
+# 为什么要有：拆家后「课件原图」留在资料仓（80 MB），软件仓里一张都没有；
+# 原先 `src="assets/…"` 是相对 HTML 的，HTML 又写在软件仓，于是 Chrome 只能画出
+# 14×16 的缺图图标 —— 更坑的是它不报错，成品里就静静躺着一条白条。
+# 现在：先找图，找到就写绝对 file:// URI（HTML 搬到哪都能显示），找不到就记进 MISSING，
+# 由 _make.py 报「缺图」并停下，不再产出「看起来绿、其实没图」的 PDF。
+ASSETS = None          # 解析到的图片目录（None = 没配置）
+ASSETS_FROM = ''       # 这个目录是从哪来的（报错时好说话）
+MISSING = []           # 本讲缺图的文件名
+
+
+def _user_assets_map() -> dict:
+    p = os.path.join(os.path.expanduser('~'), '.pluma', 'assets.json')
+    try:
+        import json
+        with open(p, encoding='utf-8') as f:
+            return json.load(f) or {}
+    except Exception:
+        return {}
+
+
+def resolve_assets(code: str):
+    """按四档顺序找课件图目录；返回 (目录 or None, 来源说明)。"""
+    cands = []
+    m = _user_assets_map()
+    if m.get(code):
+        v = m[code]
+        cands.append((v if os.path.isabs(v) else os.path.join(ROOT, v),
+                      '~\\.pluma\\assets.json'))
+    try:
+        import json
+        with open(os.path.join(ROOT, 'courses.json'), encoding='utf-8') as f:
+            v = (json.load(f).get(code) or {}).get('assets')
+        if v:
+            cands.append((v if os.path.isabs(v) else os.path.join(ROOT, v), 'courses.json'))
+    except Exception:
+        pass
+    if os.environ.get('PLUMA_ASSETS'):
+        cands.append((os.environ['PLUMA_ASSETS'], '环境变量 PLUMA_ASSETS'))
+    cands.append((os.path.join(ROOT, code, '06_笔记', 'assets'), '软件仓默认路径'))
+    for path, src in cands:
+        if os.path.isdir(path):
+            return path, src
+    return None, ''
+
+
+def use_course(code: str) -> None:
+    """切换当前课程的图片目录（build 开头调用，render_block 里的 fig 依赖它）。"""
+    global ASSETS, ASSETS_FROM, MISSING
+    ASSETS, ASSETS_FROM = resolve_assets(code)
+    MISSING = []
+
+
+def fig_src(name: str) -> str:
+    """把图片文件名变成能直接加载的 src；找不到就记进 MISSING。"""
+    if ASSETS:
+        p = os.path.join(ASSETS, name)
+        if os.path.isfile(p):
+            return 'file:///' + p.replace('\\', '/').lstrip('/')
+    MISSING.append(name)
+    return 'assets/' + name
+
 CSS = """
   :root{
     --bg:#0E0E0C; --card:#161614; --text:#F4F1E6; --dim:#A8A498;
@@ -150,8 +212,8 @@ def render_block(b):
                 % (b[1], b[2]))
     if kind == 'fig':
         cap = b[2]
-        return ('<figure>\n  <img src="assets/%s" alt="%s">\n  <figcaption>%s</figcaption>\n</figure>'
-                % (b[1], cap.replace('"', ''), cap))
+        return ('<figure>\n  <img src="%s" alt="%s">\n  <figcaption>%s</figcaption>\n</figure>'
+                % (fig_src(b[1]), cap.replace('"', ''), cap))
     if kind == 'ul':
         return '<ul>\n' + '\n'.join('  <li>%s</li>' % x for x in b[1]) + '\n</ul>'
     if kind == 'ol':
@@ -191,6 +253,7 @@ def render_block(b):
 def build(lesson: dict) -> str:
     L = lesson
     code, no = L['code'], L['no']
+    use_course(code)
     out = []
     out.append('<!DOCTYPE html>\n<html lang="zh-CN" data-theme="dark" data-reader="大学">')
     out.append('<head>\n<meta charset="utf-8">\n<meta name="out" content="%s">' % L['out'])
