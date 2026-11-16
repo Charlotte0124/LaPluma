@@ -73,7 +73,7 @@ HOST, PORT = "127.0.0.1", 8765
 #   每次打开/刷新阅读器都全量重传（本机无感，平板走 WiFi 明显）。
 #   index.html 必须仍走 no-store（改完界面要能立刻看到新版）。
 _STATIC_ETAG = {}
-VERSION = "1.8.1"
+VERSION = "1.8.2"
 BOOK_NAME = DEFAULT_COURSE + "_九讲合订本_讲义.pdf"
 
 # ---------- 主机上线（局域网 + 8 位访问码）----------
@@ -1242,6 +1242,11 @@ def _balance_now(cfg) -> dict:
 def main() -> int:
     global PORT
     argv = sys.argv[1:]
+    # 输出重定向到文件（或 double-click 的控制台）时行缓冲更靠谱：不然启动提示一个字都看不到
+    try:
+        sys.stdout.reconfigure(line_buffering=True)
+    except Exception:  # noqa: BLE001
+        pass
     # 冻结后（exe）先把两根与 engine\ tools\print\ api\ 挂上 sys.path；源码下是幂等的
     paths.bootstrap()
     # 2026-11-17：--lan 不再自己绑 0.0.0.0，改成与「一键上线」走同一条路（start_lan），
@@ -1250,24 +1255,43 @@ def main() -> int:
     for i, a in enumerate(argv):
         if a == "--port" and i + 1 < len(argv):
             PORT = int(argv[i + 1])
-    # 2026-11-16 真撞到：Windows 允许两个进程同时绑 8765，先启的那个偷偷接着应答，
-    # 改完代码看着「没生效」/看到旧界面。启动前先探一下，占用就明说并用别的端口。
+    # 2026-11-17：原来是「端口占用就打印提示然后退出」——双击 exe 时窗口一闪就没了，
+    #   用户看到的就是「打不开」。现在自动顺延 10 个端口。
+    #   注意必须**先探测再绑定**：Windows 允许两个进程同时绑 8765 且不报错（先启的那个偷偷应答），
+    #   光靠「bind 抛 OSError 就换」永远不会触发。
     import socket as _sock
-    probe = _sock.socket(_sock.AF_INET, _sock.SOCK_STREAM)
-    busy = False
-    try:
-        probe.settimeout(0.4)
-        busy = probe.connect_ex(("127.0.0.1", PORT)) == 0
-    except Exception:  # noqa: BLE001
-        busy = False
-    finally:
-        probe.close()
-    if busy:
-        print("端口 %d 已经被占用（可能是上次没关掉的旧服务）。" % PORT)
-        print("  先查：Get-NetTCPConnection -LocalPort %d -State Listen" % PORT)
-        print("  或换端口：python ui\\server.py --port %d" % (PORT + 1))
+
+    def _busy(p: int) -> bool:
+        s = _sock.socket(_sock.AF_INET, _sock.SOCK_STREAM)
+        try:
+            s.settimeout(0.35)
+            return s.connect_ex(("127.0.0.1", p)) == 0
+        except Exception:  # noqa: BLE001
+            return False
+        finally:
+            s.close()
+
+    srv = None
+    want = PORT
+    for cand in range(want, want + 10):
+        if _busy(cand):
+            continue
+        try:
+            srv = ThreadingHTTPServer(("127.0.0.1", cand), Handler)
+        except OSError:
+            continue
+        if cand != want:
+            print("端口 %d 被占用（可能是另一个 LaPluma 或上次没关的服务），已改用 %d。" % (want, cand), flush=True)
+        PORT = cand
+        break
+    if srv is None:
+        print("端口 %d–%d 都被占用，开不了。先查：Get-NetTCPConnection -LocalPort %d -State Listen" % (want, want + 9, want), flush=True)
+        print("\n回车关掉这个窗口。", flush=True)
+        try:
+            input()
+        except Exception:  # noqa: BLE001
+            pass
         return 4
-    srv = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
     local = "http://127.0.0.1:%d/" % PORT
     print("羽毛笔 La Pluma v%s · 界面已启动" % VERSION)
     print("  本机    %s" % local)
@@ -1291,4 +1315,17 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    # 双击 exe 时窗口一闪就没，用户只会看到「打不开」。任何崩溃都把原因留在屏幕上，
+    # 等人敲回车再关——宁可多按一下，也别让错误消失。
+    try:
+        sys.exit(main())
+    except SystemExit:
+        raise
+    except Exception:
+        import traceback
+        traceback.print_exc()
+        try:
+            input("\n启动失败，把上面这段发给我；回车关闭窗口。")
+        except Exception:  # noqa: BLE001
+            pass
+        sys.exit(1)
