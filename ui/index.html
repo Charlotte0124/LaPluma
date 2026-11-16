@@ -3,36 +3,43 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>羽毛笔 La Pluma</title>
 <style>
-  :root{--bg:#f7f6f3;--card:#fff;--line:#e4e2dd;--ink:#171714;--sub:#6c6a63;--faint:#97948c;--ok:#2f7d4f;--warn:#C8202C}
+  :root{--bg:#f7f6f3;--card:#fff;--line:#e4e2dd;--ink:#171714;--sub:#6c6a63;--faint:#97948c;--ok:#2f7d4f;--red:#C8202C}
   *{box-sizing:border-box}
   html,body{margin:0}
   body{background:var(--bg);color:var(--ink);font:14px/1.6 "Microsoft YaHei","Segoe UI",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
   a{color:inherit;text-decoration:none}
-  .wrap{max-width:1080px;margin:0 auto;padding:26px 20px 48px}
+  button{font:inherit}
+  .wrap{max-width:1080px;margin:0 auto;padding:26px 20px 40px}
   header{display:flex;align-items:center;justify-content:space-between;padding-bottom:16px;border-bottom:1px solid var(--line)}
   .logo{display:flex;align-items:center;gap:9px;font-size:16px;font-weight:600;letter-spacing:.05em}
   .logo em{font-style:italic;font-weight:400;color:var(--faint);font-family:Georgia,serif;font-size:14px}
-  .head-r{display:flex;gap:18px;align-items:center;font-size:12.5px;color:var(--sub)}
-  .head-r .dot{width:7px;height:7px;border-radius:50%;background:var(--faint);display:inline-block;margin-right:6px}
-  .head-r .dot.ok{background:var(--ok)}
-  .hero{padding:34px 0 22px}
-  .hero h1{font-size:34px;margin:0;font-weight:600;letter-spacing:.01em}
-  .hero p{margin:10px 0 0;color:var(--sub);font-size:14px}
-  .stats{display:flex;gap:34px;margin-top:22px}
-  .stats b{display:block;font-size:22px;font-weight:600}
+  .head-r{display:flex;gap:16px;align-items:center;font-size:12.5px;color:var(--sub)}
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--faint);display:inline-block;margin-right:6px}
+  .dot.ok{background:var(--ok)} .dot.no{background:var(--red)}
+  .link{cursor:pointer;border-bottom:1px solid transparent}
+  .link:hover{border-color:var(--faint)}
+  .hero{padding:32px 0 20px}
+  .hero h1{font-size:33px;margin:0;font-weight:600;letter-spacing:.01em}
+  .hero p{margin:9px 0 0;color:var(--sub)}
+  .stats{display:flex;gap:34px;margin-top:20px}
+  .stats b{display:block;font-size:21px;font-weight:600}
   .stats span{font-size:11.5px;color:var(--faint);letter-spacing:.06em}
-  section{margin-top:34px}
-  .sec-h{display:flex;align-items:baseline;justify-content:space-between;border-bottom:1px solid var(--line);padding-bottom:9px;margin-bottom:14px}
+  section{margin-top:30px}
+  .sec-h{display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line);padding-bottom:9px;margin-bottom:14px}
   .sec-h h2{font-size:16px;margin:0;font-weight:600}
-  .sec-h span{font-size:12px;color:var(--faint)}
+  .tabs{display:flex;gap:6px}
+  .tab{font-size:12.5px;padding:5px 13px;border:1px solid var(--line);border-radius:999px;cursor:pointer;background:#fff;color:var(--sub)}
+  .tab.on{background:var(--ink);color:#fff;border-color:var(--ink)}
   .courses{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
-  .course{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;cursor:pointer;transition:.16s}
-  .course:hover{border-color:var(--ink);transform:translateY(-1px)}
+  .course{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;cursor:pointer;position:relative;transition:.16s}
+  .course:hover{border-color:var(--ink)}
   .course .code{font-family:Consolas,monospace;font-size:11.5px;color:var(--faint);letter-spacing:.08em}
-  .course h3{margin:7px 0 6px;font-size:16px;font-weight:600}
-  .course p{margin:0;font-size:12.5px;color:var(--sub);min-height:38px}
+  .course h3{margin:7px 0 6px;font-size:16px}
+  .course p{margin:0;font-size:12.5px;color:var(--sub);min-height:36px}
   .course .foot{display:flex;gap:12px;font-size:11.5px;color:var(--faint);border-top:1px solid var(--line);padding-top:10px;margin-top:12px}
-  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .star{position:absolute;right:14px;top:12px;font-size:15px;color:#d6d3cc;cursor:pointer;line-height:1}
+  .star.on{color:#C8A24A}
+  .grid2{display:grid;grid-template-columns:1.35fr 1fr;gap:14px}
   .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px}
   .card h3{margin:0 0 4px;font-size:14.5px}
   .card .hint{margin:0 0 14px;font-size:12px;color:var(--sub)}
@@ -41,24 +48,29 @@
   .opt.on{border-color:var(--ink);box-shadow:0 0 0 1px var(--ink) inset}
   .opt b{display:block;font-size:13px;margin-bottom:3px}
   .opt small{color:var(--sub);font-size:11.5px}
-  .fld{display:flex;align-items:center;justify-content:space-between;gap:10px;border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:12.5px;margin-bottom:9px}
-  .fld code{font-family:Consolas,monospace;font-size:11.5px;color:var(--sub);flex:0 0 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:52%}
+  .fld{display:flex;align-items:center;justify-content:space-between;gap:10px;border:1px solid var(--line);border-radius:10px;padding:9px 12px;font-size:12.5px;margin-bottom:9px}
+  .fld code{font-family:Consolas,monospace;font-size:11.5px;color:var(--sub);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:60%}
   select,input{font:inherit;font-size:12.5px;border:1px solid var(--line);border-radius:9px;padding:8px 10px;background:#fff;color:var(--ink)}
   input{width:100%}
   .btn{border:1px solid var(--ink);border-radius:9px;padding:9px 18px;font-size:13px;background:#fff;cursor:pointer}
   .btn.primary{background:var(--ink);color:#fff}
   .btn:disabled{opacity:.45;cursor:not-allowed}
-  .tools{display:flex;gap:9px;align-items:center;margin-top:12px}
-  .log{margin-top:12px;background:#12120f;color:#d9d4c6;border-radius:10px;padding:12px;font-family:Consolas,monospace;font-size:11.5px;line-height:1.7;max-height:230px;overflow:auto;white-space:pre-wrap;display:none}
-  footer{margin-top:36px;padding-top:16px;border-top:1px solid var(--line);display:flex;justify-content:space-between;font-size:12px;color:var(--faint);gap:14px}
+  .tools{display:flex;gap:9px;align-items:center;margin-top:10px;flex-wrap:wrap}
+  .queue{margin-top:12px}
+  .qi{display:flex;align-items:center;justify-content:space-between;gap:10px;border:1px solid var(--line);border-radius:10px;padding:9px 11px;font-size:12.5px;margin-bottom:7px;background:#fff}
+  .qi .st{font-size:11.5px;color:var(--sub)}
+  .qi.run .st{color:var(--ink)}
+  .qi.fail{border-color:#e9c7c4;background:#fdf5f4}
+  .qi.fail .st{color:var(--red)}
+  .log{margin-top:10px;background:#12120f;color:#d9d4c6;border-radius:10px;padding:12px;font-family:Consolas,monospace;font-size:11.5px;line-height:1.7;max-height:220px;overflow:auto;white-space:pre-wrap;display:none}
+  footer{margin-top:34px;padding-top:16px;border-top:1px solid var(--line);display:flex;justify-content:space-between;font-size:12px;color:var(--faint);gap:14px;flex-wrap:wrap}
   .aibadge{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);background:#fff;border-radius:999px;padding:6px 13px;font-size:11.5px;color:var(--sub)}
   .aibadge i{width:13px;height:13px;border:1px solid var(--faint);border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:8px;font-style:normal}
-  /* 抽屉 */
   .drawer{position:fixed;inset:0 0 0 auto;width:520px;max-width:92vw;background:#fff;border-left:1px solid var(--line);
     box-shadow:-20px 0 50px rgba(23,23,20,.10);transform:translateX(102%);transition:transform .22s cubic-bezier(.22,.61,.36,1);display:flex;flex-direction:column;z-index:30}
   .drawer.on{transform:none}
   .dr-h{padding:20px 22px 12px;border-bottom:1px solid var(--line);position:relative}
-  .dr-h .c{font-family:Consolas,monospace;font-size:11px;color:var(--faint);letter-spacing:.1em}
+  .dr-h .c{font-family:Consolas,monospace;font-size:11px;color:var(--faint)}
   .dr-h h3{margin:6px 0 4px;font-size:19px}
   .dr-h p{margin:0;font-size:12px;color:var(--sub)}
   .x{position:absolute;right:14px;top:14px;border:1px solid var(--line);background:#fff;border-radius:8px;padding:4px 10px;font-size:11.5px;cursor:pointer;color:var(--sub)}
@@ -67,22 +79,30 @@
   .f:hover{background:#faf7f5}
   .f .n span{display:block;font-family:Consolas,monospace;font-size:10px;color:var(--faint);margin-top:2px}
   .f .pg{font-family:Consolas,monospace;font-size:11px;color:var(--sub);text-align:right}
-  .f .op{font-size:11.5px;color:var(--warn);text-align:right}
+  .f .op{font-size:11.5px;color:var(--red);text-align:right}
   .dr-f{padding:11px 22px;border-top:1px solid var(--line);font-family:Consolas,monospace;font-size:10.5px;color:var(--faint)}
-  .veil{position:fixed;inset:0;background:rgba(23,23,20,.36);display:none;align-items:center;justify-content:center;z-index:40}
+  .veil{position:fixed;inset:0;background:rgba(23,23,20,.38);display:none;align-items:center;justify-content:center;z-index:40;padding:20px}
   .veil.on{display:flex}
-  .dlg{width:520px;max-width:92vw;background:#fff;border-radius:16px;padding:24px 26px;box-shadow:0 30px 70px rgba(23,23,20,.22)}
+  .dlg{width:560px;max-width:96vw;max-height:92vh;overflow:auto;background:#fff;border-radius:16px;padding:24px 26px;box-shadow:0 30px 70px rgba(23,23,20,.22)}
   .dlg .eb{font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--faint)}
   .dlg h4{margin:9px 0 0;font-size:19px}
   .dlg ul{margin:14px 0 0;padding:0;list-style:none;font-size:13px;color:#4c4a45;line-height:1.85}
   .dlg li{display:flex;gap:9px;margin-bottom:7px}
   .dlg li i{font-style:normal;font-family:Consolas,monospace;font-size:11.5px;color:var(--faint);padding-top:2px}
-  .dlg .chk{display:flex;gap:8px;align-items:center;margin-top:14px;font-size:12.5px;color:#4c4a45;cursor:pointer}
-  .dlg .chk input{width:15px;height:15px}
-  .dlg .acts{display:flex;justify-content:flex-end;gap:9px;margin-top:20px}
-  .tut{counter-reset:s}
-  .tut .step{display:flex;gap:10px;margin-bottom:8px;font-size:13px;color:#4c4a45;line-height:1.8}
-  .tut .step b{font-family:Consolas,monospace;font-size:11.5px;color:var(--faint)}
+  .acts{display:flex;justify-content:flex-end;gap:9px;margin-top:20px}
+  .chk{display:flex;gap:8px;align-items:center;margin-top:14px;font-size:12.5px;color:#4c4a45;cursor:pointer}
+  .chk input{width:15px;height:15px}
+  /* 向导 */
+  .wiz-steps{display:flex;gap:18px;margin:14px 0 18px;font-size:11.5px;color:var(--faint)}
+  .wiz-steps b{color:var(--ink)}
+  .pick{display:flex;gap:9px;margin-bottom:14px}
+  .pick .p{flex:1;border:1px solid var(--line);border-radius:11px;padding:13px;cursor:pointer}
+  .pick .p.on{border-color:var(--ink);box-shadow:0 0 0 1px var(--ink) inset}
+  .pick .p b{display:block;font-size:13px;margin-bottom:3px}
+  .pick .p small{font-size:11.5px;color:var(--sub)}
+  .kv{display:flex;justify-content:space-between;font-size:12.5px;padding:7px 0;border-bottom:1px solid #f0eeea}
+  .kv b{font-weight:600}
+  .note-s{font-size:11.5px;color:var(--faint);margin-top:10px;line-height:1.7}
 </style></head>
 <body>
 <div class="wrap">
@@ -95,8 +115,8 @@
     </div>
     <div class="head-r">
       <span><i class="dot" id="dot"></i><span id="status">检查中…</span></span>
-      <a href="#" id="btnTut">教学</a>
-      <a href="#" id="btnKey">API</a>
+      <span class="link" id="btnTut">教学</span>
+      <span class="link" id="btnSet">设置</span>
     </div>
   </header>
 
@@ -112,33 +132,41 @@
   </div>
 
   <section>
-    <div class="sec-h"><h2>课程</h2><span>点一门课，右侧列出这一门的成品</span></div>
+    <div class="sec-h">
+      <h2>课程</h2>
+      <div class="tabs"><span class="tab on" data-tab="all">全部</span><span class="tab" data-tab="fav">收藏</span></div>
+    </div>
     <div class="courses" id="courses"></div>
   </section>
 
   <section>
-    <div class="sec-h"><h2>生成</h2><span>先过门，再出门</span></div>
+    <div class="sec-h"><h2>生成</h2><span style="font-size:12px;color:var(--faint)">成功后自动从队列消失</span></div>
     <div class="grid2">
       <div class="card">
         <h3>输出方式</h3>
-        <p class="hint">二选一；本地直接可用，仓库模式会复制到仓库目录并提交。</p>
+        <p class="hint">二选一；生成的成品会复制到你设的保存目录。</p>
         <div class="opts">
-          <div class="opt on" data-mode="local"><b>保存到本地</b><small>落到本仓 01_讲义</small></div>
-          <div class="opt" data-mode="repo"><b>推送到仓库</b><small>复制 + git 提交推送</small></div>
+          <div class="opt on" data-mode="local"><b>保存到本地</b><small>落到保存目录</small></div>
+          <div class="opt" data-mode="repo"><b>推送到仓库</b><small>本仓提交即推送</small></div>
         </div>
-        <div class="fld"><code id="outPath">CS340/01_讲义</code><span style="font-size:11.5px;color:var(--faint)">产物目录</span></div>
+        <div class="fld"><code id="outPath">CS340/01_讲义</code><span style="font-size:11.5px;color:var(--faint)">保存目录</span></div>
         <div class="tools">
+          <select id="courseSel"></select>
           <select id="lessonSel"></select>
           <button class="btn primary" id="btnGen">开始生成</button>
         </div>
+        <div class="queue" id="queue"></div>
         <div class="log" id="log"></div>
       </div>
       <div class="card">
-        <h3>质量门</h3>
-        <p class="hint">逐条真跑，任一项红就停；脚本判不了的（类比、数字）仍需人工抽查。</p>
-        <div class="fld"><code>源门</code><span>课件引用能对上、图注不空</span></div>
-        <div class="fld"><code>内容门</code><span>data-reader · 符号表 · 讲法 · 术语附英</span></div>
-        <div class="fld"><code>版式门</code><span>首行字体 · 正文不起页 · 无残页</span></div>
+        <h3>模型与用量</h3>
+        <p class="hint">真实余额来自接口；花费是按 token 估的，不是账单。</p>
+        <div class="kv"><span>当前模型</span><b id="mModel">—</b></div>
+        <div class="kv"><span>账户余额</span><b id="mBal">—</b></div>
+        <div class="kv"><span>累计调用</span><b id="mCalls">—</b></div>
+        <div class="kv"><span>token（入 / 出）</span><b id="mTok">—</b></div>
+        <div class="kv"><span>估算花费</span><b id="mCost">—</b></div>
+        <p class="note-s">不填 key 也能出 PDF：已有数据走本地渲染，不需要模型。只有「写新内容」才用得到。</p>
       </div>
     </div>
   </section>
@@ -160,154 +188,255 @@
   <div class="dr-f" id="drFoot"></div>
 </div>
 
-<div class="veil" id="veil">
-  <div class="dlg" id="dlg"></div>
-</div>
+<div class="veil" id="veil"><div class="dlg" id="dlg"></div></div>
 
 <script>
-const $ = s => document.querySelector(s);
-let COURSES = [], MODE = 'local';
+const $=s=>document.querySelector(s);
+let B={}, MODE='local', TAB='all', Q=[], MODEL='deepseek-flash';
 
-async function load() {
-  const r = await fetch('/api/courses');
-  const j = await r.json();
-  COURSES = j.courses || [];
-  render();
-  const sel = $('#lessonSel');
-  sel.innerHTML = (j.lessons || []).map(n => `<option>${n}</option>`).join('') || '<option value="">（没有可生成的数据）</option>';
-  $('#sLessons').textContent = (j.lessons || []).length;
+async function boot(){
+  const r=await fetch('/api/bootstrap'); B=await r.json();
+  MODEL=B.model; $('#ver').textContent='v'+B.version;
+  $('#mModel').textContent=B.model;
+  render(); fillSelects(); refreshUsage();
+  $('#outPath').textContent=B.save_dir;
+  const apiOk=B.configured;
+  $('#dot').className='dot '+(apiOk?'ok':'no');
+  $('#status').textContent=apiOk?'模型已配置 · '+B.model:'未配置模型（不影响出 PDF）';
+  if(!B.wizard_done) setTimeout(()=>wizard(0),500);
+  if(/wizard=1/.test(location.search)) setTimeout(()=>wizard(0),300);
+  if(/settings=1/.test(location.search)) setTimeout(()=>$('#btnSet').click(),300);
+  if(/open=1/.test(location.search)) setTimeout(()=>{const c=document.querySelector('.course'); if(c) c.click();},700);
 }
-function render() {
-  const box = $('#courses'); box.innerHTML = '';
-  let files = 0, pages = 0;
-  COURSES.forEach(c => {
-    files += c.files.length;
-    pages += c.files.reduce((a, f) => a + f.pages, 0);
-    const el = document.createElement('div');
-    el.className = 'course';
-    el.innerHTML = `<div class="code">${c.code} · ${c.en}</div>
+function render(){
+  const box=$('#courses'); box.innerHTML='';
+  let files=0,pages=0,lessons=0;
+  const list=B.courses.filter(c=>TAB==='all'||c.fav);
+  list.forEach(c=>{
+    files+=c.files.length; pages+=c.files.reduce((a,f)=>a+f.pages,0); lessons+=c.lessons.length;
+    const el=document.createElement('div'); el.className='course';
+    el.innerHTML=`<span class="star ${c.fav?'on':''}" title="收藏">${c.fav?'★':'☆'}</span>
+      <div class="code">${c.code}${c.en?' · '+c.en:''}</div>
       <h3>${c.title}</h3><p>${c.desc}</p>
-      <div class="foot"><span>${c.files.length} 份</span><span>${c.files.reduce((a,f)=>a+f.pages,0)} 页</span><span>点开查看 →</span></div>`;
-    el.onclick = () => openDrawer(c);
+      <div class="foot"><span>${c.files.length} 份</span><span>${c.files.reduce((a,f)=>a+f.pages,0)} 页</span><span>${c.lessons.length} 讲可生成</span></div>`;
+    el.onclick=e=>{ if(e.target.classList.contains('star')) return; openDrawer(c); };
+    el.querySelector('.star').onclick=async e=>{
+      e.stopPropagation();
+      const r=await fetch('/api/favorites',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code:c.code})});
+      const j=await r.json(); if(j.ok){ c.fav=j.fav; render(); }
+    };
     box.appendChild(el);
   });
-  $('#sCourses').textContent = COURSES.length;
-  $('#sFiles').textContent = files;
-  $('#sPages').textContent = pages;
+  if(!list.length) box.innerHTML='<div style="color:#97948c;font-size:12.5px">收藏夹是空的：点卡片右上角 ☆ 收进来。</div>';
+  $('#sCourses').textContent=B.courses.length;
+  $('#sFiles').textContent=B.courses.reduce((a,c)=>a+c.files.length,0);
+  $('#sPages').textContent=B.courses.reduce((a,c)=>a+c.files.reduce((x,f)=>x+f.pages,0),0);
+  $('#sLessons').textContent=B.courses.reduce((a,c)=>a+c.lessons.length,0);
 }
-function openDrawer(c) {
-  $('#drCode').textContent = c.code + ' · ' + c.en;
-  $('#drTitle').textContent = c.title;
-  $('#drDesc').textContent = c.desc;
-  $('#drFiles').innerHTML = c.files.length ? c.files.map(f => `
+function fillSelects(){
+  $('#courseSel').innerHTML=B.courses.map(c=>`<option value="${c.code}">${c.title}</option>`).join('');
+  syncLessons();
+}
+function syncLessons(){
+  const c=B.courses.find(x=>x.code===$('#courseSel').value)||B.courses[0];
+  $('#lessonSel').innerHTML=(c?c.lessons:[]).map(n=>`<option>${n}</option>`).join('')||'<option value="">（没有可生成的数据）</option>';
+}
+$('#courseSel').onchange=syncLessons;
+document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('on'));
+  t.classList.add('on'); TAB=t.dataset.tab; render();
+});
+document.querySelectorAll('.opt').forEach(o=>o.onclick=()=>{
+  document.querySelectorAll('.opt').forEach(x=>x.classList.remove('on'));
+  o.classList.add('on'); MODE=o.dataset.mode;
+  $('#outPath').textContent= MODE==='local'? B.save_dir : '生成后本仓提交（会先跑敏感扫描）';
+});
+function openDrawer(c){
+  $('#drCode').textContent=c.code+(c.en?' · '+c.en:'');
+  $('#drTitle').textContent=c.title; $('#drDesc').textContent=c.desc;
+  $('#drFiles').innerHTML=c.files.length?c.files.map(f=>`
     <a class="f" href="/api/pdf?p=${encodeURIComponent(f.rel)}" target="_blank" rel="noopener">
       <div class="n">${f.name}<span>${f.rel}</span></div>
       <div class="pg">${f.pages} p</div><div class="op">打开 →</div></a>`).join('')
-    : '<div style="padding:22px;color:#97948c;font-size:12.5px">这一门还没有成品。</div>';
-  $('#drFoot').textContent = c.files.length + ' FILES · 点击在新标签打开';
+    :'<div style="padding:22px;color:#97948c;font-size:12.5px">这一门还没有成品。</div>';
+  $('#drFoot').textContent=c.files.length+' FILES · 点击在新标签打开';
   $('#drawer').classList.add('on');
 }
-$('#drClose').onclick = () => $('#drawer').classList.remove('on');
+$('#drClose').onclick=()=>$('#drawer').classList.remove('on');
 
-document.querySelectorAll('.opt').forEach(o => o.onclick = () => {
-  document.querySelectorAll('.opt').forEach(x => x.classList.remove('on'));
-  o.classList.add('on'); MODE = o.dataset.mode;
-  $('#outPath').textContent = MODE === 'local' ? 'CS340/01_讲义' : '（仓库模式：复制后提交，需先配好远端）';
-});
-
-// 免责声明
-function askDisclaimer(cb) {
-  $('#dlg').innerHTML = `
-    <div class="eb">Before you generate</div>
-    <h4>生成前请确认</h4>
+// ---- 生成队列 ----
+function renderQueue(){
+  $('#queue').innerHTML=Q.map(q=>`<div class="qi ${q.st}">
+      <span>${q.course} · ${q.lesson}</span>
+      <span class="st">${q.st==='run'?'生成中…':(q.st==='fail'?'失败：'+(q.msg||'看日志'):'完成')}</span>
+    </div>`).join('');
+}
+$('#btnGen').onclick=()=>{
+  const no=$('#lessonSel').value, course=$('#courseSel').value;
+  if(!no) return;
+  disclaimer(()=>runGenerate(course,no));
+};
+function disclaimer(cb){
+  $('#dlg').innerHTML=`
+    <div class="eb">Before you generate</div><h4>生成前请确认</h4>
     <ul>
       <li><i>01</i><div>讲义内容由 AI 辅助整理，可能与原始课件不一致，<b>重要信息请自行核实</b>。</div></li>
-      <li><i>02</i><div>生成只写到你选的目录，不改动其它任何位置。</div></li>
+      <li><i>02</i><div>生成只写到你设的保存目录，不改动其它位置。</div></li>
       <li><i>03</i><div>每份成品页脚固定印「本内容由 AI 生成，请自行核实重要信息」，不可关闭。</div></li>
     </ul>
     <label class="chk"><input type="checkbox" id="dlgChk">我已阅读并理解上述说明</label>
-    <div class="acts"><button class="btn" id="dlgNo">取消</button>
-      <button class="btn primary" id="dlgYes" disabled>继续生成</button></div>`;
+    <div class="acts"><button class="btn" id="dlgNo">取消</button><button class="btn primary" id="dlgYes" disabled>继续生成</button></div>`;
   $('#veil').classList.add('on');
-  $('#dlgChk').onchange = e => $('#dlgYes').disabled = !e.target.checked;
-  const close = () => { $('#veil').classList.remove('on'); };
-  $('#dlgNo').onclick = close;
-  $('#dlgYes').onclick = () => { close(); cb(); };
+  $('#dlgChk').onchange=e=>$('#dlgYes').disabled=!e.target.checked;
+  const close=()=>$('#veil').classList.remove('on');
+  $('#dlgNo').onclick=close; $('#dlgYes').onclick=()=>{close();cb();};
 }
-$('#btnGen').onclick = () => {
-  const no = $('#lessonSel').value;
-  if (!no) return;
-  askDisclaimer(() => runGenerate(no));
-};
-async function runGenerate(no) {
-  const log = $('#log'); log.style.display = 'block'; log.textContent = '正在生成 ' + no + ' …';
-  $('#btnGen').disabled = true;
-  try {
-    const r = await fetch('/api/generate', {method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({lesson: no, mode: MODE})});
-    const j = await r.json();
-    log.textContent = (j.ok ? '成功\n\n' : '失败\n\n') + (j.log || j.error || '');
-    if (j.ok) load();
-  } catch (e) { log.textContent = '请求失败：' + e; }
-  $('#btnGen').disabled = false;
+async function runGenerate(course,no){
+  const item={course,lesson:no,st:'run'}; Q.unshift(item); renderQueue();
+  const log=$('#log'); log.style.display='block'; log.textContent='正在生成 '+no+' …';
+  $('#btnGen').disabled=true;
+  try{
+    const r=await fetch('/api/generate',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({course,lesson:no,mode:MODE,save_dir:B.save_dir})});
+    const j=await r.json();
+    log.textContent=(j.ok?'成功（'+j.seconds+'s）\n\n':'失败\n\n')+(j.log||j.error||'');
+    if(j.ok){
+      // 成功后从队列移除
+      Q=Q.filter(q=>q!==item); renderQueue();
+      const bs=await fetch('/api/bootstrap'); B=await bs.json(); render(); refreshUsage();
+    }else{
+      item.st='fail'; item.msg=(j.error||'').slice(0,40); renderQueue();
+    }
+  }catch(e){ item.st='fail'; item.msg='请求失败'; renderQueue(); log.textContent='请求失败：'+e; }
+  $('#btnGen').disabled=false;
+}
+async function refreshUsage(){
+  const r=await fetch('/api/bootstrap'); B=await r.json();
+  const u=B.usage||{};
+  $('#mCalls').textContent=(u.calls||0)+' 次';
+  $('#mTok').textContent=(u.in||0)+' / '+(u.out||0);
+  $('#mCost').textContent='¥'+((u.cost_est||0).toFixed(3))+'（估）';
+  try{
+    const b=await (await fetch('/api/balance')).json();
+    $('#mBal').textContent=b.ok?('¥'+b.balance):'未配置';
+  }catch(e){ $('#mBal').textContent='读取失败'; }
 }
 
-// 教学
-function showTut() {
-  $('#dlg').innerHTML = `
-    <div class="eb">Getting started</div>
-    <h4>四步用起来</h4>
-    <div class="tut">
-      <div class="step"><b>01</b><div>点「课程」里任意一门，右侧展开这一门的成品列表，点文件名直接打开 PDF。</div></div>
-      <div class="step"><b>02</b><div>在「生成」里选一讲（下拉框里是可生成的数据），选输出方式。</div></div>
-      <div class="step"><b>03</b><div>点「开始生成」，先弹免责声明，勾选后才能继续。</div></div>
-      <div class="step"><b>04</b><div>生成时按「内容门 → 打印 → 版式门」走；任一门报红就停在原地，日志里写着原因。</div></div>
-    </div>
-    <p style="font-size:12px;color:#97948c;margin:14px 0 0">API key 只在需要「写新内容」时才用；已有数据出 PDF 不需要它。</p>
-    <div class="acts"><button class="btn primary" id="tutOk">知道了</button></div>`;
+// ---- 向导 ----
+let W={step:0,model:null,key:'',dir:''};
+function wizard(step){
+  W.step=step;
+  const steps=`<div class="wiz-steps">
+    <span class="${step===0?'':''}">${step>=0?'<b>1 选模型</b>':'1 选模型'}</span>
+    <span>${step>=1?'<b>2 API 钥匙</b>':'2 API 钥匙'}</span>
+    <span>${step>=2?'<b>3 保存目录</b>':'3 保存目录'}</span>
+    <span>${step>=3?'<b>4 完成</b>':'4 完成'}</span></div>`;
+  let body='';
+  if(step===0){
+    body=`<h4>先选模型版本</h4>
+      <p class="note-s">选哪个都能出 PDF；区别只在「让 AI 写新内容」时的质量和花费。以后可在设置里改。</p>
+      <div class="pick">
+        ${B.models.map(m=>`<div class="p ${W.model===m.id?'on':''}" data-m="${m.id}"><b>${m.name}</b><small>${m.note}</small></div>`).join('')}
+      </div>`;
+  }else if(step===1){
+    body=`<h4>填 API 钥匙</h4>
+      <p class="note-s">只存本机（%USERPROFILE%\\.pluma\\api.json），不会进仓库。没有可以先跳过，之后在设置里补。</p>
+      <input id="wKey" placeholder="sk-…" autocomplete="off" value="${W.key?'':''}">`;
+  }else if(step===2){
+    body=`<h4>选保存目录</h4>
+      <p class="note-s">生成成功后成品复制到这里。相对路径以本仓为根，也可以填绝对路径。</p>
+      <input id="wDir" value="${B.save_dir}">
+      <p class="note-s">默认 ${B.save_dir_abs}</p>`;
+  }else{
+    body=`<h4>可以开始了</h4>
+      <div class="kv"><span>模型</span><b>${W.model||MODEL}</b></div>
+      <div class="kv"><span>API 钥匙</span><b>${W.key?'已填写':'未填（不影响出 PDF）'}</b></div>
+      <div class="kv"><span>保存目录</span><b>${W.dir||B.save_dir}</b></div>
+      <p class="note-s">点「完成」会写入本机配置。想改随时点右上「设置」。</p>`;
+  }
+  $('#dlg').innerHTML=`<div class="eb">首次配置</div>${steps}${body}
+    <div class="acts">
+      ${step>0?'<button class="btn" id="wBack">上一步</button>':''}
+      ${step===1?'<button class="btn" id="wSkip">跳过</button>':''}
+      <button class="btn primary" id="wNext">${step===3?'完成':'下一步'}</button>
+    </div>`;
   $('#veil').classList.add('on');
-  $('#tutOk').onclick = () => { $('#veil').classList.remove('on'); localStorage.setItem('pluma.tut','1'); };
+  $('#dlg').querySelectorAll('.p').forEach(p=>p.onclick=()=>{
+    $('#dlg').querySelectorAll('.p').forEach(x=>x.classList.remove('on'));
+    p.classList.add('on'); W.model=p.dataset.m;
+  });
+  if($('#wBack')) $('#wBack').onclick=()=>wizard(step-1);
+  if($('#wSkip')) $('#wSkip').onclick=()=>{ W.key=''; wizard(2); };
+  $('#wNext').onclick=async()=>{
+    if(step===0){ W.model=W.model||MODEL; wizard(1); }
+    else if(step===1){ W.key=($('#wKey').value||'').trim(); wizard(2); }
+    else if(step===2){ W.dir=($('#wDir').value||B.save_dir).trim(); wizard(3); }
+    else{
+      const payload={model:W.model||MODEL, save_dir:W.dir||B.save_dir, wizard_done:true};
+      if(W.key) payload.api_key=W.key;
+      const r=await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+      const j=await r.json();
+      $('#veil').classList.remove('on');
+      if(!j.ok) alert('保存失败：'+(j.error||''));
+      boot();
+    }
+  };
 }
-$('#btnTut').onclick = e => { e.preventDefault(); showTut(); };
 
-// API key
-$('#btnKey').onclick = e => {
-  e.preventDefault();
-  $('#dlg').innerHTML = `
-    <div class="eb">API</div><h4>模型接入</h4>
-    <p style="font-size:12.5px;color:#6c6a63;margin:10px 0 14px">key 只保存在你本机（%USERPROFILE%\\.pluma\\api.json），不会写进仓库。</p>
-    <input id="keyIn" placeholder="sk-…" autocomplete="off">
-    <div style="display:flex;gap:9px;align-items:center;margin-top:10px">
-      <select id="modelSel"><option>deepseek-flash</option><option>deepseek-v4-pro</option></select>
-      <span style="font-size:11.5px;color:#97948c">默认 flash，快且省</span>
-    </div>
-    <div class="acts"><button class="btn" id="keyNo">取消</button><button class="btn primary" id="keyYes">保存</button></div>
-    <p id="keyMsg" style="font-size:12px;color:#2f7d4f;margin:10px 0 0"></p>`;
+// ---- 设置 ----
+$('#btnSet').onclick=()=>{
+  $('#dlg').innerHTML=`
+    <div class="eb">Settings</div><h4>设置</h4>
+    <p class="note-s" style="margin-bottom:14px">改动即刻写本机配置；密钥只留在本机。</p>
+    <div style="font-size:12.5px;color:#6c6a63;margin-bottom:6px">模型版本</div>
+    <select id="sModel" style="width:100%;margin-bottom:12px">
+      ${B.models.map(m=>`<option value="${m.id}" ${m.id===MODEL?'selected':''}>${m.name} — ${m.note}</option>`).join('')}
+    </select>
+    <div style="font-size:12.5px;color:#6c6a63;margin-bottom:6px">API 钥匙（留空表示不改）</div>
+    <input id="sKey" placeholder="sk-…" autocomplete="off" style="margin-bottom:12px">
+    <div style="font-size:12.5px;color:#6c6a63;margin-bottom:6px">保存目录</div>
+    <input id="sDir" value="${B.save_dir}" style="margin-bottom:12px">
+    <div class="kv"><span>账户余额</span><b id="sBal">读取中…</b></div>
+    <div class="kv"><span>累计消耗（估）</span><b id="sCost">—</b></div>
+    <div class="acts">
+      <button class="btn" id="sTut">重看教学</button>
+      <button class="btn primary" id="sSave">保存</button>
+    </div>`;
   $('#veil').classList.add('on');
-  $('#keyNo').onclick = () => $('#veil').classList.remove('on');
-  $('#keyYes').onclick = async () => {
-    const r = await fetch('/api/apikey', {method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({key: $('#keyIn').value.trim(), model: $('#modelSel').value})});
-    const j = await r.json();
-    $('#keyMsg').textContent = j.ok ? '已保存到本机：' + j.saved : ('失败：' + j.error);
-    if (j.ok) $('#keyMsg').style.color = '#2f7d4f';
+  (async()=>{
+    const b=await (await fetch('/api/balance')).json();
+    $('#sBal').textContent=b.ok?('¥'+b.balance):'未配置';
+    const u=(await (await fetch('/api/bootstrap')).json()).usage||{};
+    $('#sCost').textContent='¥'+(u.cost_est||0).toFixed(3)+'（估）· '+(u.calls||0)+' 次';
+  })();
+  $('#sTut').onclick=()=>{ $('#veil').classList.remove('on'); showTut(); };
+  $('#sSave').onclick=async()=>{
+    const payload={model:$('#sModel').value, save_dir:$('#sDir').value.trim(), wizard_done:true};
+    const k=$('#sKey').value.trim(); if(k) payload.api_key=k;
+    const r=await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    const j=await r.json();
+    $('#veil').classList.remove('on');
+    if(!j.ok) alert('保存失败：'+(j.error||'')); else boot();
   };
 };
 
-// 健康状态
-(async () => {
-  try {
-    const r = await fetch('/api/health'); const j = await r.json();
-    $('#ver').textContent = 'v' + (j.version || '?');
-    const api = j.api || {};
-    if (api.ok) { $('#dot').classList.add('ok'); $('#status').textContent = 'API 可用 · ' + (api.models || []).join(' / '); }
-    else { $('#status').textContent = 'API 未配置（不影响出 PDF）'; }
-  } catch (e) { $('#status').textContent = '服务未就绪'; }
-})();
+// ---- 教学 ----
+function showTut(){
+  $('#dlg').innerHTML=`
+    <div class="eb">Getting started</div><h4>四步用起来</h4>
+    <div style="font-size:13px;color:#4c4a45;line-height:1.9;margin-top:12px">
+      <div>① <b>课程</b>里点任一门 → 右侧列出成品 → 点文件名直接打开。</div>
+      <div>② 卡片右上 ☆ 收进<b>收藏夹</b>；课程是按目录自动认出来的。</div>
+      <div>③ <b>生成</b>里选课程与讲次 → 点开始生成 → 勾选免责声明。</div>
+      <div>④ 生成中的任务在队列里，<b>成功后自动消失</b>；失败会留下并标红。</div>
+    </div>
+    <p class="note-s">模型与用量在右侧面板：余额是接口读的真数，花费是按 token 估的。</p>
+    <div class="acts"><button class="btn primary" id="tutOk">知道了</button></div>`;
+  $('#veil').classList.add('on');
+  $('#tutOk').onclick=()=>$('#veil').classList.remove('on');
+}
+$('#btnTut').onclick=showTut;
 
-load();
-const _q = location.search;
-if (!localStorage.getItem('pluma.tut') && !/notut/.test(_q)) setTimeout(showTut, 400);
-if (/open=1/.test(_q)) setTimeout(() => { const c = document.querySelector('.course'); if (c) c.click(); }, 700);
+boot();
 </script>
 </body></html>

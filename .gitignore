@@ -25,3 +25,7 @@ desktop.ini
 ~$*
 .DS_Store
 *.log
+
+# 本地用量日志（2026-11-16）
+_logs/
+
