@@ -69,6 +69,7 @@ python engine\_make.py L01
 - **成品**：点课程 → 右侧列出这一门的 PDF → 点文件名直接打开
 - **生成**：选课程与讲次 → 弹免责声明 → 开始；任务进队列，**成功后自动消失**，失败留红
 - **设置**：模型版本、API 钥匙、保存目录、账户余额、累计 token 与估算花费
+- **改界面前先看图**：还没实现的稿在 [`docs/预览`](docs/预览/README.md)；改了 `ui\` 要跑 `python tools\check\check-ui-preview.py`，红＝改了界面没带预览图
 
 ## 一条命令
 
@@ -137,10 +138,12 @@ CS340/06_笔记/     生成的讲义源（不入库）
 CS340/01_讲义/     生成的 PDF（不入库）
 tools/print/       C 内容门 / 版式门 / 打印 / KaTeX
 tools/src/         源门
+tools/check/       自检（check-ui-preview.py：界面改动必须先有预览图）
 tools/sync-readme.py  主页「最近更新」生成器
 api/               D 模型接入
 ui/                E 本地界面
 docs/              给人看的文档（总索引 → 分类 → 篇）
+docs/预览/         界面设计稿（还没实现；实现后由 docs/资产/界面-*.png 接替）
 courses.json       课程元数据（标题 / 说明 / 读者口径）
 ```
 
