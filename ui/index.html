@@ -144,6 +144,11 @@ nav a.on{background:var(--ink);color:var(--bg)}
 .dveil{position:fixed;inset:0;background:rgba(10,10,9,.26);opacity:0;pointer-events:none;
   transition:opacity .22s ease;z-index:29}
 .dveil.on{opacity:1;pointer-events:auto}
+/* 2026-11-17：保存目录那一行改成可点（用户：「输出模式那个按钮选目录压根就没做」） */
+.fld.pick{cursor:pointer;transition:.16s}
+.fld.pick:hover{border-color:var(--ink);background:var(--card)}
+.fld.pick.busy{opacity:.55;pointer-events:none}
+.dlg.wide{width:min(880px,96vw)}
 .dr-h{padding:20px 22px 12px;border-bottom:1px solid var(--line);position:relative}
 .dr-h .c{font-family:Consolas,monospace;font-size:11px;color:var(--faint)}
 .dr-h h3{margin:6px 0 4px;font-size:19px}
@@ -459,7 +464,8 @@ footer{max-width:1080px;margin:26px auto 0;padding:0 16px;display:flex;align-ite
           <div class="opt on" data-mode="local"><b>保存到本地</b><small>落到保存目录</small></div>
           <div class="opt" data-mode="repo"><b>推送到仓库</b><small>本仓提交即推送</small></div>
         </div>
-        <div class="fld"><code id="outPath">CS340/01_讲义</code><span style="font-size:11.5px;color:var(--faint)">保存目录</span></div>
+        <div class="fld pick" id="dirPick" title="点击选择保存目录（在这台电脑上弹系统对话框）">
+          <code id="outPath">CS340/01_讲义</code><span id="dirHint" style="font-size:11.5px;color:var(--faint)">保存目录 · 点击选择</span></div>
         <p class="hint" id="dirFix" style="display:none;color:var(--red);border:0">保存目录在配置里是乱码（出现过 ?），已临时退回默认目录；请到「设置」里重填。</p>
         <h3 style="margin-top:16px">成品形态</h3>
         <p class="hint">单本＝一讲一份 PDF（默认）；合订本＝全部讲合成一本，去掉各讲自带的封面与目录。</p>
@@ -815,6 +821,7 @@ function exportCourse(c){
     <div class="acts"><button class="btn ghost" id="exNo">取消</button>
       <button class="btn" id="exGo">导出</button></div>`;
   openVeil();
+  $('#dlg').classList.add('wide');        // 导出弹窗内容多，用宽版（用户：图 2 太小）
   const sync = () => {
     const n = sel.size;
     $('#exCnt').textContent = '已选 ' + n + ' 份';
@@ -1058,6 +1065,27 @@ $('#lsnAll').onclick = () => {
   syncLsnCnt();
 };
 $('#courseSel').onchange = syncLessons;
+/* 2026-11-17：保存目录改可点选（用户：「输出模式那个按钮选目录压根就没做」）。
+   弹的是这台电脑的系统文件夹对话框；请求会挂住直到选完或取消，所以先置灰。 */
+$('#dirPick').onclick = async () => {
+  const box = $('#dirPick'), hint = $('#dirHint');
+  const old = hint.textContent;
+  box.classList.add('busy'); hint.textContent = '等你在系统对话框里选…';
+  try{
+    const j = await (await fetch('/api/pick-dir',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({initial:B.save_dir_abs || ''})})).json();
+    if(!j.ok){
+      hint.textContent = old;
+      if(!j.canceled) toast('没选成：' + (j.error || '未知原因') + '（也可以到「设置」里手填路径）');
+      return;
+    }
+    const r = await (await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({save_dir: j.path, wizard_done:true})})).json();
+    if(r.ok){ toast('保存目录已改为 ' + j.path); await boot(); }
+    else { hint.textContent = old; toast('保存失败：' + (r.error || '')); }
+  }catch(e){ hint.textContent = old; toast('请求失败：' + e); }
+  finally { box.classList.remove('busy'); }
+};
 document.querySelectorAll('.opt[data-mode]').forEach(o=>o.onclick=()=>{
   document.querySelectorAll('.opt[data-mode]').forEach(x=>x.classList.remove('on'));
   o.classList.add('on'); MODE=o.dataset.mode;
@@ -1789,6 +1817,7 @@ function closeVeil(){
   const v = $('#veil');
   if(!v.classList.contains('on')) return;
   v.classList.add('closing');
+  $('#dlg').classList.remove('wide');
   clearTimeout(veilTimer);
   veilTimer = setTimeout(()=>{
     if(v.classList.contains('closing')) v.classList.remove('on', 'closing');

@@ -20,7 +20,11 @@ CHANGELOG = os.path.join(ROOT, "CHANGELOG.md")
 README = os.path.join(ROOT, "README.md")
 BEGIN = "<!-- 最近更新:begin（由 tools/sync-readme.py 生成，别手改） -->"
 END = "<!-- 最近更新:end -->"
-LIMIT = 5
+LIMIT = 0        # 0 = 全部版本；2026-11-17 用户说「最近更新只显示最近五个版本」不够，改成全列
+
+
+def pick_rows(rows):
+    return rows if not LIMIT else rows[:LIMIT]
 
 
 def parse(path: str) -> list[tuple[str, str, str]]:
@@ -39,7 +43,7 @@ def parse(path: str) -> list[tuple[str, str, str]]:
 
 def render(rows) -> str:
     head = "| 版本 | 日期 | 这一版做了什么 |\n|:--|:--|:--|"
-    body = "\n".join("| **%s** | %s | %s |" % (v, d[5:], t) for v, d, t in rows[:LIMIT])
+    body = "\n".join("| **%s** | %s | %s |" % (v, d[5:], t) for v, d, t in pick_rows(rows))
     return BEGIN + "\n" + head + "\n" + body + "\n" + END
 
 
@@ -60,10 +64,10 @@ def main(argv: list[str]) -> int:
         if new != src:
             print("最近更新表与 CHANGELOG 不一致：跑 python tools\\sync-readme.py")
             return 1
-        print("最近更新表一致（%d 版候选，取前 %d）" % (len(rows), LIMIT))
+        print("最近更新表一致（%d 版里列了 %d 版）" % (len(rows), len(pick_rows(rows))))
         return 0
     io.open(README, "w", encoding="utf-8").write(new)
-    print("已写回 README（%d 版候选，取前 %d）" % (len(rows), LIMIT))
+    print("已写回 README（%d 版里列了 %d 版）" % (len(rows), len(pick_rows(rows))))
     return 0
 
 

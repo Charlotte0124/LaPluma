@@ -15,6 +15,7 @@ import mimetypes
 import os
 import re
 import shutil
+import subprocess
 import sys
 import threading
 import time
@@ -373,6 +374,42 @@ def rel_out(path: str) -> str:
         if root and ap.startswith(os.path.abspath(root) + os.sep):
             return os.path.relpath(ap, root).replace(os.sep, "/")
     return os.path.basename(ap)
+
+
+def pick_directory(initial: str = "") -> str:
+    """弹一个原生「选择文件夹」对话框，返回选中路径（取消则空串）。
+
+    为什么起子进程：tkinter 的 Tk() 要在主线程建，而请求跑在
+    ThreadingHTTPServer 的工作线程，同线程建 Tk 在 Windows 上会偶发卡死。
+    冻结成 exe 后 sys.executable 就是 exe 自己，再起它等于又开一个软件，所以那种情况只能本进程内弹。
+    """
+    code = (
+        "import sys, tkinter as tk\n"
+        "from tkinter import filedialog\n"
+        "r = tk.Tk(); r.withdraw(); r.attributes('-topmost', True)\n"
+        "init = sys.argv[1] if len(sys.argv) > 1 else ''\n"
+        "p = filedialog.askdirectory(title='选择保存目录', initialdir=init or None, mustexist=True)\n"
+        "r.destroy()\n"
+        "print('PICK:' + (p or ''))\n"
+    )
+    try:
+        if getattr(sys, "frozen", False):
+            import tkinter as tk
+            from tkinter import filedialog
+            r = tk.Tk()
+            r.withdraw()
+            r.attributes("-topmost", True)
+            p = filedialog.askdirectory(title="选择保存目录", initialdir=initial or None, mustexist=True)
+            r.destroy()
+            return p or ""
+        out = subprocess.run([sys.executable, "-c", code, initial or ""],
+                             capture_output=True, text=True, timeout=180)
+        for line in (out.stdout or "").splitlines():
+            if line.startswith("PICK:"):
+                return line[5:].strip()
+        return ""
+    except Exception as e:  # noqa: BLE001
+        raise RuntimeError("弹不出目录选择框：%s" % e) from e
 
 
 def nat_key(name: str):
@@ -973,6 +1010,22 @@ class Handler(BaseHTTPRequestHandler):
                 elif not done:
                     tip["error"] = "；".join(r.get("error", "") for r in results)[:300]
                 return self._json(tip)
+            if u.path == "/api/pick-dir":
+                # 选保存目录（原生文件夹对话框）。只接本机：平板端弹不出这台电脑的对话框，
+                # 那边只能到「设置」里手填；请求会一直挂着直到用户选完或取消。
+                if self.client_address[0] not in ("127.0.0.1", "::1"):
+                    return self._json({"ok": False,
+                                       "error": "只能在运行软件的那台电脑上选目录；远程请到「设置」里手填路径"}, 403)
+                cfg0 = load_cfg()
+                initial = str(body.get("initial") or "").strip() \
+                    or os.path.abspath(os.path.join(ROOT, cfg0["save_dir"]))
+                try:
+                    p = pick_directory(initial)
+                except Exception as e:  # noqa: BLE001
+                    return self._json({"ok": False, "error": str(e)}, 500)
+                if not p:
+                    return self._json({"ok": False, "canceled": True})
+                return self._json({"ok": True, "path": p})
             if u.path == "/api/config":
                 cfg = load_cfg()
                 for k in ("model", "save_dir", "base_url", "provider"):
