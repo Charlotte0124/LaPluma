@@ -59,7 +59,7 @@ def split_long(html, rounds=4):
             changed += 1
             return new
 
-        html = re.sub(r'(<p[^>]*>)(.*?)</p>', rep, html, flags=re.S)
+        html = re.sub(r'(<p(?:\s[^>]*)?>)(.*?)</p>', rep, html, flags=re.S)
         n += changed
         if not changed:
             break

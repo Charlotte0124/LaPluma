@@ -1,335 +1,312 @@
 # -*- coding: utf-8 -*-
-"""L05 进程间通信与进程同步 · 讲义数据。"""
+"""L05 进程间通信与同步 · 练习型讲义（代码 + 例题运算 + 结构图为主）。
+
+来源：课件 L05_IPCandProcessSynchronization.pdf（148 页）。结构图按课件概念自绘；
+引文 ('q', …, '课件 p.N') 均为课件原文短语。代码块里的生产者-消费者代码取自课件 p.95 版式，
+并补了可编译的 POSIX 写法，便于课堂直接跑。
+"""
+
+_IPC = """<svg viewBox="0 0 620 150" xmlns="http://www.w3.org/2000/svg" font-family="Microsoft YaHei, sans-serif">
+  <rect x="14" y="18" width="120" height="46" rx="4" fill="#161614" stroke="#2A2A24"/>
+  <text x="74" y="46" text-anchor="middle" fill="#F4F1E6" font-size="12">进程 A</text>
+  <rect x="486" y="18" width="120" height="46" rx="4" fill="#161614" stroke="#2A2A24"/>
+  <text x="546" y="46" text-anchor="middle" fill="#F4F1E6" font-size="12">进程 B</text>
+  <rect x="196" y="10" width="228" height="28" fill="#1C1B13" stroke="#E7C246"/>
+  <text x="310" y="29" text-anchor="middle" fill="#E7C246" font-size="11">① 管道 pipe（单向字节流）</text>
+  <rect x="160" y="60" width="300" height="28" fill="#161614" stroke="#2A2A24"/>
+  <text x="310" y="79" text-anchor="middle" fill="#F4F1E6" font-size="11">② 共享内存（最快，但要自己加锁）</text>
+  <rect x="182" y="110" width="256" height="28" fill="#161614" stroke="#2A2A24"/>
+  <text x="310" y="129" text-anchor="middle" fill="#F4F1E6" font-size="11">③ 消息队列 / 套接字（内核代管）</text>
+  <path d="M134 41 L192 26" stroke="#8FA7B8" stroke-width="1.1"/>
+  <path d="M134 76 L156 76" stroke="#8FA7B8" stroke-width="1.1"/>
+  <path d="M134 124 L178 124" stroke="#8FA7B8" stroke-width="1.1"/>
+</svg>"""
+
+_RACE = """<svg viewBox="0 0 620 170" xmlns="http://www.w3.org/2000/svg" font-family="Microsoft YaHei, sans-serif">
+  <text x="14" y="18" fill="#A8A498" font-size="11">正确（串行）</text>
+  <rect x="14" y="26" width="90" height="22" fill="#161614" stroke="#2A2A24"/><text x="59" y="41" text-anchor="middle" fill="#F4F1E6" font-size="10">A 读 0</text>
+  <rect x="110" y="26" width="90" height="22" fill="#161614" stroke="#2A2A24"/><text x="155" y="41" text-anchor="middle" fill="#F4F1E6" font-size="10">A 写 1</text>
+  <rect x="206" y="26" width="90" height="22" fill="#161614" stroke="#2A2A24"/><text x="251" y="41" text-anchor="middle" fill="#F4F1E6" font-size="10">B 读 1</text>
+  <rect x="302" y="26" width="90" height="22" fill="#161614" stroke="#2A2A24"/><text x="347" y="41" text-anchor="middle" fill="#F4F1E6" font-size="10">B 写 2</text>
+  <text x="404" y="42" fill="#E7C246" font-size="11">结果 2 ✓</text>
+  <text x="14" y="86" fill="#A8A498" font-size="11">竞争（交错）</text>
+  <rect x="14" y="94" width="90" height="22" fill="#1C1B13" stroke="#E7C246"/><text x="59" y="109" text-anchor="middle" fill="#E7C246" font-size="10">A 读 0</text>
+  <rect x="110" y="94" width="90" height="22" fill="#1C1B13" stroke="#E7C246"/><text x="155" y="109" text-anchor="middle" fill="#E7C246" font-size="10">B 读 0</text>
+  <rect x="206" y="94" width="90" height="22" fill="#161614" stroke="#2A2A24"/><text x="251" y="109" text-anchor="middle" fill="#F4F1E6" font-size="10">A 写 1</text>
+  <rect x="302" y="94" width="90" height="22" fill="#161614" stroke="#2A2A24"/><text x="347" y="109" text-anchor="middle" fill="#F4F1E6" font-size="10">B 写 1</text>
+  <text x="404" y="110" fill="#E6392F" font-size="11">结果 1 ✗ 丢一次更新</text>
+  <path d="M59 66 L59 92" stroke="#6E6B61" stroke-width="1" stroke-dasharray="3 3"/>
+  <path d="M155 66 L155 92" stroke="#6E6B61" stroke-width="1" stroke-dasharray="3 3"/>
+</svg>"""
+
+_SEM = """<svg viewBox="0 0 620 160" xmlns="http://www.w3.org/2000/svg" font-family="Microsoft YaHei, sans-serif">
+  <rect x="24" y="60" width="150" height="44" rx="4" fill="#161614" stroke="#2A2A24"/>
+  <text x="99" y="87" text-anchor="middle" fill="#F4F1E6" font-size="12">进程调 down()</text>
+  <rect x="240" y="18" width="150" height="36" fill="#1C1B13" stroke="#E7C246"/>
+  <text x="315" y="41" text-anchor="middle" fill="#E7C246" font-size="11">s &gt; 0 → s = s−1 进入</text>
+  <rect x="240" y="108" width="150" height="36" fill="#161614" stroke="#2A2A24"/>
+  <text x="315" y="131" text-anchor="middle" fill="#F4F1E6" font-size="11">s = 0 → 睡眠排队</text>
+  <rect x="452" y="60" width="140" height="44" rx="4" fill="#161614" stroke="#2A2A24"/>
+  <text x="522" y="87" text-anchor="middle" fill="#F4F1E6" font-size="12">另一进程 up()</text>
+  <path d="M174 78 L236 38" stroke="#8FA7B8" stroke-width="1.2" marker-end="url(#s1)"/>
+  <path d="M174 86 L236 124" stroke="#8FA7B8" stroke-width="1.2" marker-end="url(#s1)"/>
+  <path d="M392 126 C430 150 470 120 452 92" stroke="#E7C246" stroke-width="1.2" fill="none" marker-end="url(#s2)"/>
+  <text x="404" y="150" fill="#6E6B61" font-size="9">up 唤醒一个等待者</text>
+  <defs>
+    <marker id="s1" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8 z" fill="#8FA7B8"/></marker>
+    <marker id="s2" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8 z" fill="#E7C246"/></marker>
+  </defs>
+</svg>"""
+
+_RING = """<svg viewBox="0 0 620 150" xmlns="http://www.w3.org/2000/svg" font-family="Microsoft YaHei, sans-serif">
+  <rect x="60" y="46" width="60" height="34" fill="#1C1B13" stroke="#E7C246"/>
+  <rect x="120" y="46" width="60" height="34" fill="#1C1B13" stroke="#E7C246"/>
+  <rect x="180" y="46" width="60" height="34" fill="#161614" stroke="#2A2A24"/>
+  <rect x="240" y="46" width="60" height="34" fill="#161614" stroke="#2A2A24"/>
+  <rect x="300" y="46" width="60" height="34" fill="#161614" stroke="#2A2A24"/>
+  <rect x="360" y="46" width="60" height="34" fill="#161614" stroke="#2A2A24"/>
+  <text x="90" y="68" text-anchor="middle" fill="#E7C246" font-size="10">item</text>
+  <text x="150" y="68" text-anchor="middle" fill="#E7C246" font-size="10">item</text>
+  <text x="210" y="68" text-anchor="middle" fill="#6E6B61" font-size="10">空</text>
+  <text x="270" y="68" text-anchor="middle" fill="#6E6B61" font-size="10">空</text>
+  <text x="330" y="68" text-anchor="middle" fill="#6E6B61" font-size="10">空</text>
+  <text x="390" y="68" text-anchor="middle" fill="#6E6B61" font-size="10">空</text>
+  <text x="60" y="36" fill="#A8A498" font-size="10">head（消费者取）</text>
+  <text x="350" y="36" fill="#A8A498" font-size="10">tail（生产者放）</text>
+  <text x="86" y="104" fill="#6E6B61" font-size="10">↑</text>
+  <text x="376" y="104" fill="#6E6B61" font-size="10">↑</text>
+  <text x="60" y="128" fill="#A8A498" font-size="10">empty = 4，full = 2，mutex = 1（N = 6 的示意）</text>
+</svg>"""
 
 LESSON = {
     "code": "CS340",
     "no": "L05",
-    "zh": "进程间通信与进程同步",
+    "zh": "进程间通信与同步",
     "en": "IPC and Process Synchronization",
     "out": "L05_进程间通信与同步_讲义.pdf",
-    "sub": "课件讲义 · 中英对照 ｜ 每个知识点标课件页码 ｜ 从竞争条件到五个互斥方案，再到三个经典问题",
+    "sub": "讲义 · 练习型 ｜ 代码 + 例题运算 + 结构图 ｜ 每个经典问题都能自己推一遍信号量的值",
     "meta": [
-        ("源课件", "L05_IPCandProcessSynchronization.pdf，148 页（Xuan Xie，MUST）"),
-        ("正文来源", "课件文本层直抽（判定 mixed，296 字符/页），未走 OCR"),
-        ("图", "按页裁自原 PDF，未重绘、未改图内文字"),
-        ("页码口径", "「课件 p.N」指源 PDF 的页序（共 148 页）"),
-        ("怎么读", "§1–§4 是问题（IPC 与竞争）；§5–§8 是五个互斥方案；§9–§13 是三个经典问题"),
-        ("原文在哪", "就是 CS340\\01_讲义\\L05_IPCandProcessSynchronization.pdf"),
+        ("源课件", "L05_IPCandProcessSynchronization.pdf，148 页（Xuan Xie，MUST；素材由 Prof. Subrota Kumar Mondal 提供）"),
+        ("本讲口径", "以代码与推演为主：每节至少一段可跑代码或一道带数的例题，理论只解释为什么这么写"),
+        ("页码口径", "「课件 p.N」指源 PDF 的页序（共 148 页），不是幻灯片编号"),
+        ("怎么读", "§1 三种做法 → §2 管道 → §3 竞争条件 → §4 临界区四条 → §5 信号量 PV → §6 生产者消费者 → §7 哲学家与读者写者"),
+        ("动手指令", "Linux / WSL 下 `gcc -pthread` 直接跑；§3 的竞争条件程序跑 5 次会看到不同的错误值"),
+        ("原文在哪", "CS340\\01_讲义\\L05_IPCandProcessSynchronization.pdf；本讲义只讲，不复制全文"),
     ],
+
     "sections": [
         {
-            "no": "0", "zh": "本讲导读", "en": "How to Use This Handout", "lec": None,
+            "no": "0", "zh": "本讲导读", "en": "How to Use This Handout",
+            "lec": "这讲是整门课最该动手的一讲：所有结论都能用一段 C 代码跑出来，或用一次 PV 推演算出来。理论只有一句——并发访问共享数据必须互斥。",
             "body": [
-                ("p", "<b>这一节能解决什么。</b>前几讲的进程都是各干各的，本讲让它们合作。合作带来两个新麻烦：怎么传数据（进程间通信，inter-process communication, IPC），以及怎么不打架（进程同步，process synchronization）。你会拿到一套判断标准（互斥的四条要求）、五个候选方案（关中断、锁变量、严格轮换、Peterson、信号量），以及三个必须会解的经典问题。"),
-                ("p", "<b>这一节不能解决什么。</b>线程级的互斥与条件变量在 L06（同一套思想换个库）；死锁的检测与恢复、银行家算法不在本讲；网络通信与消息队列的完整实现也不在范围。"),
-                ("p", "<b>前置知识。</b>L02 的 fork、L03 的信号、L04-01 的进程状态（阻塞/就绪）。代码都是伪 C，能读 <code>while</code> 与函数调用即可。"),
-                ("note", "本讲地图", "为什么通信（§1–§2）→ 共享内存与竞争（§3–§4）→ 互斥与临界区（§5）→ 五个方案（§6–§8）→ 生产者消费者（§9–§10）→ 哲学家（§11–§12）→ 读者写者（§13）。<br>一句话：<em>所有麻烦都来自「共享」；所有方案都在回答「怎么让不该同时的人不同时」</em>。"),
+                ("p", "<b>这一节能解决什么。</b>两个具体问题：① 两个进程同时改一个变量，为什么结果会少一点；② 写一个「生产者放、消费者取」的缓冲，怎样保证不覆盖、不空取、不饿死。"),
+                ("p", "<b>这一节不能解决什么。</b>不涉及分布式锁与网络同步；本讲的信号量只在单机内核里有效，跨机器要靠别的机制。"),
+                ("p", "<b>每节都有一道能算的题</b>：信号量当前值是多少、缓冲区里有几个、哪个进程在睡——算不出来就是没懂，别跳过。"),
+                ("note", "本讲地图", "三种 IPC（§1）→ 管道代码（§2）→ 竞争条件与丢更新（§3）→ 四条硬要求（§4）→ PV 推演（§5）→ 生产者消费者（§6）→ 哲学家死锁（§7）。"),
             ],
         },
         {
-            "no": "1", "zh": "为什么需要 IPC", "en": "Why IPC",
-            "lec": "课件开头问得很朴素：进程之间为什么要说话？先给一个你天天用的例子（<code>ls | less</code>），再回答一个反问：为什么不把两个程序合成一个？答案很硬——组合数是程序数的指数级。这节要带走的是「分工 + 通信」这个结构。",
+            "no": "1", "zh": "IPC 的三种做法", "en": "Three Ways to Communicate",
+            "lec": "先把「通道」画清楚，再记住每种通道的代价：管道最省事、共享内存最快、消息队列最省心。这节配一张结构图就够。",
             "body": [
-                ("q", "IPC means: Inter Process Communication … In the UNIX talk, you know (or heard) about the use of pipe. As a matter of fact, using pipe is one of ways for processes to communicate.", "课件 p.5"),
-                ("p", "课件 p.5 的例子是 <code>ls | less</code>：<code>ls</code> 的输出通过管道（pipe）交给 <code>less</code> 显示。课件 p.8 补充了双向管道的做法——两条管道各管一个方向，因为一条管道只能单向。"),
-                ("p", "课件 p.11–p.13 回答「为什么不合成一个程序」：组合数随程序数指数增长，合成一个不现实；反过来，IPC 带来三个好处——信息共享（information sharing）、计算加速（computational speedup，比如把归并排序拆给多个进程）、软件复用（software reusability，不用为 <code>ls | less</code> 再写一个程序）。"),
-                ("h3", "易错点"),
-                ("ul", [
-                    "<b>以为管道能双向传。</b>一条管道是单向的；双向要两条（课件 p.8）。",
-                    "<b>以为 IPC 只是「传数据」。</b>它还包含「同步双方动作」这件难得多的事（课件 p.16）。",
-                ]),
+                ("svg", _IPC, "图 1　三种 IPC 通道：管道（字节流）/ 共享内存（最快但需自己加锁）/ 消息队列（内核代管）"),
+                ("q", "As a matter of fact, using pipe is one of ways for processes to communicate.", "课件 p.5"),
+                ("code", "bash", "# 管道：shell 里的竖线就是一个 pipe\nls -l | wc -l          # 左边进程的标准输出接右边进程的标准输入\n\n# 共享内存：速度最快，但要自己加锁（没有锁就会出 §3 的竞争条件）\n", "管道由内核维护，你只负责接两头"),
+                ("table", ["做法", "数据怎么走", "谁保证互斥", "代价"],
+                 [["管道 pipe", "单向字节流，先进先出", "内核保证读写不越界", "只适合线性流水，双向要两根"],
+                  ["共享内存", "两块虚拟内存指向同一物理页", "<b>没人保证，要你自己加锁</b>", "最快，但最容易写错"],
+                  ["消息队列", "内核里排队，收发各一次系统调用", "内核保证", "每次收发都要跨界，最慢"]],
+                 ["16%", "34%", "26%", "24%"]),
+                ("eg", "两个进程要双向通信（各写各读），最少要几根管道？为什么？",
+                 ["一根管道只有一个方向：写端到读端",
+                  "要让两边同时写，就得有两根：A→B 一根、B→A 一根",
+                  "还要在 fork 后关掉各自不用的那一端，否则读到 EOF 会永远等不到"],
+                 "答案：两根。课件 p.8 给的就是这个六步做法：建两根 → fork → 父关要读的一端、子关要写的一端。"),
             ],
         },
         {
-            "no": "2", "zh": "两种做法与共享对象", "en": "Two Methodologies",
-            "lec": "IPC 在工程上只有两条路：消息传递（message passing，把数据交出去）与共享对象（shared object，大家看同一块东西）。本课程重点在后者。这节还有个实用判断：什么能共享？全局变量不行、局部变量不行，打开的文件可以。",
+            "no": "2", "zh": "竞争条件：为什么 count 会少一", "en": "Race Condition",
+            "lec": "这节必须自己跑一遍。程序会稳定地给出小于 200000 的结果——不是编译器坏了，是「读-加-写」三步被切开了。",
             "body": [
-                ("table", ["做法", "怎么做", "例子", "本课程"], [
-                    ["消息传递<span class=\"en\">message passing</span>", "把数据从一个进程送到另一个", "管道、MPI、套接字", "只作对比"],
-                    ["共享对象<span class=\"en\">shared object</span>", "多个进程访问同一块东西", "共享内存、普通文件", "重点讲"],
-                ], ["26%", "28%", "28%", "18%"]),
-                ("p", "课件 p.15 给了共享对象的判定表：全局变量能不能被别的进程共享？不能；局部变量？不能；已打开的文件？可以。原因在 L08/L09 讲过——每个进程有独立的地址空间，只有内核提供的对象（文件、共享内存段）才能跨进程。"),
-                ("fig", "L05_IPCandProcessSynchronization_p037_1.jpg", "竞争：结果取决于谁先访问共享资源——课件 p.37 原图"),
-                ("p", "课件 p.16 给 IPC 的正式定义：操作系统的机制，让多个进程互相通信；它包含两件事——同步它们的动作、管理共享数据。后半句才是本讲的重头。"),
-                ("h3", "易错点"),
-                ("ul", [
-                    "<b>以为全局变量能跨进程共享。</b>每个进程一份，fork 之后也是复制（课件 p.15）。",
-                    "<b>以为共享内存是「两块内存同步」。</b>它是同一块物理内存映射进多个进程。",
-                ]),
+                ("code", "c", "/* race.c —— 两个进程各把共享变量加 10 万次 */\n#include <stdio.h>\n#include <sys/mman.h>\n#include <sys/wait.h>\n#include <unistd.h>\n\nint main(void) {\n    int *count = mmap(NULL, sizeof(int), PROT_READ|PROT_WRITE,\n                      MAP_SHARED|MAP_ANONYMOUS, -1, 0);\n    *count = 0;\n    if (fork() == 0) {                       /* 子进程 */\n        for (int i = 0; i < 100000; i++) (*count)++;\n        _exit(0);\n    }\n    for (int i = 0; i < 100000; i++) (*count)++;   /* 父进程 */\n    wait(NULL);\n    printf(\"count = %d（期望 200000）\\n\", *count);\n    return 0;\n}\n/* gcc race.c -o race && ./race   —— 多跑几次，结果常常不到 200000 */", "跑五次，记下每次的数字，这就是竞争条件的证据"),
+                ("svg", _RACE, "图 2　同一个 ++ 在两种执行顺序下的结果：串行得 2，交错得 1"),
+                ("p", "`(*count)++` 在机器上至少三条指令：读进寄存器、加一、写回内存。两条路径一旦在「读」之后、「写」之前交错，后写的那次就把前一次的结果盖掉——这叫<b>丢失更新</b>（lost update）。课件 p.44 把这类「结果取决于调度时机」的毛病统一叫<b>竞争条件</b>（race condition）。"),
+                ("eg", "初值 count = 0，A、B 各执行一次 `count++`。列出三种可能的交错与最终值。",
+                 ["① 完全串行：A 读 0 → A 写 1 → B 读 1 → B 写 2 → 结果 2",
+                  "② A 读完被切走，B 读 0 → A 写 1 → B 写 1 → 结果 1（丢一次）",
+                  "③ B 先读 0，A 写 1，B 写 1 → 结果仍为 1（同样丢一次）"],
+                 "答案：结果可能是 2 或 1。<b>只要交错发生在「读」与「写」之间，就丢一次更新</b>；这就是为什么单次加法看着没错、循环十万次就明显少。"),
+                ("eg", "两个进程各加 10 万次，实测 13 万–17 万之间浮动。用上面的模型解释「为什么不是固定值」。",
+                 ["每次交错丢更新的次数取决于调度时机，而调度由内核决定，不可预测",
+                  "循环次数越多，可交错的点越多，丢失次数越多",
+                  "所以结果是一个分布，不是固定值"],
+                 "答案：因为交错的次数由调度器决定。这恰好说明竞争条件是「不确定的正确性」，不能靠运气，只能靠互斥。"),
             ],
         },
         {
-            "no": "3", "zh": "共享内存与「不同步」", "en": "Shared Memory and Out-of-Sync",
-            "lec": "这节先给共享内存下定义（内核创建、全系统可见、有权限保护），再指出一个关键差别：管道有内核帮你协调，共享内存<b>没有</b>。这个差别就是后面所有问题的根源——没有人管顺序，两个进程就会互相踩。",
+            "no": "3", "zh": "临界区：四条硬要求怎么用", "en": "Critical Section Requirements",
+            "lec": "四条要求不是背书，是判据：拿任何一个「互斥方案」来，逐条问它过不过。用一道题练这个判据。",
             "body": [
-                ("q", "Shared memory is: a piece of memory created by the kernel; visible by all the processes in the system; accessible by all the processes in the system. But, there is a set of \"rwx\" type of permissions protecting the shared memory.", "课件 p.19"),
-                ("p", "课件 p.19 还点出一句对比：管道只对两个进程可见，共享内存对整个系统可见。课件 p.22 举了浏览器的例子：多个标签页共享书签数据，靠的就是共享内存这类机制。"),
-                ("p", "课件 p.23 把问题摆出来：管道的情况下，内核提供了访问控制与协调；共享内存<b>没有这种控制</b>。如果进程没协调好，一个在加 10、一个在减 10，结果就无法预料。"),
-                ("p", "课件 p.24 给进程同步（process synchronization）的定义：让进程以这样的方式共享系统资源——对共享数据的并发访问被处理，从而把数据不一致的机会降到最低；要维持数据一致性，就需要保证协作进程同步执行的机制。"),
-                ("h3", "易错点"),
-                ("ul", [
-                    "<b>以为共享内存自带同步。</b>它只有权限保护，没有顺序保证（课件 p.23）。",
-                    "<b>把「同步」理解为「同时」。</b>这里恰好相反：是让它们别同时。",
-                ]),
+                ("p", "课件 p.44–p.45 定义：临界区（critical section）是<b>访问共享对象的代码段</b>；入口要声明「我开始用」，出口要声明「我用完了」。注意它是代码段，不是共享对象本身。"),
+                ("table", ["要求", "课件原文（p.50–p.51）", "违反了会怎样"],
+                 [["① 互斥", "No two processes can be simultaneously inside their critical sections", "两个进程同时改，丢更新"],
+                  ["② 不假设速度与 CPU 数", "No assumptions can be made about the speeds and the numbers of CPUs", "在单核能跑、多核就崩"],
+                  ["③ 区外不许阻塞别人", "No process running outside its critical region can cause other processes to be blocked", "全班都堵住，没人能进"],
+                  ["④ 不许无限等待", "No process has to wait forever in order to enter its critical region", "饿死（starvation）"]],
+                 ["14%", "56%", "30%"]),
+                ("code", "c", "/* 用「严格轮换」当反例：两个进程必须交替进临界区 */\nturn = 0;                 /* 0 表示轮到 A，1 表示轮到 B */\n\n/* 进程 A */                    /* 进程 B */\nwhile (turn != 0) ;             while (turn != 1) ;\ncritical_section();             critical_section();\nturn = 1;                       turn = 0;\n\n/* 问题：A 跑完一次后如果不再进，B 也得等 A 把 turn 交出来吗？\n   —— 是的，这违反要求 ③：区外的 A 把 B 堵住了。 */", "课件 p.86 的对比表把「严格轮换」判成 Yes and No 就是这个原因"),
+                ("eg", "判断：严格轮换违反了哪一条？如果 A 在临界区里挂了（不再执行），B 会怎样？",
+                 ["违反要求 ③：A 在临界区外（跑完了，不再进来）却让 B 无限等待",
+                  "A 一旦挂掉，B 永远等 turn 变成 1 → 也违反要求 ④（无限等待）"],
+                 "答案：同时踩 ③ 和 ④。所以课件把它标成「Yes and No」——互斥是有的，但可用性不合格。"),
             ],
         },
         {
-            "no": "4", "zh": "竞争条件：两次执行两个结果", "en": "Race Condition",
-            "lec": "这节用一个可以手算的例子把问题钉死：共享变量是 10，A 加 10、B 减 10。两种执行顺序得到两个不同结果（10 或 20 或 0）。同一个程序、同一组输入，结果却取决于调度——这就是竞争条件。",
+            "no": "4", "zh": "信号量：PV 怎么推", "en": "Semaphore and PV",
+            "lec": "这节是全讲的工具。只要会推 s 值，后面三个经典问题都是同一套算术：down 前先看 s 是不是 0。",
             "body": [
-                ("p", "课件 p.25–p.31 走执行序列一：A 先跑完（读 10 → 加 10 → 写 20），B 再跑（读 20 → 减 10 → 写 10），最终 <b>10</b>。这个过程是正确的。"),
-                ("p", "课件 p.32–p.36 走执行序列二：A 读了 10 就被切换走，B 读到 10、减 10、写 0；A 回来继续用自己本地的 10+10=20 写回，最终 <b>20</b>；若顺序再变还可能得到 <b>0</b>——课件的结论是「最终值由执行序列决定」。"),
-                ("q", "A race condition means the outcome of an execution depends on the particular order in which the shared resource is accessed. Remember: race condition is always a bad thing.", "课件 p.37"),
-                ("p", "课件 p.37 还补了一句现实：竞争条件的调试毫无乐趣——99% 的执行没问题、1% 出问题。课件 p.38 给出解法方向：互斥（mutual exclusion）——「我在用它的时候你不能用，反之亦然」。"),
-                ("h3", "易错点"),
-                ("ul", [
-                    "<b>以为结果只可能是 10 或 20。</b>换一种交错还可能得到 0（课件 p.39 标注为 0 或 20）。",
-                    "<b>以为加了 <code>sleep</code> 就没事。</b>只降低概率，不消除（§6 的严格轮换就是教训）。",
-                ]),
+                ("code", "c", "/* 课件 p.78 的原版伪代码：down / up 都是原子操作 */\nvoid down(semaphore *s) {\n    if (*s > 0) *s = *s - 1;\n    else        sleep();          /* 值为 0 就睡，醒来后重试 */\n}\n\nvoid up(semaphore *s) {\n    if (*s == 0) wakeup_proc();   /* 有人睡着就叫醒一个 */\n    *s = *s + 1;\n}", "原子 = 中间不会被切换；只有 sleep 那一刻算「暂停并重试」"),
+                ("svg", _SEM, "图 3　down / up 的两条路径：s>0 直接进，s=0 睡排队；up 负责叫醒一个并让 s 加 1"),
+                ("p", "初值决定身份：初值 1 = <b>二元信号量</b>（当锁用）；初值 N = <b>计数信号量</b>（当「还剩几个空位」用）。这一个区别后面两节都会用到。"),
+                ("eg", "s 初值 1。进程 A、B 依次执行：A.down → B.down → A.up → B 醒来重试 down。逐步写出 s 的值和谁在睡。",
+                 ["A.down：s = 1 > 0 → s = 0，A 进临界区",
+                  "B.down：s = 0 → B 睡眠排队",
+                  "A.up：有人在睡 → 唤醒 B；s = 0 + 1 = 1",
+                  "B 醒来重试 down：s = 1 > 0 → s = 0，B 进临界区"],
+                 "答案：结束时 s = 0，B 在临界区里。注意 up 的顺序是「先唤醒、再加一」，否则被唤醒的进程会看到 s 仍是 0 而再次睡下。"),
+                ("eg", "若把 up 写成「先加一再唤醒」，上面第 3 步会发生什么？",
+                 ["s = 0 + 1 = 1，然后唤醒 B",
+                  "B 醒来 down：s = 1 > 0 → s = 0，能进 —— 这次侥幸没错",
+                  "但若此时还有第三个进程 C 抢在 B 之前 down，C 拿到 s=0，B 又睡回去"],
+                 "答案：看起来仍能跑，但在竞争更激烈时会多一次无谓的睡眠/唤醒，甚至在「唤醒又立即被抢」下造成饿死。课件 p.78 的顺序不是随意写的。"),
             ],
         },
         {
-            "no": "5", "zh": "互斥、临界区与四条要求", "en": "Mutual Exclusion and Critical Section",
-            "lec": "互斥是目标，临界区是实现手段。这节要分清三件事：竞争条件是问题、互斥是要求、临界区是要被保护的那段代码。再记住四条要求（互斥、不假设速度与核数、区外不能阻塞别人、不能饿死），后面每个方案都拿这四条去量。",
+            "no": "5", "zh": "生产者-消费者：算空位、算满位", "en": "Producer-Consumer",
+            "lec": "这节只做两件事：读懂课件那三行 down/up 的顺序，然后算出一个具体状态下三个信号量各是多少。算得出来，题目就不会错。",
             "body": [
-                ("p", "课件 p.41 给互斥定义：若一个进程正在访问共享对象，其他进程必须被排除在访问之外。实现靠临界区（critical section / critical region）：程序中访问共享对象的那段代码。课件用一张图标出「进入区（entry）」「临界区」「退出区（exit）」。"),
-                ("p", "课件 p.43 强调：不同进程有各自的临界区，里面的任务可以完全不同（A 是自增、B 是自减），但都需要一个进入、一个退出。课件 p.44 用「占用/空闲」的牌子做现实类比。"),
-                ("p", "课件 p.45–p.46 讲两条实用规则：临界区是<b>代码段</b>不是共享对象；临界区应当尽量小（否则很容易互相阻塞）；临界区里可以包含多个共享对象——是否需要互斥，看两个进程临界区里共享对象集合的交集是否为空。"),
-                ("table", ["要求", "内容", "为什么"], [
-                    ["要求 1", "不能有两个进程同时在临界区", "这就是互斥本身"],
-                    ["要求 2", "不能假设速度与 CPU 个数", "否则换个机器就失效"],
-                    ["要求 3", "区外运行的进程不能阻塞别人", "否则会出现「谁都没进临界区，但大家都被挡」"],
-                    ["要求 4", "不能有进程永远等下去", "不能饿死"],
-                ], ["14%", "44%", "42%"]),
-                ("h3", "易错点"),
-                ("ul", [
-                    "<b>把临界区当成「共享对象的别名」。</b>它是代码段（课件 p.45）。",
-                    "<b>把临界区写得很大「更安全」。</b>越大越容易互相阻塞。",
-                ]),
+                ("code", "c", "/* 课件 p.95 原版（N = 100，缓冲中最多 100 个） */\n#define N 100\ntypedef int semaphore;\nsemaphore mutex = 1;      /* 互斥：同一时刻只有一个在动缓冲区 */\nsemaphore empty = N;      /* 空位数，初值 N */\nsemaphore full  = 0;      /* 已放数，初值 0 */\n\nvoid producer(void) {          /* 生产者 */\n    int item;\n    while (TRUE) {\n        item = produce_item();\n        down(&empty);          /* 先问「还有空位吗」 */\n        down(&mutex);          /* 再拿锁 */\n        insert_item(item);\n        up(&mutex);            /* 先放锁 */\n        up(&full);             /* 再报告「多了一个」 */\n    }\n}\n\nvoid consumer(void) {          /* 消费者 */\n    int item;\n    while (TRUE) {\n        down(&full);\n        down(&mutex);\n        item = remove_item();\n        up(&mutex);\n        up(&empty);\n        consume_item(item);\n    }\n}", "课件 p.95；顺序是重点：先 empty/full，后 mutex"),
+                ("svg", _RING, "图 4　环形缓冲：head 由消费者推、tail 由生产者推；两把「计数器」盯住空位与实位"),
+                ("eg", "N = 100，初始 empty = 100、full = 0、mutex = 1。生产者连续放 3 个、消费者取 1 个之后，三个值各是多少？",
+                 ["生产 3 次：每次 down(empty) 减 1、up(full) 加 1 → empty = 97、full = 3",
+                  "消费 1 次：down(full) 减 1、up(empty) 加 1 → empty = 98、full = 2",
+                  "mutex 每次都 up 回去了 → mutex = 1"],
+                 "答案：empty = 98、full = 2、mutex = 1。三者之和恒为 N + 1 = 101，可以用这个等式自查。"),
+                ("eg", "缓冲已满（empty = 0）时生产者再调一次 down(&empty) 会怎样？消费者取走一个后谁被唤醒？",
+                 ["生产者的 down(&empty) 看到 s = 0 → 睡眠排队，不进入临界区",
+                  "消费者取走一个 → up(&empty)：先唤醒等待中的生产者，再 s = 0 + 1 = 1",
+                  "生产者被唤醒后重试 down → s = 1 > 0 → s = 0，进临界区插入"],
+                 "答案：生产者睡、被消费者唤醒。这也是课件 p.90 说的「requirement #1」：满了要让生产者睡，取走一个就把它叫醒。"),
+                ("eg", "如果把两行 down 的顺序写反（先 down(&mutex) 再 down(&empty)），会出什么问题？",
+                 ["生产者拿到 mutex 后发现 empty = 0 → 睡在 down(&empty) 里，<b>mutex 没释放</b>",
+                  "消费者要取数据必须先拿 mutex，但锁在生产者的手里 → 消费者永远进不去",
+                  "两边互相等 = 死锁"],
+                 "答案：死锁。规则一句话：<b>先拿「资源计数」、后拿「互斥锁」</b>；反过来就会带着锁睡觉。"),
             ],
         },
         {
-            "no": "6", "zh": "方案一到三：关中断、锁变量、严格轮换", "en": "Proposals 1-3",
-            "lec": "这三个方案最好连起来看，因为它们各自死在一个不同的地方：关中断可行但不能给用户用；锁变量看起来最直观，却根本不工作；严格轮换能工作但太低效，还违反第三条要求。看完这三个，你会明白「直觉不管用」是这门课的常态。",
+            "no": "6", "zh": "哲学家与读者写者：死锁怎么破", "en": "Philosophers and Readers-Writers",
+            "lec": "这两道经典题各考一件事：哲学家考「死锁的四个必要条件」，读者写者考「读写比例与公平」。都用信号量算给你看。",
             "body": [
-                ("p", "方案一（课件 p.52）：在临界区内<b>关中断</b>，这样就不会发生上下文切换，别的进程自然跑不了。课件 p.52 判定：正确，但不是一个有吸引力的方案——让用户程序随意开关中断太危险，程序员疏忽一次就是灾难。它只在内核里（如调度器）使用。"),
-                ("p", "方案二（课件 p.53）：用一个共享的 <code>lock</code> 变量，<code>while(lock == 1);</code> 忙等，进入后置 1，离开置 0。优点：简单、与语言无关、任何平台可用。缺点：忙等浪费 CPU。判定：<b>完全不能工作</b>——因为「检查 + 置位」这两步之间可能被打断，两个进程都可能看到 0 然后都进去。"),
-                ("p", "方案三（课件 p.54–p.56）：严格轮换（strict alternation），共享一个 <code>turn</code> 变量，进程 0 等 <code>turn != 0</code>、临界区后置 <code>turn = 1</code>，进程 1 对称。它能工作，但两个问题：忙等浪费 CPU；顺序太死——如果进程 0 想连续进两次临界区就不可能，这会<b>违反要求 3</b>（区外的进程阻塞了别人）。"),
-                ("h3", "易错点"),
-                ("ul", [
-                    "<b>以为「检查再置位」是原子的。</b>不是，这正是方案二失败的原因。",
-                    "<b>以为严格轮换只是「公平」。</b>它恰好会让想让路的那个进程挡路（课件 p.56）。",
-                ]),
-            ],
-        },
-        {
-            "no": "7", "zh": "方案四：Peterson 与忙等的代价", "en": "Peterson Solution",
-            "lec": "Peterson 是两进程的经典解法：用 <code>interested[]</code> 表示「我想进」，用 <code>turn</code> 表示「谁该让」。它的精髓在一个字：让。两个都想进时，后声明 turn 的那个等。这节还要看忙等的两个代价——浪费 CPU，以及更隐蔽的优先级反转。",
-            "body": [
-                ("p", "课件 p.57 的代码：<code>enter_region(process)</code> 里先把自己标为 interested、再把 turn 设为自己，然后 <code>while (turn == process &amp;&amp; interested[other] == TRUE);</code> 忙等；<code>leave_region()</code> 只做一件事——把 interested 清掉。"),
-                ("p", "课件 p.58 用两句人话总结这段代码：「我想进临界区时才等」与「虽然轮到我了，我让另一个进程先进」——后半句就是「绅士」精神，也正是它能同时满足互斥与前进的关键。"),
-                ("p", "课件 p.62 指出限制：Peterson 只适用于<b>两个进程</b>，而且要交替执行临界区与其余部分。课件 p.63 讲忙等的两个问题：显性的浪费 CPU；隐性的<b>优先级反转</b>（priority inversion）——低优先级进程在临界区里，高优先级进程在门口忙等，结果高优先级反而占着 CPU 干无用的事，低优先级又长时间拿不到 CPU。"),
-                ("fig", "L05_IPCandProcessSynchronization_p047_1.jpg", "临界区的三段：进入、临界区、退出——课件 p.47 原图"),
-                ("p", "课件 p.64 给出路：别忙等，改成阻塞——<code>sleep()</code> 挂起自己，<code>wakeup()</code> 唤醒指定进程。这两个调用就是下一节信号量的地基。"),
-                ("h3", "易错点"),
-                ("ul", [
-                    "<b>以为 Peterson 能用于任意多个进程。</b>它只保证两进程（课件 p.62）。",
-                    "<b>忽略优先级反转。</b>它比「浪费 CPU」严重得多，是实时系统的经典坑（课件 p.63）。",
-                ]),
-            ],
-        },
-        {
-            "no": "8", "zh": "方案五：信号量", "en": "Semaphore",
-            "lec": "信号量是全讲的中心。把它想成一个整数加两个原子操作：<code>down</code>（要资源，没资源就睡）与 <code>up</code>（还资源，顺便叫醒一个）。关键在于「原子」——这两个函数执行期间不会被打断（除了内部那次 sleep）。这节还要看清一个陷阱：计数初值决定它是锁还是计数器。",
-            "body": [
-                ("p", "课件 p.65 用现实类比：铁路臂板信号机（semaphore），告诉司机什么时候停、什么时候走。编程里它是一个数据类型，可以想象成整数，但实现上不是。课件 p.66 注明发明者是 Edsger W. Dijkstra。"),
-                ("p", "课件 p.68 给两个操作的朴素实现：<code>down(s)</code>——若值大于 0 就减 1，否则 <code>sleep()</code>；<code>up(s)</code>——若值为 0 就唤醒某个睡眠进程，然后把值加 1。课件 p.69 用 <code>s = 1</code> 的多进程例子演示互斥：初始 1，第一个进程 down 后变 0 并进入临界区，其余进程 down 时睡；第一个 up 时唤醒其中一个。"),
-                ("p", "课件 p.70–p.74 专讲「为什么要原子」：如果 <code>down</code> 的「检查」与「减一」之间能被切换，两个进程就可能都看到 1 而都减成 0——互斥就破了。原子操作的定义是「要么全部完成，要么一条都没完成」；<code>down</code> 内部唯一允许打断的地方是那个 <code>sleep()</code>，而且醒来后会从记录点重新开始，最终只有一个进程能成功 down。"),
-                ("fig", "L05_IPCandProcessSynchronization_p065.jpg", "信号量：现实里的臂板信号机与编程里的数据类型——课件 p.65 原图"),
-                ("p", "课件 p.75 区分两种信号量：值只能是 0 或 1 的叫二值信号量（binary semaphore，当锁用）；值可以大于 0 的叫计数信号量（counting semaphore，当计数器用）。课件 p.76 的总结表给五个方案打分：关中断「可行但不该给用户」、锁变量「不工作」、严格轮换「可行但违反要求」、Peterson「可行但忙等不好」、信号量「最好」，从此只讲信号量。"),
-                ("h3", "易错点"),
-                ("ul", [
-                    "<b>以为 down 只是减一。</b>没资源时它会睡眠，这是同步的入口。",
-                    "<b>把二值信号量与计数信号量混用。</b>计数信号量的初值就是「资源总数」。",
-                ]),
-            ],
-        },
-        {
-            "no": "9", "zh": "生产者消费者：三个信号量", "en": "Producer-Consumer",
-            "lec": "这是第一个必须会手写的经典解。核心是分清三个信号量各自的职责：<code>mutex</code> 管互斥（初值 1），<code>empty</code> 与 <code>full</code> 管同步（初值 N 与 0）。记住一条铁律：<b>先要名额，再进临界区</b>，顺序反了就是死锁。",
-            "body": [
-                ("p", "课件 p.79 定义问题（也叫有界缓冲区问题，bounded-buffer problem）：一个大小限为 N 的缓冲区、一个生产者（每次往尾部写一个单位）、一个消费者（每次从头部取一个单位）。课件 p.80 解释为什么不能只用管道：管道只管两端，2 个生产者 + 2 个消费者时内核帮不了你。"),
-                ("p", "课件 p.81–p.83 列三条需求：缓冲满时生产者睡、消费者取走后叫醒它；缓冲空时消费者睡、生产者放入后叫醒它；以及缓冲区是共享对象，必须互斥。"),
-                ("p", "课件 p.85 讲朴素解法的毛病：用共享变量 <code>count</code> 加 sleep/wakeup，会出现<b>信号丢失</b>——消费者读到 count 为 0 但还没睡下去，生产者的 wakeup 就发空了，之后消费者真睡了就没人叫。于是改用信号量。"),
-                ("p", "课件 p.86 的完整代码：<code>mutex = 1</code>、<code>empty = N</code>、<code>full = 0</code>；生产者 <code>down(&amp;empty); down(&amp;mutex); insert_item(); up(&amp;mutex); up(&amp;full);</code>；消费者 <code>down(&amp;full); down(&amp;mutex); remove_item(); up(&amp;mutex); up(&amp;empty);</code>。"),
-                ("table", ["信号量", "初值", "职责", "去掉会怎样"], [
-                    ["mutex", "1", "互斥（保护缓冲区）", "两个进程同时改缓冲区"],
-                    ["empty", "N", "空位数量（同步）", "满时还往里写"],
-                    ["full", "0", "已有数量（同步）", "空时还去取"],
-                ], ["20%", "12%", "34%", "34%"]),
-                ("p", "课件 p.89–p.91 也逐条回答「能不能去掉」：mutex 保护临界区入口，不能去；empty 与 full 是同步用的计数器，<code>empty + full = N</code> 恒成立，也不能去。"),
-                ("h3", "易错点"),
-                ("ul", [
-                    "<b>把 mutex 初值写成 0。</b>那就谁都进不去——初值 1 表示「锁是开的」。",
-                    "<b>先 down(mutex) 再 down(empty)。</b>顺序反了会死锁（§10 细讲）。",
-                ]),
-            ],
-        },
-        {
-            "no": "10", "zh": "死锁：把两行对调就出事", "en": "Deadlock",
-            "lec": "这节是全讲最值钱的一个「如果」。课件只改一件事——把生产者里的 <code>down(&amp;empty)</code> 与 <code>down(&amp;mutex)</code> 对调——就造出了一个死锁。推演过程要看懂：缓冲区满、生产者拿着 mutex 去等 empty、消费者在门口等 mutex。",
-            "body": [
-                ("p", "前提（课件 p.93）：生产者已经跑了很久，于是 <code>full = N</code>、<code>empty = 0</code>、<code>mutex = 1</code>。"),
-                ("p", "对调后的生产者（课件 p.94–p.96）：第一步 <code>down(&amp;mutex)</code> 成功，<code>mutex</code> 变 0；第二步 <code>down(&amp;empty)</code> 因 <code>empty = 0</code> 而睡。消费者此时来：<code>down(&amp;full)</code> 成功（full 从 N 变 N−1），但 <code>down(&amp;mutex)</code> 被挡——mutex 还在生产者手里。于是双方各自握着对方要的东西，谁也不动。"),
-                ("q", "This scenario is called a deadlock, and it is happened when a circular wait happened. The producer is waiting for the consumer to \"up\" the \"empty\" semaphore, and the consumer is waiting for the producer to \"up\" the \"mutex\" semaphore.", "课件 p.97"),
-                ("p", "课件 p.98 的结论：所有进程都无法推进。课件 p.99–p.100 用「两人都不肯先出厕所」的现实例子解释死锁——各持一半、互不相让。"),
-                ("fig", "L05_IPCandProcessSynchronization_p099.jpg", "死锁的现实类比：双方各持一半资源，互相等待——课件 p.99 原图"),
-                ("h3", "易错点"),
-                ("ul", [
-                    "<b>以为对调只影响性能。</b>它会直接死锁（课件 p.97）。",
-                    "<b>只记住「先 mutex」这一条。</b>真正的原因是「持锁去等另一个资源」这个模式；任何地方这么做都危险。",
-                ]),
-            ],
-        },
-        {
-            "no": "11", "zh": "哲学家问题：朴素解为什么死锁", "en": "Dining Philosophers",
-            "lec": "五个哲学家、五根筷子、每人要两根才能吃。朴素解是每人先拿左边再拿右边——课件用一张图把死锁摆出来：五个人各拿一根，全在等另一根。这节要带走的是「对称 + 贪心 = 死锁」这个结论。",
-            "body": [
-                ("p", "课件 p.105 定义问题：5 个哲学家、5 盘面、5 根筷子；每人要两根筷子才能吃；目标是设计一个同步协议，既不死锁也不饿死。课件 p.106 说面可以认为永远够，真正稀缺的是筷子（共享对象）。"),
-                ("p", "课件 p.107 给建模：哲学家 P<sub>i</sub> 拿第 i 根与第 ((i+1) % N) 根筷子——也就是「左手的」与「右手的」。课件 p.109–p.110 用图对比合法与非法情形：一个人吃东西时，他两边的筷子都不能被别人拿。"),
-                ("p", "课件 p.112 的朴素解：把每根筷子做成初值为 1 的信号量，<code>take_chopstick(i)</code> 就是 <code>down(chopstick[i])</code>，拿两根就是连着 down 两次。它能保证互斥，但课件 p.113 的图直接标出 <b>DEADLOCK</b>：五个哲学家各拿到左手那根，然后全部在等右手。"),
-                ("p", "课件 p.114–p.118 试了几种补救：拿到第一根后若拿不到第二根就放下、随机睡一会再试。课件 p.117 说这种随机做法会以<b>饥饿</b>收场——进程还在跑，但做不出任何有用的进展；课件 p.118 承认随机睡「有时能行，但不能保证」，于是要找确定性解。"),
-                ("h3", "易错点"),
-                ("ul", [
-                    "<b>以为「先放下再重试」能解决。</b>它能破死锁，但会饿死某些哲学家（课件 p.117）。",
-                    "<b>把饥饿与死锁混为一谈。</b>死锁是谁都不动；饥饿是有人在动但总轮不到它。",
-                ]),
-            ],
-        },
-        {
-            "no": "12", "zh": "哲学家的确定性解", "en": "A Deterministic Solution",
-            "lec": "这个解法的思路值得学：不再让每个人自己抢筷子，而是让每个人先「声明想吃」，再由一个受保护的检查函数决定谁能吃、该叫醒谁。于是没有「各持一半」的中间状态——要么吃、要么睡在等自己的信号量上。",
-            "body": [
-                ("p", "课件 p.119 给数据结构：<code>int state[N]</code> 记录每人状态（THINKING / HUNGRY / EATING）、<code>mutex = 1</code> 保护这张表、<code>semaphore s[N]</code> 每人一个私人信号量。"),
-                ("p", "取筷子（课件 p.121）：<code>down(&amp;mutex)</code> → 把自己的 state 设为 HUNGRY → 调 <code>test(i)</code> → <code>up(&amp;mutex)</code> → <code>down(&amp;s[i])</code>。<b>关键在最后一步</b>：如果 test 判定你能吃，它会先 <code>up(&amp;s[i])</code>，所以这里的 down 会立刻通过；若不能吃，就睡在自己的 s[i] 上。"),
-                ("p", "test 函数（课件 p.121）：若自己是 HUNGRY、且左右邻都不是 EATING，就把自己设为 EATING 并 <code>up(&amp;s[i])</code>。放筷子（课件 p.121）：设回 THINKING，然后对左、右两个邻居各调一次 test——因为他们可能正因为你在吃而睡着。"),
-                ("fig", "L05_IPCandProcessSynchronization_p120.jpg", "确定性解：state 表 + 每人一个信号量，test 决定谁能吃——课件 p.120 原图"),
-                ("p", "课件 p.124–p.131 用一组图逐帧演示：0 号先吃；1 号想吃但被挡（3 号在吃？按课件帧序为对称情形），睡在 s[1]；等旁边的人放下筷子时调用 test 把它叫醒。课件 p.132 的结论：这个问题本质是互斥加同步，随机算法会饿死，而确定性算法既不死锁也不饿死。"),
-                ("h3", "易错点"),
-                ("ul", [
-                    "<b>以为 test 要在锁外调用。</b>必须在 mutex 内，否则 state 表会被同时改。",
-                    "<b>忘了放筷子后要 test 两个邻居。</b>不测试就没人叫醒那些在等的人。",
-                ]),
-            ],
-        },
-        {
-            "no": "13", "zh": "读者写者问题", "en": "Readers and Writers",
-            "lec": "最后一个是数据库场景：读可以多人同时，写必须独占。它的难处不在互斥，而在「并发」——第一个读者来上锁、最后一个读者走解锁，中间的读者自由进出。这节要带走的是这个「计数 + 首尾负责」的技巧。",
-            "body": [
-                ("p", "课件 p.135–p.138 讲规则：读者可以并发读；写者要独占，防止读到不一致的数据；写者写的时候既禁止其它写者也禁止读者；读者在读时，写者必须等所有读者读完。"),
-                ("p", "课件 p.139 把它拆成三个问题：互斥（数据库是共享对象，读写不能同时）、同步（读读可并发、读写互斥、写写互斥）、并发（多个读者的同时访问必须被保证）。"),
-                ("p", "课件 p.140–p.141 给思路：读者与写者共用一个信号量 <code>db</code>；但为了并发，由<b>第一个</b>到达的读者去 <code>down(&amp;db)</code>、由<b>最后一个</b>离开的读者去 <code>up(&amp;db)</code>，中间用 <code>read_count</code> 计数。"),
-                ("p", "课件 p.142–p.144 的伪代码：写者是 <code>down(&amp;db); write_database(); up(&amp;db);</code>；读者用 <code>mutex</code> 保护 <code>read_count</code>，第一个读者 down db，最后一个读者 up db。课件 p.146 的两条备注很重要：这个解不限制读者与写者的人数；它<b>偏向读者</b>——写者可能长期得不到机会，若要写者优先得改设计。"),
-                ("p", "课件 p.147 收束全讲的三个问题：共同点是多进程、需要同步才能产生有用吞吐、资源被共享；共同要求是保证互斥、维持正确的同步、不饿死、不死锁。"),
-                ("fig", "L05_IPCandProcessSynchronization_p145.jpg", "第一个读者上锁、最后一个读者解锁——课件 p.145 原图"),
-                ("h3", "易错点"),
-                ("ul", [
-                    "<b>让每个读者都去 down(db)。</b>那就没有并发了，退化成互斥。",
-                    "<b>忘记用 mutex 保护 read_count。</b>计数本身会成为新的竞争条件。",
-                ]),
+                ("code", "c", "/* 5 个哲学家、5 根叉，每人先拿左手、再拿右手 */\n#define LEFT  (i)\n#define RIGHT ((i + 1) % 5)\n\na = 0; b = 0; c = 0; d = 0; e = 0;   /* 五根叉，1 表示被拿起 */\n\nvoid philosopher(int i) {\n    while (TRUE) {\n        down(&fork[LEFT]);            /* 先拿左手 */\n        down(&fork[RIGHT]);           /* 再拿右手 */\n        eat();\n        up(&fork[LEFT]);\n        up(&fork[RIGHT]);\n        think();\n    }\n}", "死锁版本：五个都先拿左叉"),
+                ("p", "五个人同时执行到第一个 down：各自拿到左手的叉，桌上五根叉全被占。接着每个人都调第二个 down —— 等的是别人手里的那根。<b>没人能进 eat()，也没人放手</b>，这就是死锁（课件 p.6 把它列为经典问题，p.86 的对比表也强调同步方案必须避开它）。"),
+                ("eg", "上面这版为什么会死锁？给出两种可行的破法，并说明为什么有效。",
+                 ["原因：5 人各持 1 把、再等 1 把，形成环（循环等待）",
+                  "破法一：只允许 4 人同时上桌（计数信号量初值 4）→ 总有一人能拿到两把，环被打断",
+                  "破法二：按奇偶顺序拿（奇数先左后右，偶数先右后左）→ 相邻两人抢叉顺序相反，不会成环"],
+                 "答案：两种都有效，因为它们都破坏了「循环等待」这一条。破法三（用一把大锁把整桌锁住）也有效，但把并行度压成 1，代价最大。"),
+                ("code", "c", "/* 读者-写者：读者可并发，写者独占 */\nint reader_count = 0;\nsemaphore mutex   = 1;   /* 保护 reader_count */\nsemaphore write   = 1;   /* 写者独占 */\n\nvoid reader(void) {\n    down(&mutex);\n    reader_count++;\n    if (reader_count == 1) down(&write);   /* 第一个读者把写者挡住 */\n    up(&mutex);\n    read_data();\n    down(&mutex);\n    reader_count--;\n    if (reader_count == 0) up(&write);     /* 最后一个读者放开写者 */\n    up(&mutex);\n}", "注意：只有「第一个」和「最后一个」读者碰 write 这个信号量"),
+                ("eg", "已有 3 个读者在读时，一个写者来了会怎样？再来 1 个读者呢？",
+                 ["写者 down(&write)：write = 0，睡 —— 因为第一个读者已经把它按下去了",
+                  "新读者 down(&mutex) → reader_count 3 → 4，不碰 write → 直接进（读读可并发）",
+                  "等 4 个读者都读完后，最后一个 down(&mutex) 时把 reader_count 减到 0 → up(&write)，写者才被唤醒"],
+                 "答案：写者一直等，新读者不排队。这就是「读者优先」的写法；它的问题是写者可能长期拿不到锁（写者饥饿）。想公平就得再加一个「轮到谁」的信号量。"),
             ],
         },
     ],
+
     "summary": {
-        "no": "14", "zh": "全讲小结表", "en": "Summary",
-        "lec": "压成一句一条，复习只看右列问题。",
-        "head": ["词", "页码", "它回答的问题"],
-        "head_widths": ["24%", "26%", "50%"],
+        "no": "7", "zh": "本讲小结", "en": "Takeaways",
+        "lec": "收口用一张表：每条都配一个能动手验或能算的动作。",
+        "head": ["记住什么", "一句话", "怎么自查"],
+        "head_widths": ["22%", "50%", "28%"],
         "rows": [
-            ["IPC", "课件 p.5、p.16", "进程为什么要说话、怎么说"],
-            ["共享对象", "课件 p.15", "什么东西能跨进程共用"],
-            ["竞争条件", "课件 p.37", "同样的程序为什么两个结果"],
-            ["临界区", "课件 p.41–p.45", "哪段代码要保护"],
-            ["四条要求", "课件 p.47–p.48", "什么才算合格的互斥解"],
-            ["五个方案", "课件 p.52–p.76", "哪个真的能用"],
-            ["信号量", "课件 p.65–p.75", "down/up 与原子性"],
-            ["生产者消费者", "课件 p.86–p.91", "三个信号量各管什么"],
-            ["死锁", "课件 p.97", "为什么对调两行就卡死"],
-            ["哲学家", "课件 p.112–p.132", "朴素解为何死锁、确定性解怎么破"],
-            ["读者写者", "课件 p.142–p.146", "怎么让读者并发又不读到脏数据"],
+            ["IPC 三法", "管道省事 / 共享内存最快 / 消息队列最慢但要内核", "画图 1，说出各自代价"],
+            ["竞争条件", "读-加-写被打断就丢更新", "跑 race.c，结果 < 200000"],
+            ["四条要求", "互斥 / 不假设速度 / 区外不阻塞 / 不饿死", "拿严格轮换逐条判：踩 ③④"],
+            ["down/up", "down 见 0 就睡；up 先唤醒再加一", "推 §4 那道 4 步题"],
+            ["生产者消费者", "先 down(empty/full)，后 down(mutex)", "算 empty=98 / full=2 那道"],
+            ["死锁", "五人各持一把等另一把 = 循环等待", "说出两种破法并说明打断了哪一条"],
+            ["读者写者", "第一个读者挡写者，最后一个放开", "推 3 读者 + 1 写者那道"],
         ],
-        "tail": "<span class=\"src\">上表每行都能回到课件原页核对。</span>",
+        "tail": "一句话收口：<b>所有同步问题都是同一句算术——数一数谁在等、谁手里有东西</b>；数不清就会写出带着锁睡觉的代码。",
     },
+
     "quiz": {
-        "no": "15", "zh": "自测六题", "en": "Self-check",
-        "lec": "六题只用本讲内容。前三题判概念与判据，后三题判经典问题的实现。",
+        "no": "8", "zh": "自测", "en": "Self-check",
+        "lec": "六题全是推演或小计算；答不出来就回对应小节，把那段代码或那张图再走一遍。",
         "items": [
-            ("什么是竞争条件？为什么它「总是坏事」？",
-             "答：结果取决于共享资源的访问顺序（课件 p.37）；同一程序不同调度得到不同结果，且 99% 正常、1% 出错，极难调试（课件 p.37–p.38）。回看 §4。"),
-            ("互斥解的四条要求分别是什么？",
-             "答：不能两个进程同时在临界区；不能假设速度与 CPU 数；区外进程不能阻塞别人；不能有进程永远等（课件 p.47–p.48）。回看 §5。"),
-            ("「锁变量」方案为什么完全不能工作？",
-             "答：检查与置位不是原子的，两个进程可能都看到 0 而都进入临界区（课件 p.53）。回看 §6。"),
-            ("生产者消费者里三个信号量的初值与职责分别是什么？",
-             "答：mutex = 1 管互斥；empty = N 表示空位；full = 0 表示已有数量；且 empty + full = N（课件 p.86、p.91）。回看 §9。"),
-            ("把生产者里 down(&empty) 与 down(&mutex) 对调会发生什么？为什么？",
-             "答：会死锁：生产者持着 mutex 去等 empty，消费者握着 full 却等不到 mutex，形成循环等待（课件 p.97）。回看 §10。"),
-            ("读者写者解为什么让第一个读者上锁、最后一个读者解锁？",
-             "答：为了让多个读者能同时读（并发），同时保证读写互斥；用 read_count 判断谁是第一个/最后一个（课件 p.141–p.144）。回看 §13。"),
+            ("初值 count = 0，A、B 各执行一次 count++，写出能得到 1 的那种交错。",
+             "答：A 读 0 → B 读 0 → A 写 1 → B 写 1，结果 1（丢一次更新）。回看 §2。"),
+            ("严格轮换方案违反了哪两条要求？",
+             "答：③ 区外进程会让别人阻塞（A 出区后 B 仍得等 turn）；④ 可能无限等待（A 挂掉后 B 永远等）。回看 §3。"),
+            ("s 初值 1，A.down、B.down、A.up、B 重试 down，最后 s 等于多少？谁在临界区？",
+             "答：s = 0，B 在临界区。up 会先唤醒 B 再让 s 加 1，B 重试时正好拿到 0。回看 §4。"),
+            ("N = 100，生产 5 个、消费 2 个后，empty / full / mutex 各是多少？",
+             "答：empty = 97、full = 3、mutex = 1（三者之和 101 可自查）。回看 §5。"),
+            ("把生产者里两行 down 的顺序对调，会发生什么？为什么？",
+             "答：死锁。生产者先拿到 mutex 再发现 empty = 0 而睡下，锁没释放；消费者等 mutex 永远进不去。回看 §5。"),
+            ("五个哲学家都先拿左手叉时会怎样？给出两种破法。",
+             "答：五人各持一把、互等另一把，形成循环等待而死锁。破法：① 只允许 4 人上桌（初值 4 的计数信号量）；② 奇偶顺序拿叉。回看 §6。"),
         ],
     },
+
     "glossary": {
-        "no": "16", "zh": "术语表", "en": "Glossary",
-        "lec": "每条都能回到课件原页。",
+        "no": "9", "zh": "术语表", "en": "Glossary",
+        "lec": "本讲术语按首次出现排；英文是课件原词，写代码查文档都用它。",
         "rows": [
-            ("进程间通信", "IPC", "p.5", "进程之间交换数据"),
-            ("管道", "pipe", "p.5", "单向的数据通道"),
-            ("消息传递", "message passing", "p.14", "把数据送过去"),
-            ("共享对象", "shared object", "p.15", "多进程共同访问的东西"),
-            ("共享内存", "shared memory", "p.19", "内核创建的共享区域"),
-            ("进程同步", "process synchronization", "p.24", "协调进程的访问顺序"),
-            ("竞争条件", "race condition", "p.37", "结果取决于访问顺序"),
-            ("互斥", "mutual exclusion", "p.41", "同一时刻只许一个进程访问"),
-            ("临界区", "critical section", "p.41", "访问共享对象的代码段"),
-            ("进入区", "entry section", "p.42", "声明进入临界区"),
-            ("退出区", "exit section", "p.42", "声明离开临界区"),
-            ("忙等", "busy waiting", "p.53", "循环空转等资源"),
-            ("优先级反转", "priority inversion", "p.63", "高优先级被低优先级拖住"),
-            ("信号量", "semaphore", "p.65", "带原子操作的计数器"),
-            ("二值信号量", "binary semaphore", "p.75", "值只有 0/1，当锁用"),
-            ("计数信号量", "counting semaphore", "p.75", "值可大于 1，当计数器用"),
-            ("原子操作", "atomic operation", "p.71", "不可分割的操作"),
-            ("有界缓冲区", "bounded buffer", "p.79", "大小固定的缓冲区"),
-            ("死锁", "deadlock", "p.97", "循环等待、谁都不动"),
-            ("饥饿", "starvation", "p.117", "长期拿不到资源"),
-            ("哲学家问题", "dining philosophers", "p.105", "五个进程争五根筷子"),
-            ("读者写者", "readers and writers", "p.135", "并发读、独占写"),
+            ("进程间通信", "inter-process communication (IPC)", "课件 p.5", "进程之间传数据的机制"),
+            ("管道", "pipe", "课件 p.5", "单向字节流，内核维护先进先出"),
+            ("共享内存", "shared memory", "课件 p.10", "两块虚拟内存映射同一物理页，速度最快"),
+            ("竞争条件", "race condition", "课件 p.44", "并发访问共享数据导致结果不确定"),
+            ("丢失更新", "lost update", "本讲 §2", "两个写互相覆盖，只留最后一次"),
+            ("临界区", "critical section", "课件 p.44", "访问共享对象的那段代码"),
+            ("互斥", "mutual exclusion", "课件 p.44", "同一时刻只允许一个进程进临界区"),
+            ("饥饿", "starvation", "课件 p.51", "某进程永远轮不到"),
+            ("死锁", "deadlock", "本讲 §6", "互相等对方手里的资源，谁都不前进"),
+            ("信号量", "semaphore", "课件 p.77", "用 down/up 控制进入与唤醒的计数变量"),
+            ("二元信号量", "binary semaphore", "课件 p.85", "取值只有 0/1，当锁用"),
+            ("计数信号量", "counting semaphore", "课件 p.85", "取值为 0..N，当资源计数用"),
+            ("原子操作", "atomic operation", "课件 p.81", "要么全做完、要么没开始，中间不被切换"),
+            ("生产者消费者", "producer-consumer", "课件 p.88", "有界缓冲上的一放一取"),
+            ("有界缓冲", "bounded buffer", "课件 p.88", "容量 N 的环形队列"),
+            ("哲学家问题", "dining philosophers", "课件 p.6", "五个进程争五把叉，经典死锁题"),
+            ("读者写者", "readers-writers", "课件 p.6", "读可并发、写要独占"),
+            ("读者优先", "reader preference", "本讲 §6", "新读者可直接进，写者可能饥饿"),
+            ("唤醒", "wakeup", "课件 p.78", "up 把睡眠中的进程叫起来重试"),
+            ("循环等待", "circular wait", "本讲 §6", "A 等 B、B 等 A，死锁的成因之一"),
         ],
     },
+
     "appendix": {
-        "no": "A", "zh": "附录：符号速查与四条常见误解", "en": "Appendix",
-        "lec": "把本讲的函数与变量名列一次，再把最容易记错的四条写成「错 → 对」。",
+        "no": "10", "zh": "附录", "en": "Appendix",
+        "lec": "一张算式速查加一组误解。速查那几条考试直接用。",
         "symbols": [
-            ("down()", "申请资源：有则减一，无则睡", "课件 p.68"),
-            ("up()", "释放资源：唤醒等待者并加一", "课件 p.68"),
-            ("sleep() / wakeup()", "挂起自己 / 唤醒指定进程", "课件 p.64"),
-            ("mutex", "互斥信号量，初值通常为 1", "课件 p.86"),
-            ("empty / full", "空位与已有数量的信号量", "课件 p.86"),
-            ("state[N]", "哲学家的状态表", "课件 p.119"),
-            ("read_count", "当前读者数量", "课件 p.142"),
-            ("db", "读者写者共用的互斥信号量", "课件 p.142"),
+            ["empty + full", "恒等于 N（缓冲总数不变）", "本讲 §5"],
+            ["mutex", "恒为 1（用完必须 up 回去）", "本讲 §5"],
+            ["s > 0", "down 后 s 减 1，进程进入", "课件 p.78"],
+            ["s = 0", "down 会让进程睡眠排队，等 up 唤醒", "课件 p.78"],
+            ["p.N", "源 PDF 第 N 页（不是幻灯片编号）", "本讲义口径"],
         ],
-        "myths_title": "四条常见误解",
+        "myths_title": "常见误解",
         "myths": [
-            "<b>错：</b>全局变量能跨进程共享。<b>对：</b>不能，要共享得用内核对象（课件 p.15）。",
-            "<b>错：</b>锁变量方案只是效率低。<b>对：</b>它根本不工作（课件 p.53）。",
-            "<b>错：</b>死锁只会让程序变慢。<b>对：</b>谁都推不动，进程永久卡住（课件 p.97–p.98）。",
-            "<b>错：</b>读者写者对所有进程公平。<b>对：</b>它偏向读者，写者可能长期等待（课件 p.146）。",
+            "以为 count++ 是原子的：它是读、加、写三条指令，中间可以被切走。",
+            "写反 down 的顺序：先拿 mutex 再等资源，就会带着锁睡觉 → 死锁。",
+            "以为 up 是「先加一再唤醒」：顺序反了会在竞争激烈时多睡一轮甚至饿死。",
+            "把临界区当成共享对象：临界区是代码段，共享对象才是被保护的东西。",
+            "以为信号量能跨机器：它只在同一内核内有效，跨机器要分布式锁。",
         ],
     },
-    "tail": [
-        {"no": "15", "zh": "自测六题", "en": "Self-check"},
-        {"no": "16", "zh": "术语表", "en": "Glossary"},
-        {"no": "A", "zh": "附录：符号速查与四条常见误解", "en": "Appendix"},
-    ],
+
+    "tail": [],
 }
