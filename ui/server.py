@@ -251,18 +251,30 @@ def safe_join(*parts):
     return p
 
 
-# ---------- 笔记（本机落盘，一个课件一个文件）----------
-def load_notes(code: str) -> dict:
-    d = _read_json(os.path.join(NOTES_DIR, _safe_code(code) + ".json"), {})
+# ---------- 笔记（按「课程 + 具体文档」落盘）----------
+# 2026-11-16 冒烟真撞到：原来只按课程存，结果打开 L02 能看到挂在 L05 的笔记，
+# 页码对不上、导出的附页也会跟错文档。现在一格文档一个文件：
+#   %USERPROFILE%\.pluma\notes\<课程>\<文档名>.json；没传 doc 时才退回按课程存（兼容旧调用）。
+def _notes_path(code: str, doc: str = "") -> str:
+    base = os.path.join(NOTES_DIR, _safe_code(code))
+    if doc:
+        return os.path.join(base, _safe_code(os.path.splitext(os.path.basename(doc))[0]) + ".json")
+    return base + ".json"
+
+
+def load_notes(code: str, doc: str = "") -> dict:
+    p = _notes_path(code, doc)
+    d = _read_json(p, {})
     notes = d.get("notes") if isinstance(d, dict) else None
-    return {"code": code, "notes": notes if isinstance(notes, list) else []}
+    return {"code": code, "doc": doc, "notes": notes if isinstance(notes, list) else []}
 
 
-def save_notes(code: str, notes: list) -> int:
-    os.makedirs(NOTES_DIR, exist_ok=True)
+def save_notes(code: str, notes: list, doc: str = "") -> int:
+    p = _notes_path(code, doc)
+    os.makedirs(os.path.dirname(p), exist_ok=True)
     keep = [n for n in notes if isinstance(n, dict) and str(n.get("text") or "").strip()][-500:]
-    _write_json(os.path.join(NOTES_DIR, _safe_code(code) + ".json"),
-                {"code": code, "updated": time.strftime("%Y-%m-%d %H:%M"), "notes": keep})
+    _write_json(p, {"code": code, "doc": doc,
+                    "updated": time.strftime("%Y-%m-%d %H:%M"), "notes": keep})
     return len(keep)
 
 
@@ -484,7 +496,8 @@ class Handler(BaseHTTPRequestHandler):
             if u.path == "/api/host":
                 return self._json(dict(ok=True, **host_state()))
             if u.path == "/api/notes":
-                return self._json(dict(ok=True, **load_notes(q.get("code", ["CS340"])[0])))
+                return self._json(dict(ok=True, **load_notes(q.get("code", ["CS340"])[0],
+                                                             q.get("doc", [""])[0])))
             if u.path == "/favicon.ico":
                 self.send_response(204)
                 self.send_header("Cache-Control", "max-age=86400")
@@ -547,7 +560,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({"ok": False, "need_access": True, "error": "需要访问码"}, 401)
             if u.path == "/api/notes":
                 code = str(body.get("code") or "CS340")
-                cur = load_notes(code)["notes"]
+                doc = str(body.get("doc") or "")
+                cur = load_notes(code, doc)["notes"]
                 act = str(body.get("action") or "add")
                 if act == "add":
                     note = body.get("note") or {}
@@ -566,7 +580,7 @@ class Handler(BaseHTTPRequestHandler):
                     cur = []
                 else:
                     return self._json({"ok": False, "error": "未知动作：%s" % act}, 400)
-                n = save_notes(code, cur)
+                n = save_notes(code, cur, doc)
                 return self._json({"ok": True, "notes": cur, "count": n})
             if u.path == "/api/note/export":
                 # 07：选中对话 / 侧栏笔记 → 整理成笔记页 → 追加到指定 PDF 末尾（另存副本）
@@ -750,7 +764,7 @@ class Handler(BaseHTTPRequestHandler):
                 if api_client is None or not cfg["api_key"]:
                     return self._json({"ok": False, "need_key": True, "refs": refs,
                                        "error": "没配置 API 钥匙，不能真问。已检索到的片段在下面可以直接看。"})
-                bare = {"code": code, "no": no or "全课",
+                bare = {"code": code, "no": no or ("/".join(only) if only else "全课"),
                         "zh": "（跨讲检索）" if not no else str((first or {}).get("zh", ""))}
                 msgs = mod.build_prompt(bare, question, picked)
                 hist = [{"role": ("user" if m.get("role") == "user" else "assistant"),
@@ -766,7 +780,8 @@ class Handler(BaseHTTPRequestHandler):
                 log_usage(out.get("model", cfg["model"]), out.get("usage", {}))
                 return self._json({"ok": True, "answer": out["text"], "model": out["model"],
                                    "seconds": round(time.time() - t0, 1), "refs": refs,
-                                   "scope": {"course": code, "lesson": no or "全课",
+                                   "scope": {"course": code,
+                                             "lesson": no or ("/".join(only) if only else "全课"),
                                              "cross": allow_cross}})
             return self._json({"ok": False, "error": "无此路由"}, 404)
         except subprocess.TimeoutExpired:

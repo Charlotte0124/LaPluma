@@ -861,7 +861,14 @@ $('#btnNote').onclick = () => {
   const items = idx.map(i=>({role:CHAT.messages[i].role==='user'?'user':'a',
     text:CHAT.messages[i].text, meta:CHAT.messages[i].meta||CHAT.messages[i].cite||''}));
   const files = CHAT.files||[];
-  EXPORT.target = files.length ? files[0].rel : '';
+  // 默认追加到「选中对话命中讲次」的那份讲义；否则到第一份不带 _附笔记 的；再不行才用第 0 份
+  // 注意：局部变量不能叫 plain —— 模块里 plain() 是去 Markdown 的单行文本函数，
+  // 同名后在下面 plain(it.text) 会报「plain is not a function」，弹窗根本不会出（冒烟测到过）。
+  const wantLes = new Set(idx.flatMap(i => (CHAT.messages[i].refs||[]).map(r=>r.lesson).filter(Boolean)));
+  const plainFiles = files.filter(f => !f.name.includes('附笔记'));
+  const pick = plainFiles.find(f => [...wantLes].some(l => f.name.startsWith(l)))
+            || plainFiles[0] || files[0] || null;
+  EXPORT.target = pick ? pick.rel : '';
   const rows = items.map(it=>`<div class="row"><span>${it.role==='user'?'问':'答'}</span>
       <div>${esc(plain(it.text).slice(0,150))}${(it.text||'').length>150?'…':''}</div></div>`).join('');
   $('#dlg').innerHTML = `
@@ -1040,7 +1047,8 @@ document.addEventListener('keydown', e=>{
 
 async function loadNotes(){
   try{
-    const j = await (await fetch('/api/notes?code='+encodeURIComponent(RD.code))).json();
+    const j = await (await fetch('/api/notes?code='+encodeURIComponent(RD.code)
+      + '&doc=' + encodeURIComponent(RD.rel))).json();
     RD.notes = j.notes || [];
   }catch(e){ RD.notes = []; }
   renderNotes();
@@ -1062,7 +1070,7 @@ function renderNotes(){
     el.onclick = async e => {
       e.stopPropagation();
       const j = await (await fetch('/api/notes',{method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({code:RD.code, action:'del', index:+el.dataset.del})})).json();
+        body:JSON.stringify({code:RD.code, doc:RD.rel, action:'del', index:+el.dataset.del})})).json();
       if(j.ok){ RD.notes = j.notes; renderNotes(); toast('已删除'); }
     };
   });
@@ -1072,7 +1080,7 @@ $('#nAdd').onclick = async () => {
   if(!v){ toast('先写一句再记'); ta.focus(); return; }
   if(!RD.doc){ toast('先打开一份讲义'); return; }
   const j = await (await fetch('/api/notes',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({code:RD.code, action:'add', note:{p:RD.page, text:v}})})).json();
+    body:JSON.stringify({code:RD.code, doc:RD.rel, action:'add', note:{p:RD.page, text:v}})})).json();
   if(j.ok){ RD.notes = j.notes; ta.value=''; renderNotes(); toast('已记在 p.'+RD.page); }
   else toast('没记上：'+(j.error||''));
 };
