@@ -1,0 +1,55 @@
+{
+  "at": "2026-11-17 05:34",
+  "items": [
+    {
+      "kind": "讲义数",
+      "scale": 120,
+      "api": {
+        "ms": [
+          1545,
+          47,
+          48
+        ],
+        "courses": 3,
+        "kb": 15.0
+      },
+      "ui": {
+        "courses_page": {
+          "cards": 3,
+          "pageH": 612,
+          "screens": 0.7,
+          "hasSearch": false
+        },
+        "drawer": {
+          "rows": 120,
+          "clientH": 634,
+          "scrollH": 7230,
+          "rowHeights": 1,
+          "hasSearch": true
+        }
+      }
+    },
+    {
+      "kind": "课程数",
+      "scale": 60,
+      "api": {
+        "ms": [
+          649,
+          99,
+          103
+        ],
+        "courses": 63,
+        "kb": 34.1
+      },
+      "ui": {
+        "courses_page": {
+          "cards": 63,
+          "pageH": 4179,
+          "screens": 4.6,
+          "hasSearch": false
+        }
+      }
+    }
+  ],
+  "cleaned": true
+}
