@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import mimetypes
 import os
 import re
@@ -33,6 +34,11 @@ CFG_PATH = os.path.join(USER_DIR, "api.json")
 FAV_PATH = os.path.join(USER_DIR, "favorites.json")
 USAGE_PATH = os.path.join(LOG_DIR, "usage.jsonl")
 HOST, PORT = "127.0.0.1", 8765
+# 静态资源 ETag 缓存（2026-11-17）：path -> ((size, mtime), '"hash"')。
+# 为什么要有：pdf.js 的 worker 1.33 MB + 主包 328 KB，原来一律 no-store，
+#   每次打开/刷新阅读器都全量重传（本机无感，平板走 WiFi 明显）。
+#   index.html 必须仍走 no-store（改完界面要能立刻看到新版）。
+_STATIC_ETAG = {}
 VERSION = "1.5.0"
 BOOK_NAME = "CS340_九讲合订本_讲义.pdf"
 
@@ -438,6 +444,42 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _static(self, path):
+        """静态资源（pdf.js 等）：内容哈希做 ETag，命中 If-None-Match 就回 304。
+
+        行为与 _file 一致（同样的 200 + 字节），只是多了缓存协商；
+        内容一改（size/mtime 变）就重算哈希，缓存自动失效。
+        不用 _file 的原因：那条路统一 no-store，是给 index.html 与 PDF 下载的。
+        """
+        if not os.path.isfile(path):
+            return self._json({"ok": False, "error": "文件不存在"}, 404)
+        st = os.stat(path)
+        stamp = (st.st_size, int(st.st_mtime))
+        got = _STATIC_ETAG.get(path)
+        if got is None or got[0] != stamp:
+            h = hashlib.sha256()
+            with open(path, "rb") as f:
+                for chunk in iter(lambda: f.read(262144), b""):
+                    h.update(chunk)
+            got = (stamp, '"%s"' % h.hexdigest()[:32])
+            _STATIC_ETAG[path] = got
+        tag = got[1]
+        if self.headers.get("If-None-Match") == tag:
+            self.send_response(304)
+            self.send_header("ETag", tag)
+            self.send_header("Cache-Control", "no-cache")
+            self.end_headers()
+            return None
+        ctype = mimetypes.guess_type(path)[0] or "application/octet-stream"
+        self.send_response(200)
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("ETag", tag)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(st.st_size))
+        self.end_headers()
+        with open(path, "rb") as f:
+            shutil.copyfileobj(f, self.wfile)
+
     def _file(self, path, inline=True):
         if not os.path.isfile(path):
             return self._json({"ok": False, "error": "文件不存在"}, 404)
@@ -501,7 +543,7 @@ class Handler(BaseHTTPRequestHandler):
                 fn = os.path.basename(u.path)
                 if not fn:
                     return self._json({"ok": False, "error": "缺文件名"}, 400)
-                return self._file(os.path.join(PDFJS_DIR, fn))
+                return self._static(os.path.join(PDFJS_DIR, fn))
             if u.path == "/api/host":
                 return self._json(dict(ok=True, **host_state()))
             if u.path == "/api/notes":
