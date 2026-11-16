@@ -11,7 +11,7 @@
 
 <div align="center">
 
-<a href="https://github.com/Charlotte0124/LaPluma/releases/latest"><img src="https://img.shields.io/badge/⬇_下载_v1.9.0-C8202C?style=for-the-badge&logo=windows&logoColor=white" height="40" alt="下载"></a>
+<a href="https://github.com/Charlotte0124/LaPluma/releases/latest"><img src="https://img.shields.io/badge/⬇_下载_v1.9.1-C8202C?style=for-the-badge&logo=windows&logoColor=white" height="40" alt="下载"></a>
 &nbsp;
 <a href="一键启动.ps1"><img src="https://img.shields.io/badge/▶_一键启动-2F7D4F?style=for-the-badge&logo=powershell&logoColor=white" height="40" alt="一键启动"></a>
 &nbsp;
@@ -25,7 +25,7 @@
 
 ![license](https://img.shields.io/badge/license-MIT-171714?style=flat-square)
 ![python](https://img.shields.io/badge/python-3.12-171714?style=flat-square)
-![version](https://img.shields.io/badge/version-1.9.0-171714?style=flat-square)
+![version](https://img.shields.io/badge/version-1.9.1-171714?style=flat-square)
 ![gates](https://img.shields.io/badge/三道门-绿才出门-C8202C?style=flat-square)
 ![offline](https://img.shields.io/badge/出_PDF-不需要密钥-2F7D4F?style=flat-square)
 
@@ -80,8 +80,9 @@
 
 **直接运行（Windows，最简单）**
 
-从 [Releases](https://github.com/Charlotte0124/LaPluma/releases/latest) 下载 `LaPluma.exe`（约 101 MB），双击运行：
-控制台会打印本机地址，浏览器自动打开界面。首次启动要解包，慢几秒。
+从 [Releases](https://github.com/Charlotte0124/LaPluma/releases/latest) 下载 `LaPluma.exe`（约 108 MB），双击运行：
+直接开出羽毛笔自己的窗口（标题栏带版本号），关掉窗口就是退出。首次启动要解包，慢几秒。
+**不需要 Python，也不需要装任何依赖**——运行环境已经打在里面。
 
 - 你放进去的课程、生成的 PDF 与日志都在 **exe 旁边**；配置在 `%USERPROFILE%\.pluma`
 - 自带示例课程 `DEMO`（2 讲），内容数据齐备，**不配密钥也能出 PDF**；要换成自己的课，在 exe 旁边建 `<课程代码>\_lessons\` 并在 `courses.json` 里登记
@@ -92,10 +93,12 @@
 ```powershell
 git clone https://github.com/Charlotte0124/LaPluma.git
 cd LaPluma
-.\一键启动.ps1
+.\一键启动.bat
 ```
 
-- 需要 Python 3.12（脚本会检查并提示），依赖仅 `pymupdf`
+- 双击 `一键启动.bat`；**不要直接双击 `.ps1`**（默认设置下它会被记事本打开，不运行）
+- 需要 Python 3.12（脚本会检查版本并提示），依赖只有 `pymupdf`——缺了脚本会自动装
+- 自动装不上时看 [用 CMD 装依赖](docs/使用/07-装依赖-用CMD.md)（三步，粘两行命令）
 - 需要本机 Chrome 或 Edge（用于打印 PDF，无需另行安装）
 - **仓库自带示例课程 `DEMO`**：无需准备任何教材，即可完整走一遍「数据 → 讲义 → PDF → 三道门」：
 
@@ -111,7 +114,7 @@ python engine\_make.py D01
 
 ## 一键启动
 
-`一键启动.ps1` 完成四件事：检查 Python → 缺少 `pymupdf` 则安装 → 启动本地界面 → 打开浏览器。**默认仅监听 127.0.0.1，不对外网开放。**
+`一键启动.bat`（它调 `一键启动.ps1`）做三件事：查 Python 3.12 → 缺 `pymupdf` 就自动装 → 启动界面（默认开原生窗口；加 `-NoWindow` 才回浏览器页）。**默认仅监听 127.0.0.1，不对外网开放。**
 
 ```powershell
 .\一键启动.ps1
@@ -171,15 +174,19 @@ python engine\_make.py L01
 ## 一条命令
 
 ```powershell
-python engine\_make.py L01
+$env:PLUMA_COURSE='DEMO'
+python engine\_make.py D01
 ```
 
+实测输出（v1.9.0）：
+
 ```
-生成 L01_零基础_讲义_源.html（23738 字符，术语附英 51 处，拆长段 0 处）
-OK  CS340/06_笔记/L01_零基础_讲义_源.html
+生成 D01_零基础_讲义_源.html（16479 字符，术语附英 7 处，拆长段 0 处）
+OK  DEMO/06_笔记/D01_零基础_讲义_源.html
 1 份讲义源：OK 1 · WARN 0 · FAIL 0
-已写    …\CS340\01_讲义\L01_操作系统是什么_讲义.pdf（1433 KB · 15 页 · 10287 字符）
-OK  L01_操作系统是什么_讲义.pdf
+已写    …\DEMO\01_讲义\D01_一份讲义是怎么出来的_讲义.pdf（1274 KB · 10 页 · 4722 字符）
+WARN  D01_一份讲义是怎么出来的_讲义.pdf
+      ! 页码引用偏少 1 处/10 页
 ```
 
 它不解决的问题：**内容是否正确，脚本无法判定。** 类比是否恰当、例题数字是否经过验算，需要人工复核。每份成品页脚均印有「本内容由 AI 生成，请自行核实重要信息」。
@@ -192,7 +199,7 @@ OK  L01_操作系统是什么_讲义.pdf
 | **B 内容** | `CS340/_lessons/` | 每讲一份 `LESSON`：节、讲法、原文引用、符号表 | 内容变化，引擎不变 |
 | **C 门与打印** | `tools/print/` | 内容门 / 版式门、术语附英、HTML→PDF | 成品无法产出 |
 | **D 模型** | `api/client.py` | 内容生产所用的模型调用，密钥永不入库 | 已有数据仍可生成 PDF |
-| **E 界面** | `ui/` | 本地网页：课程、成品、生成、向导、设置 | 仅剩命令行 |
+| **E 界面** | `ui/` | 本地窗口：课程、成品、生成、向导、设置 | 仅剩命令行 |
 
 A/B/C 三层可离线运行；仅「让模型撰写新内容」时才需要 D 层。
 
@@ -220,12 +227,12 @@ A/B/C 三层可离线运行；仅「让模型撰写新内容」时才需要 D �
 <!-- 最近更新:begin（由 tools/sync-readme.py 生成，别手改） -->
 | 版本 | 日期 | 这一版做了什么 |
 |:--|:--|:--|
+| **v1.9.1** | 11-17 | 保存目录能选文件夹、不再把本机路径印在界面上；标签页有羽毛图标；一键启动会查 Python 版本并自动装依赖 |
 | **v1.9.0** | 11-17 | 双击就是一个自己的窗口（不再是浏览器页），带羽毛图标；界面上线方式可用 --no-window 退回 |
 | **v1.8.2** | 11-17 | 双击 exe 不再「黑框一闪就没了」：端口被占用时自动换一个，崩了也把原因留在窗口里 |
 | **v1.8.1** | 11-17 | 推出单文件 exe（LaPluma.exe）；修好打包后才暴露的三处问题 |
 | **v1.8.0** | 11-17 | 搜索课程与课件（放大镜 / Ctrl+K）· 导出可选分册或合订本 · 笔记可一次加到多份讲义 · 生成可多选讲次 |
-| **v1.7.0** | 11-17 | 一键上线按钮 · 余额不足的人话提示 · 讲义多时列表更清爽 |
-| — | — | 更早的 12 个版本 → [CHANGELOG](CHANGELOG.md) |
+| — | — | 更早的 13 个版本 → [CHANGELOG](CHANGELOG.md) |
 <!-- 最近更新:end -->
 
 ## 目录
@@ -250,7 +257,9 @@ courses.json       课程元数据（标题 / 说明 / 读者口径）
 
 ## 依赖
 
-Python 3.12、`pymupdf`、本机 Chrome 或 Edge。无前端构建、无 npm、无服务端数据库、无第三方 Web 框架。
+**用 exe**：什么都不用装，双击即可（Chrome / Edge 用系统自带的）。
+
+**从源码跑**：Python 3.12、`pymupdf`、本机 Chrome 或 Edge。无前端构建、无 npm、无服务端数据库、无第三方 Web 框架。
 
 ## 致谢
 
