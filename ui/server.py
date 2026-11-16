@@ -14,7 +14,6 @@ import mimetypes
 import os
 import re
 import shutil
-import subprocess
 import sys
 import threading
 import time
@@ -22,8 +21,14 @@ import urllib.parse
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-UI_DIR = os.path.join(ROOT, "ui")
+# 2026-11-17：路径双根（见仓根 paths.py）。本脚本是 `python ui\server.py` 直接跑的，
+#   仓根不在 sys.path 上，得自己挂一下；冻结后 __file__ 在解包目录，同样成立。
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import paths  # noqa: E402
+
+ROOT = paths.DATA_ROOT          # 可写数据：课程、生成物、日志（冻结后 = exe 旁边）
+RES = paths.RES_ROOT            # 只读资源：ui\ api\ engine\ tools\（冻结后 = 解包目录）
+UI_DIR = paths.res("ui")
 # 2016-11-17：默认课程不再写死 CS340 —— 原来的「多课程」只是 UI 支持，代码里到处是 CS340，
 #   换一门课（示例课程 / 截图演示）就得改代码。现在取 courses.json 的第一个 key，
 #   环境变量 PLUMA_COURSE 可覆盖（截图演示仓靠它切到示例课程）。
@@ -32,7 +37,7 @@ def _pick_default_course() -> str:
     if env:
         return env
     try:
-        with open(os.path.join(ROOT, "courses.json"), "r", encoding="utf-8-sig") as _f:
+        with open(paths.data_or_res("courses.json"), "r", encoding="utf-8-sig") as _f:
             _keys = [k for k in json.load(_f).keys() if not k.startswith("_")]
         if _keys:
             return _keys[0]
@@ -42,11 +47,13 @@ def _pick_default_course() -> str:
 
 
 DEFAULT_COURSE = _pick_default_course()
-NOTES = os.path.join(ROOT, DEFAULT_COURSE, "06_笔记")
-PDF_DIR = os.path.join(ROOT, DEFAULT_COURSE, "01_讲义")
-LESSONS = os.path.join(ROOT, DEFAULT_COURSE, "_lessons")
-API_DIR = os.path.join(ROOT, "api")
-LOG_DIR = os.path.join(ROOT, "_logs")
+# 2026-11-17：路径双根之后，课程可能在数据根（用户自己的）也可能在资源根（随程序发布的示例课程）；
+#   这里保留三个默认值只为了“默认课程”那一门，真正读文件的地方一律走 paths.course_dir()。
+NOTES = os.path.join(paths.course_dir(DEFAULT_COURSE), "06_笔记")
+PDF_DIR = os.path.join(paths.course_dir(DEFAULT_COURSE), "01_讲义")
+LESSONS = os.path.join(paths.course_dir(DEFAULT_COURSE), "_lessons")
+API_DIR = paths.res("api")
+LOG_DIR = paths.data("_logs")
 USER_DIR = os.environ.get("PLUMA_HOME") or os.path.join(os.path.expanduser("~"), ".pluma")
 CFG_PATH = os.path.join(USER_DIR, "api.json")
 FAV_PATH = os.path.join(USER_DIR, "favorites.json")
@@ -57,7 +64,7 @@ HOST, PORT = "127.0.0.1", 8765
 #   每次打开/刷新阅读器都全量重传（本机无感，平板走 WiFi 明显）。
 #   index.html 必须仍走 no-store（改完界面要能立刻看到新版）。
 _STATIC_ETAG = {}
-VERSION = "1.5.0"
+VERSION = "1.6.0"
 BOOK_NAME = DEFAULT_COURSE + "_九讲合订本_讲义.pdf"
 
 # ---------- 主机上线（局域网 + 8 位访问码）----------
@@ -67,7 +74,7 @@ LAN = False            # main() 按 --lan 置 true：只有显式要上线才对
 ACCESS_CODE = ""       # 8 位数字；LAN=False 时为空
 HOST_PATH = os.path.join(os.path.expanduser("~"), ".pluma", "host.json")
 NOTES_DIR = os.path.join(os.path.expanduser("~"), ".pluma", "notes")
-PDFJS_DIR = os.path.join(ROOT, "tools", "print", "pdfjs")
+PDFJS_DIR = paths.res("tools", "print", "pdfjs")
 
 sys.path.insert(0, API_DIR)
 try:
@@ -103,7 +110,7 @@ def _safe_code(code: str) -> str:
 def load_lesson(course: str, no: str) -> dict:
     """按 <课程>/_lessons/<讲>.py 读数据（引擎的 builder.load 写死了 CS340，这里按课程走）。"""
     import importlib.util as ilu
-    path = os.path.join(ROOT, course, "_lessons", no + ".py")
+    path = paths.data_or_res(course, "_lessons", no + ".py")
     if not os.path.isfile(path):
         raise FileNotFoundError(path)
     spec = ilu.spec_from_file_location("lesson_%s_%s" % (_safe_code(course), _safe_code(no)), path)
@@ -113,16 +120,19 @@ def load_lesson(course: str, no: str) -> dict:
 
 
 def find_lesson(course: str) -> list[str]:
-    d = os.path.join(ROOT, course, "_lessons")
-    if not os.path.isdir(d):
-        return []
-    return sorted(x[:-3] for x in os.listdir(d) if x.endswith(".py"))
+    """这一门有哪些讲：数据根与资源根合起来看（用户新增的讲与出厂示例课程都能列出来）。"""
+    names = set()
+    for root in (paths.DATA_ROOT, paths.RES_ROOT):
+        d = os.path.join(root, course, "_lessons")
+        if os.path.isdir(d):
+            names.update(x[:-3] for x in os.listdir(d) if x.endswith(".py"))
+    return sorted(names)
 
 
 def load_ask_module():
     """engine/_ask.py 当模块用（检索 + 提示词）。"""
     import importlib.util as ilu
-    path = os.path.join(ROOT, "engine", "_ask.py")
+    path = paths.res("engine", "_ask.py")
     if not os.path.isfile(path):
         return None
     spec = ilu.spec_from_file_location("pluma_ask", path)
@@ -147,6 +157,37 @@ def save_session(code: str, sess: dict) -> int:
     sess["messages"] = (sess.get("messages") or [])[-200:]  # 只留最近 200 条，防文件无限长
     _write_json(os.path.join(SESS_DIR, _safe_code(code) + ".json"), sess)
     return len(sess["messages"])
+
+
+# ---------- 生成：进程内调用（打包改造 · 第二半）----------
+# 2026-11-17：原来 /api/generate 用 subprocess 跑 [sys.executable, engine\_make.py]。
+#   源码下能跑；冻结成 exe 后 sys.executable 就是 exe 自己——点一次生成会再开一个软件。
+#   现在改成 import + 直接调入口函数（make / main），日志用 emit 收回来。
+_ENGINE_MODS = {}
+
+
+def _engine(modname: str):
+    """把 engine 目录下的脚本当模块取过来（只 import 一次）。"""
+    if modname in _ENGINE_MODS:
+        return _ENGINE_MODS[modname]
+    for p in (paths.res("engine"), paths.res("tools", "print")):
+        if p not in sys.path:
+            sys.path.insert(0, p)
+    import importlib
+    _ENGINE_MODS[modname] = importlib.import_module(modname)
+    return _ENGINE_MODS[modname]
+
+
+def _inproc(modname: str, args: list, course: str, entry: str):
+    """跑 engine 下的入口，收它的日志；返回 (日志, 退出码)。异常也当红项回报。"""
+    buf = []
+    try:
+        mod = _engine(modname)
+        rc = getattr(mod, entry)(list(args), course=course, emit=buf.append)
+    except Exception as e:  # noqa: BLE001
+        buf.append("[异常] 生成器抱错：%r" % (e,))
+        return "\n".join(buf), 1
+    return "\n".join(buf), int(rc or 0)
 
 
 # ---------- 配置 ----------
@@ -184,7 +225,7 @@ def load_cfg():
     # 2026-11-17：换课程（示例课程 / 别人自己的课件）后，配置里存的旧课程目录会失效——
     #   以前会把 PDF 写到一个不存在的目录。现在目录不存在就退回当前课程的默认目录。
     _first = os.path.normpath(out["save_dir"]).split(os.sep)[0]
-    if _first and _first not in (".", "..") and not os.path.isdir(os.path.join(ROOT, _first)):
+    if _first and _first not in (".", "..") and not os.path.isdir(paths.data_or_res(_first)):
         out["save_dir"] = default_dir
         out["save_dir_fixed"] = True
     # 本机没填 key 时，走 D 层的三级回退（环境变量 / PRTS secrets）
@@ -237,27 +278,44 @@ def usage_summary():
 
 # ---------- 课程（自动分类 + 收藏） ----------
 def discover_courses():
-    """扫仓根：含 01_讲义 或 _lessons 的目录就是一「门课」。"""
-    meta = _read_json(os.path.join(ROOT, "courses.json"), {})
+    """扫两根：含 01_讲义 或 _lessons 的目录就是一「门课」。
+
+    2026-11-17：数据根先扫（用户自己的课件），资源根后扫（随程序发布的示例课程）；
+    同名时数据根优先——用户把示例课程拷到 exe 旁边改，就看改过的那份。
+    """
+    meta = _read_json(paths.data_or_res("courses.json"), {})
     favs = set(_read_json(FAV_PATH, {}).get("codes", []))
+    found = {}
+    for root in (paths.DATA_ROOT, paths.RES_ROOT):
+        if not root or not os.path.isdir(root):
+            continue
+        for name in sorted(os.listdir(root)):
+            d = os.path.join(root, name)
+            if name in found or not os.path.isdir(d) or name.startswith((".", "_")):
+                continue
+            if name in ("ui", "api", "engine", "tools", "docs"):
+                continue
+            if not (os.path.isdir(os.path.join(d, "01_讲义")) or os.path.isdir(os.path.join(d, "_lessons"))):
+                continue
+            found[name] = d
     out = []
-    for name in sorted(os.listdir(ROOT)):
-        d = os.path.join(ROOT, name)
-        if not os.path.isdir(d) or name.startswith((".", "_")) or name in ("ui", "api", "engine", "tools", "docs"):
-            continue
-        pdfs = os.path.join(d, "01_讲义")
+    for name, d in sorted(found.items()):
         les = os.path.join(d, "_lessons")
-        if not (os.path.isdir(pdfs) or os.path.isdir(les)):
-            continue
         m = meta.get(name, {})
-        files = []
-        if os.path.isdir(pdfs):
+        files, seen = [], set()
+        # 成品同样两根合起来看：用户自己的在数据根，出厂的示例成果在资源根
+        for root in (paths.DATA_ROOT, paths.RES_ROOT):
+            pdfs = os.path.join(root, name, "01_讲义")
+            if not os.path.isdir(pdfs):
+                continue
             for fn in sorted(os.listdir(pdfs)):
-                if fn.lower().endswith(".pdf"):
-                    full = os.path.join(pdfs, fn)
-                    files.append({"name": fn, "rel": "%s/01_讲义/%s" % (name, fn),
-                                  "size_kb": round(os.path.getsize(full) / 1024),
-                                  "pages": _pages(full)})
+                if not fn.lower().endswith(".pdf") or fn in seen:
+                    continue
+                seen.add(fn)
+                full = os.path.join(pdfs, fn)
+                files.append({"name": fn, "rel": "%s/01_讲义/%s" % (name, fn),
+                              "size_kb": round(os.path.getsize(full) / 1024),
+                              "pages": _pages(full)})
         lessons = sorted(x[:-3] for x in os.listdir(les) if x.endswith(".py")) if os.path.isdir(les) else []
         out.append({"code": name, "title": m.get("title", name), "en": m.get("en", ""),
                     "desc": m.get("desc", "（未填说明，可在 courses.json 里补）"),
@@ -275,10 +333,12 @@ def _pages(pdf_path: str) -> int:
 
 
 def safe_join(*parts):
+    """拼一个可读文件的绝对路径；两根（数据根 / 资源根）以内才算合法。"""
     p = os.path.abspath(os.path.join(ROOT, *parts))
-    if not p.startswith(os.path.abspath(ROOT) + os.sep):
-        raise PermissionError("路径越界")
-    return p
+    for root in (paths.DATA_ROOT, paths.RES_ROOT):
+        if root and p.startswith(os.path.abspath(root) + os.sep):
+            return p
+    raise PermissionError("路径越界")
 
 
 # ---------- 笔记（按「课程 + 具体文档」落盘）----------
@@ -768,27 +828,22 @@ class Handler(BaseHTTPRequestHandler):
                 t0 = time.time()
                 if form == "book":
                     # 合订本：默认全部讲，按讲号顺序（B 口径：去掉各讲封面与目录）
-                    p = subprocess.run([sys.executable, os.path.join(ROOT, "engine", "_book.py")],
-                                       cwd=ROOT, capture_output=True, text=True,
-                                       encoding="utf-8", errors="replace", timeout=600)
-                    log = (p.stdout or "") + (p.stderr or "")
+                    log, rc = _inproc("_book", [], course, "main")
                     copied = ""
-                    if p.returncode == 0:
-                        copied = self._copy_out(course, "CS340_九讲合订本", str(body.get("save_dir") or ""))
-                    return self._json({"ok": p.returncode == 0, "log": log, "form": "book",
+                    if rc == 0:
+                        copied = self._copy_out(course, "%s_九讲合订本" % course,
+                                                str(body.get("save_dir") or ""))
+                    return self._json({"ok": rc == 0, "log": log, "form": "book",
                                        "seconds": round(time.time() - t0, 1), "copied": copied})
-                avail = sorted(x[:-3] for x in os.listdir(os.path.join(ROOT, course, "_lessons"))
-                               if x.endswith(".py")) if os.path.isdir(os.path.join(ROOT, course, "_lessons")) else []
+                avail = sorted(x[:-3] for x in os.listdir(os.path.join(paths.course_dir(course), "_lessons"))
+                               if x.endswith(".py")) if os.path.isdir(os.path.join(paths.course_dir(course), "_lessons")) else []
                 if no not in avail:
                     return self._json({"ok": False, "error": "没有这一讲：%s" % no}, 400)
-                p = subprocess.run([sys.executable, os.path.join(ROOT, "engine", "_make.py"), no],
-                                   cwd=ROOT, capture_output=True, text=True,
-                                   encoding="utf-8", errors="replace", timeout=300)
-                log = (p.stdout or "") + (p.stderr or "")
+                log, rc = _inproc("_make", [no], course, "make")
                 copied = ""
-                if p.returncode == 0 and body.get("save_dir"):
+                if rc == 0 and body.get("save_dir"):
                     copied = self._copy_out(course, no, str(body["save_dir"]))
-                return self._json({"ok": p.returncode == 0, "log": log, "form": "single",
+                return self._json({"ok": rc == 0, "log": log, "form": "single",
                                    "seconds": round(time.time() - t0, 1), "copied": copied})
             if u.path == "/api/ask":
                 # 问课件：先检索，再由模型回答。
@@ -859,8 +914,6 @@ class Handler(BaseHTTPRequestHandler):
                                              "lesson": no or ("/".join(only) if only else "全课"),
                                              "cross": allow_cross}})
             return self._json({"ok": False, "error": "无此路由"}, 404)
-        except subprocess.TimeoutExpired:
-            return self._json({"ok": False, "error": "生成超时（>300 s）"}, 504)
         except Exception as e:  # noqa: BLE001
             return self._json({"ok": False, "error": repr(e)}, 500)
 
@@ -868,6 +921,7 @@ class Handler(BaseHTTPRequestHandler):
         """成功后把成品复制到用户选的目录（dest 可在仓内，也可绝对路径）。"""
         if not dest:
             return ""
+        # 生成物一律写在数据根（paths.data），自带示例课程也一样——不从资源根拷
         src_dir = os.path.join(ROOT, course, "01_讲义")
         hit = [f for f in os.listdir(src_dir) if f.startswith(no + "_") and f.endswith(".pdf")]
         if not hit:
@@ -886,6 +940,8 @@ class Handler(BaseHTTPRequestHandler):
 def main() -> int:
     global HOST, PORT, LAN, ACCESS_CODE
     argv = sys.argv[1:]
+    # 冻结后（exe）先把两根与 engine\ tools\print\ api\ 挂上 sys.path；源码下是幂等的
+    paths.bootstrap()
     for i, a in enumerate(argv):
         if a == "--lan" or a == "-lan":
             LAN = True

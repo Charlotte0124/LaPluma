@@ -18,9 +18,10 @@ import os
 import re
 import sys
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, os.path.join(ROOT, 'engine'))
-sys.path.insert(0, os.path.join(ROOT, 'api'))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import paths  # noqa: E402  路径双根（见仓根 paths.py）：本模块只需要只读资源
+sys.path.insert(0, paths.res('engine'))
+sys.path.insert(0, paths.res('api'))
 
 import _build_讲义 as builder  # noqa: E402
 

@@ -35,7 +35,12 @@ import sys
 
 import pymupdf
 
-ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+import paths  # noqa: E402  路径双根，见仓根 paths.py
+
+# 2026-11-17：ROOT = 数据根（冻结后是 exe 旁的可写目录；源码下就是仓根）。
+#   只用来找「课程目录」与相对路径显示；本脚本自己（与 terms.py）从 __file__ 旁边找。
+ROOT = paths.DATA_ROOT
 
 FOOTER_RE = re.compile(r"(\d+)\s*/\s*(\d+)\s*$")
 # 定位引用：PDF 入口用「课件 p.N」，论文入口用 arXiv 编号 / DOI——两者都是「能回到原文某一处」
@@ -454,7 +459,7 @@ def collect(targets: list[str], light: bool) -> list[dict]:
     return out
 
 
-def main() -> int:
+def main(argv: list | None = None) -> int:
     for s in (sys.stdout, sys.stderr):   # Windows 控制台默认 GBK，中文路径与 ✗ 会直接抛异常
         if hasattr(s, "reconfigure"):
             s.reconfigure(encoding="utf-8", errors="replace")
@@ -467,7 +472,7 @@ def main() -> int:
     ap.add_argument("--light", action="store_true", help="按浅色版验收")
     ap.add_argument("--content", action="store_true", help="内容门：扫讲义源 HTML（公式符号表/裸术语/定位/固定件/主题色/读者口径）")
     ap.add_argument("--draft", action="store_true", help="配 --content：预览稿模式，不判固定件/术语表/自测")
-    a = ap.parse_args()
+    a = ap.parse_args(argv)
 
     if a.content:
         srcs = ([os.path.abspath(f) for f in a.file] if a.file else

@@ -20,8 +20,10 @@ import json
 import os
 import sys
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, os.path.join(ROOT, 'engine'))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import paths  # noqa: E402  路径双根：资源根只读，课程数据在数据根
+ROOT = paths.DATA_ROOT
+sys.path.insert(0, paths.res('engine'))
 
 import _build_讲义 as builder  # noqa: E402
 

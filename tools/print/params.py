@@ -28,6 +28,10 @@ from pathlib import Path
 import pymupdf
 
 ROOT = Path(__file__).resolve().parents[2]
+# 2026-11-17：路径双根（见仓根 paths.py）；本脚本只记参数、写数据，跟数据根走
+sys.path.insert(0, str(ROOT))
+import paths  # noqa: E402
+ROOT = Path(paths.DATA_ROOT)
 
 
 def sha256(p: Path) -> str:

@@ -17,7 +17,12 @@ import importlib.util
 import os
 import sys
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import paths  # noqa: E402  路径双根，见仓根 paths.py
+
+# 2026-11-17：不再用 dirname(dirname(__file__))——冻结后那指向临时解包目录。
+#   ROOT = 数据根（exe 旁的可写目录；源码运行时就是仓根，行为不变）。
+ROOT = paths.DATA_ROOT
 # 2026-11-17：课程代码不再写死（示例课程 / 截图演示用 PLUMA_COURSE 切，默认仍是 CS340）
 COURSE = os.environ.get("PLUMA_COURSE") or "CS340"
 
@@ -52,7 +57,7 @@ def resolve_assets(code: str):
                       '~\\.pluma\\assets.json'))
     try:
         import json
-        with open(os.path.join(ROOT, 'courses.json'), encoding='utf-8') as f:
+        with open(paths.data_or_res('courses.json'), encoding='utf-8') as f:
             v = (json.load(f).get(code) or {}).get('assets')
         if v:
             cands.append((v if os.path.isabs(v) else os.path.join(ROOT, v), 'courses.json'))
@@ -60,7 +65,7 @@ def resolve_assets(code: str):
         pass
     if os.environ.get('PLUMA_ASSETS'):
         cands.append((os.environ['PLUMA_ASSETS'], '环境变量 PLUMA_ASSETS'))
-    cands.append((os.path.join(ROOT, code, '06_笔记', 'assets'), '软件仓默认路径'))
+    cands.append((os.path.join(paths.course_dir(code), '06_笔记', 'assets'), '软件仓默认路径'))
     for path, src in cands:
         if os.path.isdir(path):
             return path, src
@@ -341,7 +346,8 @@ def build(lesson: dict) -> str:
 
 
 def load(no: str) -> dict:
-    path = os.path.join(ROOT, COURSE, '_lessons', no + '.py')
+    # 逐文件回落：数据根有这一讲就用它（用户改过的），没有就用随程序发布的那份
+    path = paths.data_or_res(COURSE, '_lessons', no + '.py')
     spec = importlib.util.spec_from_file_location('lesson_' + no, path)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)

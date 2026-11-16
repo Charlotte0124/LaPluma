@@ -147,7 +147,7 @@ def postprocess(pdf: Path, label: str, bg: str = "") -> None:
         doc.close()
 
 
-def main() -> int:
+def main(argv: list | None = None) -> int:
     for s in (sys.stdout, sys.stderr):
         if hasattr(s, "reconfigure"):
             s.reconfigure(encoding="utf-8")
@@ -160,7 +160,7 @@ def main() -> int:
     ap.add_argument("--toc", action="store_true", help="自动回填目录页码（多打一遍草稿）")
     ap.add_argument("--footer", default="", help="页脚左侧标签，如「L01-02 · 强化学习基础与贝尔曼方程」")
     ap.add_argument("--bg", default="", help="补铺页面底色（如 #0E0E0C），用于深色满页效果")
-    a = ap.parse_args()
+    a = ap.parse_args(argv)
 
     src = Path(a.html).resolve()
     if not src.is_file():

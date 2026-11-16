@@ -21,22 +21,39 @@
 """
 from __future__ import annotations
 
+import io
 import os
 import re
-import subprocess
 import sys
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import paths  # noqa: E402  路径双根，见仓根 paths.py
+
+sys.path.insert(0, paths.res('engine'))
+sys.path.insert(0, paths.res('tools', 'print'))
+# 2026-11-17：ROOT 改成数据根（冻结后是 exe 旁的可写目录；源码下就是仓根）
+ROOT = paths.DATA_ROOT
 # 2026-11-17：课程代码不再写死（示例课程 / 截图演示用 PLUMA_COURSE 切，默认仍是 CS340）
 COURSE = os.environ.get("PLUMA_COURSE") or "CS340"
-sys.path.insert(0, os.path.join(ROOT, 'engine'))
-sys.path.insert(0, os.path.join(ROOT, 'tools', 'print'))
 
 import _build_讲义 as builder  # noqa: E402
 
 ORDER = ['L01', 'L02', 'L03', 'L04-01', 'L04-02', 'L05', 'L06', 'L08', 'L09']
-OUT_HTML = os.path.join(ROOT, COURSE, '06_笔记', COURSE + '_合订本_源.html')
-OUT_PDF = os.path.join(ROOT, COURSE, '01_讲义', COURSE + '_九讲合订本_讲义.pdf')
+OUT_HTML = ''
+OUT_PDF = ''
+
+
+def set_course(course: str) -> None:
+    """同一进程里切课程：数据目录与产物名跟着换（默认课程仍是 CS340）。"""
+    global COURSE, OUT_HTML, OUT_PDF
+    COURSE = course or COURSE
+    builder.COURSE = COURSE
+    d = paths.data(COURSE)
+    OUT_HTML = os.path.join(d, '06_笔记', COURSE + '_合订本_源.html')
+    OUT_PDF = os.path.join(d, '01_讲义', COURSE + '_九讲合订本_讲义.pdf')
+
+
+set_course(COURSE)
 
 
 def strip_fixed_pages(html: str) -> str:
@@ -119,47 +136,54 @@ def build_book(nos: list[str]) -> tuple[str, list[dict]]:
     return '\n\n'.join(parts), lessons, secs
 
 
-def run(cmd: list[str]) -> int:
-    p = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True,
-                       encoding='utf-8', errors='replace')
-    out = (p.stdout or '') + (p.stderr or '')
-    print(out.strip())
-    return p.returncode
+def run(argv: list, emit=print) -> int:
+    """进程内跑 html2pdf（不再 subprocess sys.executable：冻结后那就是再开一个 exe）。"""
+    import html2pdf
+    buf = io.StringIO()
+    out, err = sys.stdout, sys.stderr
+    sys.stdout = sys.stderr = buf
+    try:
+        rc = html2pdf.main([str(x) for x in argv])
+    finally:
+        sys.stdout, sys.stderr = out, err
+    emit(buf.getvalue().strip())
+    return int(rc or 0)
 
 
-def main(argv: list[str]) -> int:
+def main(argv: list, course: str | None = None, emit=print) -> int:
     for s in (sys.stdout, sys.stderr):
         if hasattr(s, 'reconfigure'):
             s.reconfigure(encoding='utf-8')
+    if course:
+        set_course(course)
 
     nos = argv or ORDER
     try:
         html, lessons, secs = build_book(nos)
     except RuntimeError as e:
-        print('[停] %s' % e)
+        emit('[停] %s' % e)
         return 1
 
     if builder.MISSING:
-        print('[停] 缺图 %d 张：%s' % (len(builder.MISSING), '、'.join(builder.MISSING[:4])))
+        emit('[停] 缺图 %d 张：%s' % (len(builder.MISSING), '、'.join(builder.MISSING[:4])))
         return 1
 
     os.makedirs(os.path.dirname(OUT_HTML), exist_ok=True)
     with open(OUT_HTML, 'w', encoding='utf-8') as f:
         f.write(html)
-    print('生成 %s（%d 字符 · %d 讲 · %d 节正文）'
-          % (os.path.basename(OUT_HTML), len(html), len(lessons), secs))
+    emit('生成 %s（%d 字符 · %d 讲 · %d 节正文）'
+         % (os.path.basename(OUT_HTML), len(html), len(lessons), secs))
 
     # 期望节数：每讲 len(sections) + 4（小结 / 自测 / 术语表 / 附录）
     want = sum(len(L['sections']) + 4 for L in lessons)
     if secs != want:
-        print('[停] 节数对不上：实际 %d，应为 %d（合并时丢了节）' % (secs, want))
+        emit('[停] 节数对不上：实际 %d，应为 %d（合并时丢了节）' % (secs, want))
         return 1
 
-    rc = run([sys.executable, os.path.join('tools', 'print', 'html2pdf.py'), OUT_HTML,
-              '-o', OUT_PDF, '--theme', 'dark', '--toc', '--bg', '#0E0E0C',
-              '--footer', COURSE + ' 讲义 · 九讲合订本'])
+    rc = run([OUT_HTML, '-o', OUT_PDF, '--theme', 'dark', '--toc', '--bg', '#0E0E0C',
+              '--footer', COURSE + ' 讲义 · 九讲合订本'], emit)
     if rc != 0:
-        print('[停] 打印失败')
+        emit('[停] 打印失败')
         return 1
 
     import pymupdf
@@ -170,20 +194,20 @@ def main(argv: list[str]) -> int:
     body = 0
     detail = []
     for L in lessons:
-        p = os.path.join(ROOT, COURSE, '01_讲义', L['out'])
+        p = os.path.join(paths.data(COURSE), '01_讲义', L['out'])
         d = pymupdf.open(p)
         body += d.page_count - 2            # 每讲去掉封面与目录两页
         detail.append('%s %d' % (L['no'], d.page_count - 2))
         d.close()
 
     toc_pages = total - 1 - body
-    print('\n----- 合订本自检 -----')
-    print('  各讲正文页：%s（合计 %d）' % (' · '.join(detail), body))
-    print('  合订本 %d 页 = 封面 1 + 总目录 %d + 正文 %d' % (total, toc_pages, body))
+    emit('\n----- 合订本自检 -----')
+    emit('  各讲正文页：%s（合计 %d）' % (' · '.join(detail), body))
+    emit('  合订本 %d 页 = 封面 1 + 总目录 %d + 正文 %d' % (total, toc_pages, body))
     if toc_pages < 1:
-        print('[停] 总目录算出 %d 页，说明各讲正文有页数没对上（有节被拆页了）' % toc_pages)
+        emit('[停] 总目录算出 %d 页，说明各讲正文有页数没对上（有节被拆页了）' % toc_pages)
         return 1
-    print('  判据：封面 1 + 总目录 %d + 正文 %d = %d ✓' % (toc_pages, body, 1 + toc_pages + body))
+    emit('  判据：封面 1 + 总目录 %d + 正文 %d = %d ✓' % (toc_pages, body, 1 + toc_pages + body))
     return 0
 
 

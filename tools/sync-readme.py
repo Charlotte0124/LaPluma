@@ -13,7 +13,9 @@ import os
 import re
 import sys
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import paths  # noqa: E402  路径双根：CHANGELOG / README 属于随程序发布的东西（资源根）
+ROOT = paths.RES_ROOT
 CHANGELOG = os.path.join(ROOT, "CHANGELOG.md")
 README = os.path.join(ROOT, "README.md")
 BEGIN = "<!-- 最近更新:begin（由 tools/sync-readme.py 生成，别手改） -->"
@@ -51,7 +53,9 @@ def main(argv: list[str]) -> int:
     if BEGIN not in src or END not in src:
         print("README 里缺标记：%s / %s" % (BEGIN, END))
         return 2
-    new = re.sub(re.escape(BEGIN) + r".*?" + re.escape(END), block, src, flags=re.S)
+    # 2026-11-17 修：原来直接拿 block 当替换串，block 里的反斜杠（如 tools\print\pdfjs）
+    #   会被当成转义序列，re 直接报 bad escape \p。用函数替换就不做转义解析了。
+    new = re.sub(re.escape(BEGIN) + r".*?" + re.escape(END), lambda _m: block, src, flags=re.S)
     if "--check" in argv:
         if new != src:
             print("最近更新表与 CHANGELOG 不一致：跑 python tools\\sync-readme.py")

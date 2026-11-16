@@ -8,14 +8,16 @@ import sys
 
 import pymupdf
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import paths  # noqa: E402  路径双根：产物在数据根
+ROOT = paths.DATA_ROOT
 # 2026-11-17：课程代码不再写死（示例课程 / 截图演示用 PLUMA_COURSE 切，默认仍是 CS340）
 COURSE = os.environ.get("PLUMA_COURSE") or "CS340"
 
 
 def main(no):
     pdf = None
-    d = os.path.join(ROOT, COURSE, '01_讲义')
+    d = os.path.join(paths.data(COURSE), '01_讲义')
     for f in os.listdir(d):
         if f.startswith(no) and f.endswith('.pdf') and '讲义' in f:
             pdf = os.path.join(d, f)
