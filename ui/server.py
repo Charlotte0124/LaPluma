@@ -194,6 +194,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(code)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")  # 2026-11-16：上一次改完界面，用户刷新看到的还是旧页
         self.end_headers()
         self.wfile.write(body)
 
@@ -202,6 +203,7 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"ok": False, "error": "文件不存在"}, 404)
         ctype = mimetypes.guess_type(path)[0] or "application/octet-stream"
         self.send_response(200)
+        self.send_header("Cache-Control", "no-store")  # 理由同上：本地工具不需要缓存
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(os.path.getsize(path)))
         self.send_header("Content-Disposition",
