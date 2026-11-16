@@ -73,7 +73,8 @@ HOST, PORT = "127.0.0.1", 8765
 #   每次打开/刷新阅读器都全量重传（本机无感，平板走 WiFi 明显）。
 #   index.html 必须仍走 no-store（改完界面要能立刻看到新版）。
 _STATIC_ETAG = {}
-VERSION = "1.8.2"
+VERSION = "1.9.0"
+APP_NAME = "羽毛笔 La Pluma"
 BOOK_NAME = DEFAULT_COURSE + "_九讲合订本_讲义.pdf"
 
 # ---------- 主机上线（局域网 + 8 位访问码）----------
@@ -1239,6 +1240,20 @@ def _balance_now(cfg) -> dict:
         return {"ok": False, "error": str(e)}
 
 
+def run_window(url: str) -> int:
+    """把界面放进一个原生窗口（Windows 上走 WebView2 / Edge）。
+
+    2026-11-17 用户问「为什么都是网页版，不应该是一个软件吗」——以前是本地服务 + 浏览器页，
+    看着像网页。现在双击/启动直接是一个自己的窗口，带图标与标题，关窗口就退出。
+    想要回浏览器（例如平板、远程调试）用 --no-window。
+    """
+    import webview
+    webview.create_window("%s v%s" % (APP_NAME, VERSION), url,
+                          width=1280, height=880, min_size=(980, 640))
+    webview.start()
+    return 0
+
+
 def main() -> int:
     global PORT
     argv = sys.argv[1:]
@@ -1292,6 +1307,14 @@ def main() -> int:
         except Exception:  # noqa: BLE001
             pass
         return 4
+
+    # 默认开窗口（像桌面软件）；--no-window 回浏览器页
+    use_window = "--no-window" not in argv
+    if use_window:
+        try:
+            import webview  # noqa: F401
+        except Exception:  # noqa: BLE001
+            use_window = False
     local = "http://127.0.0.1:%d/" % PORT
     print("羽毛笔 La Pluma v%s · 界面已启动" % VERSION)
     print("  本机    %s" % local)
@@ -1305,6 +1328,27 @@ def main() -> int:
             print("  上线没开成：%s；继续只在本机。" % e)
     else:
         print("  （Ctrl+C 停止；现在只监听本机。要给平板用：界面「上线」页点「一键上线」，或加 --lan）")
+    if use_window:
+        # 应用窗口（WebView2）：关窗口就退出。用户原话「为什么都是网页版，它不应该是一个软件吗」。
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        print("  窗口模式：关掉窗口就退出（想用浏览器：加 --no-window）", flush=True)
+        try:
+            rc = run_window(local)
+        except Exception as e:  # noqa: BLE001
+            print("  窗口开不了（%s），改用浏览器。" % e, flush=True)
+            if "--no-browser" not in argv:
+                webbrowser.open(local)
+            try:
+                srv.serve_forever()
+            except KeyboardInterrupt:
+                pass
+            srv.server_close()
+            return 1
+        srv.server_close()
+        print("窗口已关闭，服务停止", flush=True)
+        return rc
+
+    # 浏览器模式（--no-window）：本地服务 + 系统浏览器
     if "--no-browser" not in argv:
         threading.Timer(0.6, lambda: webbrowser.open(local)).start()
     try:
@@ -1313,19 +1357,27 @@ def main() -> int:
         print("\n已停止")
     return 0
 
-
 if __name__ == "__main__":
-    # 双击 exe 时窗口一闪就没，用户只会看到「打不开」。任何崩溃都把原因留在屏幕上，
-    # 等人敲回车再关——宁可多按一下，也别让错误消失。
+    # 双击 exe 时窗口一闪就没，用户只会看到「打不开」。无控制台的打包里没有地方看报错，
+    # 所以用系统对话框把原因显式弹出来。
     try:
         sys.exit(main())
     except SystemExit:
         raise
     except Exception:
         import traceback
-        traceback.print_exc()
+        msg = traceback.format_exc()
         try:
-            input("\n启动失败，把上面这段发给我；回车关闭窗口。")
+            sys.stderr.write(msg)
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            import tkinter as _tk
+            from tkinter import messagebox as _mb
+            _r = _tk.Tk()
+            _r.withdraw()
+            _mb.showerror("羽毛笔 La Pluma · 启动失败", msg[-1500:])
+            _r.destroy()
         except Exception:  # noqa: BLE001
             pass
         sys.exit(1)

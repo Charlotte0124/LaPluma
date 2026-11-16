@@ -11,7 +11,7 @@
 
 <div align="center">
 
-<a href="https://github.com/Charlotte0124/LaPluma/releases/latest"><img src="https://img.shields.io/badge/⬇_下载_v1.8.2-C8202C?style=for-the-badge&logo=windows&logoColor=white" height="40" alt="下载"></a>
+<a href="https://github.com/Charlotte0124/LaPluma/releases/latest"><img src="https://img.shields.io/badge/⬇_下载_v1.9.0-C8202C?style=for-the-badge&logo=windows&logoColor=white" height="40" alt="下载"></a>
 &nbsp;
 <a href="一键启动.ps1"><img src="https://img.shields.io/badge/▶_一键启动-2F7D4F?style=for-the-badge&logo=powershell&logoColor=white" height="40" alt="一键启动"></a>
 &nbsp;
@@ -25,7 +25,7 @@
 
 ![license](https://img.shields.io/badge/license-MIT-171714?style=flat-square)
 ![python](https://img.shields.io/badge/python-3.12-171714?style=flat-square)
-![version](https://img.shields.io/badge/version-1.8.2-171714?style=flat-square)
+![version](https://img.shields.io/badge/version-1.9.0-171714?style=flat-square)
 ![gates](https://img.shields.io/badge/三道门-绿才出门-C8202C?style=flat-square)
 ![offline](https://img.shields.io/badge/出_PDF-不需要密钥-2F7D4F?style=flat-square)
 
@@ -220,12 +220,12 @@ A/B/C 三层可离线运行；仅「让模型撰写新内容」时才需要 D �
 <!-- 最近更新:begin（由 tools/sync-readme.py 生成，别手改） -->
 | 版本 | 日期 | 这一版做了什么 |
 |:--|:--|:--|
+| **v1.9.0** | 11-17 | 双击就是一个自己的窗口（不再是浏览器页），带羽毛图标；界面上线方式可用 --no-window 退回 |
 | **v1.8.2** | 11-17 | 双击 exe 不再「黑框一闪就没了」：端口被占用时自动换一个，崩了也把原因留在窗口里 |
 | **v1.8.1** | 11-17 | 推出单文件 exe（LaPluma.exe）；修好打包后才暴露的三处问题 |
 | **v1.8.0** | 11-17 | 搜索课程与课件（放大镜 / Ctrl+K）· 导出可选分册或合订本 · 笔记可一次加到多份讲义 · 生成可多选讲次 |
 | **v1.7.0** | 11-17 | 一键上线按钮 · 余额不足的人话提示 · 讲义多时列表更清爽 |
-| **v1.6.0** | 11-17 | 新增《桃花源记》示例与「范本 → 成品」对照 · 界面截图全部换成示例课程 |
-| — | — | 更早的 11 个版本 → [CHANGELOG](CHANGELOG.md) |
+| — | — | 更早的 12 个版本 → [CHANGELOG](CHANGELOG.md) |
 <!-- 最近更新:end -->
 
 ## 目录

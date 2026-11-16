@@ -9,6 +9,8 @@
 """
 import os
 
+from PyInstaller.utils.hooks import collect_data_files
+
 ROOT = os.path.abspath(os.path.join(SPECPATH, "..", ".."))
 
 datas = [
@@ -20,10 +22,18 @@ datas = [
     (os.path.join(ROOT, "courses.json"), "."),
     (os.path.join(ROOT, "paths.py"), "."),
 ]
+# pywebview 自带 js/css，不带就会白窗口
+for src, dst in collect_data_files("webview"):
+    datas.append((src, dst))
 
 # engine / api 是运行时按名字 import 的（server.py 的 _engine()），modulegraph 看不出来；
 # 它们已经作为数据文件在 _MEIPASS 里，sys.path 也覆盖了，所以不用 hiddenimports 抓它们。
-hidden = ["pymupdf", "tkinter", "tkinter.filedialog", "tkinter.messagebox"]
+hidden = [
+    "pymupdf", "tkinter", "tkinter.filedialog", "tkinter.messagebox",
+    # 2026-11-17：v1.9.0 起界面装在 WebView2 窗口里（pywebview）
+    "webview", "webview.platforms.edgechromium", "webview.platforms.winforms",
+    "clr", "pythonnet",
+]
 
 a = Analysis(
     [os.path.join(ROOT, "ui", "server.py")],
@@ -53,6 +63,7 @@ exe = EXE(
     bootloader_ignore_signals=False,
     strip=False,
     upx=False,
-    console=True,        # 保留控制台：启动时会打印本机地址与访问码
+    console=False,       # 无控制台：双击就是一个自己的窗口（v1.9.0）
+    icon=os.path.join(ROOT, "assets", "lapluma.ico"),
     disable_windowed_traceback=False,
 )
