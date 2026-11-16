@@ -32,7 +32,7 @@ CFG_PATH = os.path.join(USER_DIR, "api.json")
 FAV_PATH = os.path.join(USER_DIR, "favorites.json")
 USAGE_PATH = os.path.join(LOG_DIR, "usage.jsonl")
 HOST, PORT = "127.0.0.1", 8765
-VERSION = "1.1.0"
+VERSION = "1.2.0"
 
 sys.path.insert(0, API_DIR)
 try:
@@ -171,7 +171,7 @@ def safe_join(*parts):
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "LaPluma/1.1"
+    server_version = "LaPluma/1.2"
 
     def log_message(self, *a):
         pass

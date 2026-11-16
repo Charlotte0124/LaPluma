@@ -4,13 +4,13 @@
 
 <br>
 
-[![下载 v1.1.0](https://img.shields.io/badge/⬇_下载-v1.1.0-171714?style=for-the-badge)](https://github.com/Charlotte0124/LaPluma/releases/latest)
+[![下载 v1.2.0](https://img.shields.io/badge/⬇_下载-v1.2.0-171714?style=for-the-badge)](https://github.com/Charlotte0124/LaPluma/releases/latest)
 [![一键启动](https://img.shields.io/badge/▶_一键启动-一键启动.ps1-C8202C?style=for-the-badge)](一键启动.ps1)
 [![文档](https://img.shields.io/badge/📖_文档-总索引-6c6a63?style=for-the-badge)](docs/00-总索引.md)
 
 ![MIT](https://img.shields.io/badge/license-MIT-171714?style=flat-square)
 ![Python](https://img.shields.io/badge/python-3.12-171714?style=flat-square)
-![version](https://img.shields.io/badge/version-1.1.0-171714?style=flat-square)
+![version](https://img.shields.io/badge/version-1.2.0-171714?style=flat-square)
 ![gates](https://img.shields.io/badge/三道门-绿才出门-C8202C?style=flat-square)
 
 </div>
