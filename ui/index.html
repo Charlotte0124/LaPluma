@@ -144,6 +144,23 @@ nav a.on{background:var(--ink);color:var(--bg)}
 .dveil{position:fixed;inset:0;background:rgba(10,10,9,.26);opacity:0;pointer-events:none;
   transition:opacity .22s ease;z-index:29}
 .dveil.on{opacity:1;pointer-events:auto}
+/* 2026-11-17：导入资料（用户：「他怎么只有保存的地方，没让我能丢进去的地方」） */
+.dr-tools{display:flex;gap:10px;align-items:center;padding:0 18px 10px}
+.dr-import{border:1px solid var(--ink);background:var(--ink);color:var(--bg);border-radius:9px;
+  padding:7px 14px;font-size:12.5px;cursor:pointer;transition:.16s;white-space:nowrap}
+.dr-import:hover{opacity:.86}
+.dr-import.busy{opacity:.5;pointer-events:none}
+.dr-tip{font-size:11.5px;color:var(--faint);line-height:1.5}
+.dr-files-grp{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);
+  padding:12px 22px 6px;display:flex;gap:8px;align-items:baseline}
+.dr-files-grp span{letter-spacing:0;text-transform:none;font-size:11.5px;color:var(--faint);opacity:.8}
+.dropveil{position:fixed;inset:0;z-index:60;display:none;align-items:center;justify-content:center;
+  background:rgba(10,10,9,.45);backdrop-filter:blur(2px)}
+.dropveil.on{display:flex}
+.dropveil .box{border:2px dashed var(--card);border-radius:18px;padding:38px 46px;color:#fff;text-align:center;
+  background:rgba(23,23,20,.72);max-width:520px}
+.dropveil .box b{display:block;font-size:19px;margin-bottom:8px}
+.dropveil .box span{font-size:12.5px;opacity:.82;line-height:1.7}
 /* 2026-11-17：保存目录那一行改成可点（用户：「输出模式那个按钮选目录压根就没做」） */
 .fld.pick{cursor:pointer;transition:.16s}
 .fld.pick:hover{border-color:var(--ink);background:var(--card)}
@@ -642,12 +659,18 @@ footer{max-width:1080px;margin:26px auto 0;padding:0 16px;display:flex;align-ite
 </footer>
 
 <div class="dveil" id="dveil"></div>
+<div class="dropveil" id="dropveil"><div class="box"><b>松手放进 <span id="dropCourse">这门课</span></b>
+  <span>PDF / 图片会复制到该课程的「00_原件」目录，原文件不会被改</span></div></div>
 <div class="drawer" id="drawer">
   <div class="dr-h">
     <button class="x" id="drClose">关闭</button>
     <div class="c" id="drCode"></div>
     <h3 id="drTitle"></h3>
     <p id="drDesc"></p>
+  </div>
+  <div class="dr-tools">
+    <button class="dr-import" id="drImport">＋ 导入课件</button>
+    <div class="dr-tip">选文件，或把 PDF / 图片直接拖进窗口</div>
   </div>
   <div class="dr-find"><input id="drFind" placeholder="找讲义：讲号或关键词" autocomplete="off"><span class="n" id="drCount"></span></div>
   <div class="files" id="drFiles"></div>
@@ -1007,12 +1030,26 @@ function renderFiles(){
   const kw = ($('#drFind').value||'').trim().toLowerCase();
   const all = sortFiles(c.files);
   const list = kw ? all.filter(f=>String(f.name).toLowerCase().includes(kw)) : all;
-  $('#drCount').textContent = kw ? (list.length+' / '+all.length) : (all.length+' 份');
-  $('#drFiles').innerHTML = list.length ? list.map(f=>`
+  const org = c.originals || [];
+  const origs = kw ? org.filter(f=>String(f.name).toLowerCase().includes(kw)) : org;
+  const tot = all.length + org.length;
+  $('#drCount').textContent = kw ? ((list.length+origs.length)+' / '+tot) : (tot+' 份');
+  let html = '';
+  // 2026-11-17：抽屉分两段——原件（用户自己导进来的源课件）/ 成品（生成出来的讲义）
+  html += `<div class="dr-files-grp">原件 · ${org.length}<span>你导入的源课件</span></div>`;
+  html += origs.length ? origs.map(f=>`
+    <div class="f" data-pdf="${esc(f.rel)}" data-name="${esc(f.name)}" title="${esc(f.rel)}">
+      <div class="n">${esc(f.name)}</div>
+      <div class="pg">${f.size_kb} KB</div><div class="op">在软件里读 →</div>
+    </div>`).join('')
+    : '<div class="empty">'+(kw?'没有匹配的原件':'还没有原件。点上面「＋ 导入课件」，或直接把 PDF 拖进窗口。')+'</div>';
+  html += `<div class="dr-files-grp">成品 · ${all.length}<span>生成出来的讲义</span></div>`;
+  html += list.length ? list.map(f=>`
     <div class="f" data-pdf="${esc(f.rel)}" data-name="${esc(f.name)}" title="${esc(f.rel)}">
       <div class="n">${esc(f.name)}</div>
       <div class="pg">${f.pages} p</div><div class="op">在软件里读 →</div>
-    </div>`).join('') : '<div class="empty">'+(kw?'没有匹配的讲义':'这一门还没有成品。')+'</div>';
+    </div>`).join('') : '<div class="empty">'+(kw?'没有匹配的成品':'这一门还没有成品。')+'</div>';
+  $('#drFiles').innerHTML = html;
   $('#drFiles').querySelectorAll('[data-pdf]').forEach(el=>el.onclick = () => {
     closeDrawer();
     openReader(el.dataset.pdf, el.dataset.name, c.code);
@@ -1024,13 +1061,83 @@ function openDrawer(c){
   $('#drTitle').textContent = c.title; $('#drDesc').textContent = c.desc;
   $('#drFind').value = '';
   renderFiles();
-  $('#drFoot').textContent = (c.files||[]).length + ' FILES · 点击在软件里打开（可写笔记）';
+  $('#drFoot').textContent = ((c.files||[]).length + (c.originals||[]).length) + ' FILES · 点击在软件里打开（可写笔记）';
   $('#drawer').classList.add('on');
   $('#dveil').classList.add('on');
 }
 $('#drFind').oninput = renderFiles;
 $('#drClose').onclick = () => closeDrawer();
 $('#drAsk').onclick = () => { const c=DRAGGED; closeDrawer(); openChat(c); };
+
+/* ---------- 导入资料（2026-11-17 用户：「他怎么只有保存的地方，没让我能丢进去的地方」）----------
+   两个入口共用一个后端：按钮→本机文件对话框（后端直接拷，不走浏览器，大 PDF 也快）；
+   拖拽→浏览器读成 base64 再传（平板/手机那边也能用）。存到 <课程>/00_原件\。 */
+function currentCourse(){
+  if(DRAGGED && DRAGGED.code) return DRAGGED.code;
+  if(B.default) return B.default;
+  return ((B.courses||[])[0] || {}).code || '';
+}
+async function afterImport(j, code){
+  if(!j.ok){
+    if(!j.canceled) toast('没导进来：' + (j.error || (j.skipped||[]).join('；') || '未知原因'));
+    return;
+  }
+  toast('已导入 ' + (j.added||[]).length + ' 份 → ' + (j.dir||''));
+  if((j.skipped||[]).length) setTimeout(()=>toast('跳过：' + j.skipped.join('；')), 1600);
+  await boot();
+  const c = (B.courses||[]).find(x=>x.code===code);
+  if(c) openDrawer(c);
+}
+$('#drImport').onclick = async () => {
+  const code = currentCourse();
+  const btn = $('#drImport'), old = btn.innerHTML;
+  btn.classList.add('busy'); btn.textContent = '等你在对话框里选…';
+  try{
+    const j = await (await fetch('/api/import',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({course:code, mode:'pick'})})).json();
+    await afterImport(j, code);
+  }catch(e){ toast('请求失败：' + e); }
+  finally{ btn.classList.remove('busy'); btn.innerHTML = old; }
+};
+let dropDepth = 0;
+function setDrop(on, code){
+  if(on){
+    const c = (B.courses||[]).find(x=>x.code===code);
+    $('#dropCourse').textContent = c ? (c.code + ' · ' + c.title) : code;
+  }
+  $('#dropveil').classList.toggle('on', !!on);
+}
+['dragenter','dragover'].forEach(ev => document.addEventListener(ev, e => {
+  if(!e.dataTransfer || !Array.from(e.dataTransfer.types||[]).includes('Files')) return;
+  e.preventDefault();
+  if(ev === 'dragenter') dropDepth++;
+  setDrop(true, currentCourse());
+}));
+document.addEventListener('dragleave', e => {
+  if(!e.dataTransfer) return;
+  dropDepth = Math.max(0, dropDepth - 1);
+  if(dropDepth === 0) setDrop(false);
+});
+document.addEventListener('drop', async e => {
+  if(!e.dataTransfer) return;
+  e.preventDefault();
+  dropDepth = 0; setDrop(false);
+  const files = Array.from(e.dataTransfer.files || []);
+  if(!files.length) return;
+  const code = currentCourse();
+  const arr = [];
+  for(const f of files){
+    if(f.size > 50 * 1024 * 1024){ toast(f.name + ' 太大（>50 MB），请用「＋ 导入课件」'); continue; }
+    const b64 = await new Promise(res => { const r = new FileReader(); r.onload = () => res(String(r.result || '')); r.readAsDataURL(f); });
+    arr.push({ name: f.name, b64 });
+  }
+  if(!arr.length) return;
+  try{
+    const j = await (await fetch('/api/import',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({course:code, files:arr})})).json();
+    await afterImport(j, code);
+  }catch(err){ toast('导入失败：' + err); }
+});
 
 /* ---------- 生成 ---------- */
 function fillSelects(){
@@ -1924,7 +2031,14 @@ document.addEventListener('keydown', e => {
   //   需要临时滤掉非示例课）。模块作用域的东西外部拿不到，带 ?dbg 时挂一个小口子。
   if(DBG) window.__pluma = { B, render, showPage, openDrawer, renderHost, fillSelects, state:()=>({B, MODE, FORM}) };
   if(/settings=1/.test(location.search)) setTimeout(()=>$('#btnSet').click(), 400);
-  if(/open=1/.test(location.search)) setTimeout(()=>{ const c=document.querySelector('.course'); if(c) c.click(); }, 700);
+  // 2026-11-17：?open=1 开第一门；?open=DEMO 开指定那门（截图与复现用）
+  const mo = location.search.match(/open=([A-Za-z0-9_-]+)/);
+  if(mo) setTimeout(()=>{
+    const code = mo[1];
+    const cards = [...document.querySelectorAll('.course')];
+    const c = code === '1' ? cards[0] : (cards.find(x=>x.innerText.includes(code)) || cards[0]);
+    if(c) c.click();
+  }, 700);
   const mc = location.search.match(/chat=([A-Za-z0-9_-]+)/);
   if(mc) setTimeout(()=>{ const c=(B.courses||[]).find(x=>x.code===mc[1]); if(c) openChat(c); }, 500);
   const mp = sp.get('pdf');

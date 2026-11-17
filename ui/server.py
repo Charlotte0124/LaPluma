@@ -8,6 +8,7 @@
 """
 from __future__ import annotations
 
+import base64
 import io
 import json
 import hashlib
@@ -60,6 +61,8 @@ DEFAULT_COURSE = _pick_default_course()
 #   这里保留三个默认值只为了“默认课程”那一门，真正读文件的地方一律走 paths.course_dir()。
 NOTES = os.path.join(paths.course_dir(DEFAULT_COURSE), "06_笔记")
 PDF_DIR = os.path.join(paths.course_dir(DEFAULT_COURSE), "01_讲义")
+# 2026-11-17：用户导入的源课件放这里（每门课一个 00_原件\），与成品 01_讲义 分开
+ORIG_DIR = "00_原件"
 LESSONS = os.path.join(paths.course_dir(DEFAULT_COURSE), "_lessons")
 API_DIR = paths.res("api")
 LOG_DIR = paths.data("_logs")
@@ -73,7 +76,7 @@ HOST, PORT = "127.0.0.1", 8765
 #   每次打开/刷新阅读器都全量重传（本机无感，平板走 WiFi 明显）。
 #   index.html 必须仍走 no-store（改完界面要能立刻看到新版）。
 _STATIC_ETAG = {}
-VERSION = "1.9.1"
+VERSION = "1.9.2"
 APP_NAME = "羽毛笔 La Pluma"
 BOOK_NAME = DEFAULT_COURSE + "_九讲合订本_讲义.pdf"
 
@@ -361,7 +364,8 @@ def discover_courses():
         lessons = sorted(x[:-3] for x in os.listdir(les) if x.endswith(".py")) if os.path.isdir(les) else []
         out.append({"code": name, "title": m.get("title", name), "en": m.get("en", ""),
                     "desc": m.get("desc", "（未填说明，可在 courses.json 里补）"),
-                    "files": files, "lessons": lessons, "fav": name in favs})
+                    "files": files, "lessons": lessons, "fav": name in favs,
+                    "originals": list_originals(name)})
     return out
 
 
@@ -395,6 +399,39 @@ def safe_join(*parts):
         if os.path.isfile(p):
             return p
     return cands[0]      # 都不存在：回数据根，交给调用方报「文件不存在」
+
+
+def originals_dir(code: str) -> str:
+    """一「原件」目录：用户自己的源课件就放这儿（2026-11-17 用户：
+    「他怎么只有保存的地方，没让我能丢进去的地方」）。"""
+    return os.path.join(ROOT, _safe_code(code), ORIG_DIR)
+
+
+def list_originals(code: str) -> list:
+    """只列名字与大小，不开 PDF──每条都开的话，几十份原件会把 bootstrap 拖慢。"""
+    d = originals_dir(code)
+    if not os.path.isdir(d):
+        return []
+    out = []
+    for fn in os.listdir(d):
+        p = os.path.join(d, fn)
+        if os.path.isfile(p):
+            out.append({"name": fn, "size_kb": max(1, round(os.path.getsize(p) / 1024)),
+                        "rel": "%s/%s/%s" % (_safe_code(code), ORIG_DIR, fn)})
+    out.sort(key=lambda x: nat_key(x["name"]))
+    return out
+
+
+def _unique_path(d: str, name: str) -> str:
+    """重名不覆盖：`a.pdf` 已在就写 `a (2).pdf`。"""
+    name = os.path.basename(name) or "未命名"
+    base, ext = os.path.splitext(name)
+    cand = os.path.join(d, name)
+    i = 2
+    while os.path.exists(cand):
+        cand = os.path.join(d, "%s (%d)%s" % (base, i, ext))
+        i += 1
+    return cand
 
 
 def course_pdfs(code: str) -> list:
@@ -463,6 +500,41 @@ def pick_directory(initial: str = "") -> str:
         return ""
     except Exception as e:  # noqa: BLE001
         raise RuntimeError("弹不出目录选择框：%s" % e) from e
+
+
+def pick_files(initial: str = "") -> list:
+    """弹系统「打开文件」对话框（可多选），返回选中的绝对路径。
+
+    与 pick_directory 同一套理由：tkinter 要在主线程建 Tk，而请求跑在
+    ThreadingHTTPServer 的工作线程；冻结成 exe 时 sys.executable 就是自己，只能本进程内弹。
+    """
+    code = (
+        "import sys, tkinter as tk\n"
+        "from tkinter import filedialog\n"
+        "r = tk.Tk(); r.withdraw(); r.attributes('-topmost', True)\n"
+        "init = sys.argv[1] if len(sys.argv) > 1 else ''\n"
+        "ps = filedialog.askopenfilenames(title='选择要导入的课件', initialdir=init or None,\n"
+        "    filetypes=[('PDF 与图片', '*.pdf *.png *.jpg *.jpeg'), ('所有文件', '*.*')])\n"
+        "r.destroy()\n"
+        "for p in (ps or ()): print('PICK:' + p)\n"
+    )
+    try:
+        if getattr(sys, "frozen", False):
+            import tkinter as tk
+            from tkinter import filedialog
+            r = tk.Tk()
+            r.withdraw()
+            r.attributes("-topmost", True)
+            ps = filedialog.askopenfilenames(
+                title="选择要导入的课件", initialdir=initial or None,
+                filetypes=[("PDF 与图片", "*.pdf *.png *.jpg *.jpeg"), ("所有文件", "*.*")])
+            r.destroy()
+            return [p for p in (ps or ()) if p]
+        out = subprocess.run([sys.executable, "-c", code, initial or ""],
+                             capture_output=True, text=True, timeout=300)
+        return [ln[5:].strip() for ln in (out.stdout or "").splitlines() if ln.startswith("PICK:")]
+    except Exception as e:  # noqa: BLE001
+        raise RuntimeError("弹不出文件选择框：%s" % e) from e
 
 
 def nat_key(name: str):
@@ -1076,6 +1148,59 @@ class Handler(BaseHTTPRequestHandler):
                 elif not done:
                     tip["error"] = "；".join(r.get("error", "") for r in results)[:300]
                 return self._json(tip)
+            if u.path == "/api/import":
+                # 2026-11-17 用户：「他怎么只有保存的地方，没让我能丢进去的地方」
+                #   两种入口：mode=pick（本机弹文件对话框，不走浏览器上传，大 PDF 也快）
+                #   不传 mode 则按 files=[{name,b64}] 处理（网页拖拽进来的）
+                code = _safe_code(str(body.get("course") or DEFAULT_COURSE))
+                d = originals_dir(code)
+                try:
+                    os.makedirs(d, exist_ok=True)
+                except Exception as e:  # noqa: BLE001
+                    return self._json({"ok": False, "error": "建目录失败：%s" % e}, 500)
+                added, skipped = [], []
+                if str(body.get("mode") or "") == "pick":
+                    if self.client_address[0] not in ("127.0.0.1", "::1"):
+                        return self._json({"ok": False,
+                                           "error": "只能在运行软件的那台电脑上选文件；远程请把文件拖进窗口"}, 403)
+                    try:
+                        picked = pick_files(d)
+                    except Exception as e:  # noqa: BLE001
+                        return self._json({"ok": False, "error": str(e)}, 500)
+                    if not picked:
+                        return self._json({"ok": False, "canceled": True})
+                    for src in picked:
+                        try:
+                            dst = _unique_path(d, os.path.basename(src))
+                            shutil.copy2(src, dst)
+                            added.append(os.path.basename(dst))
+                        except Exception as e:  # noqa: BLE001
+                            skipped.append("%s：%s" % (os.path.basename(src), e))
+                else:
+                    for it in (body.get("files") or []):
+                        if not isinstance(it, dict):
+                            continue
+                        name = os.path.basename(str(it.get("name") or "").strip())
+                        b64 = str(it.get("b64") or "")
+                        if not name or not b64:
+                            continue
+                        if "." not in name:
+                            skipped.append(name + "：没有扩展名")
+                            continue
+                        if len(b64) > 70 * 1024 * 1024:
+                            skipped.append(name + "：超过 50 MB，请用「选择文件」")
+                            continue
+                        try:
+                            raw = base64.b64decode(b64.split(",")[-1], validate=False)
+                            dst = _unique_path(d, name)
+                            with open(dst, "wb") as fh:
+                                fh.write(raw)
+                            added.append(os.path.basename(dst))
+                        except Exception as e:  # noqa: BLE001
+                            skipped.append(name + "：%s" % e)
+                return self._json({"ok": bool(added), "course": code, "dir": d,
+                                   "added": added, "skipped": skipped,
+                                   "files": list_originals(code)})
             if u.path == "/api/pick-dir":
                 # 选保存目录（原生文件夹对话框）。只接本机：平板端弹不出这台电脑的对话框，
                 # 那边只能到「设置」里手填；请求会一直挂着直到用户选完或取消。
