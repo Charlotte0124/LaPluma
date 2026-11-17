@@ -78,7 +78,7 @@ HOST, PORT = "127.0.0.1", 8765
 #   每次打开/刷新阅读器都全量重传（本机无感，平板走 WiFi 明显）。
 #   index.html 必须仍走 no-store（改完界面要能立刻看到新版）。
 _STATIC_ETAG = {}
-VERSION = "1.9.5"
+VERSION = "1.9.6"
 APP_NAME = "羽毛笔 La Pluma"
 
 
@@ -1248,7 +1248,7 @@ class Handler(BaseHTTPRequestHandler):
             if u.path == "/favicon.ico":
                 # 2026-11-17：以前回 204（空图标）——用户「软件图标还没有整上去」。
                 # 现在直接给 exe 那张 assets\lapluma.ico，标签页与书签都用它。
-                ico = paths.res("assets", "lapluma.ico")
+                ico = paths.data_or_res("assets", "lapluma.ico")
                 if os.path.isfile(ico):
                     return self._static(ico)
                 self.send_response(204)
@@ -1834,7 +1834,8 @@ def _balance_now(cfg) -> dict:
 
 
 # ---------- 文档打开与更新检查（2026-11-17）----------
-DOC_ROOT = paths.res("docs")
+# 2026-11-17：先看数据根——资源包（LaPluma-res.zip）解压到程序目录后就能覆盖内嵌文档
+DOC_ROOT = paths.data_or_res("docs")
 UPDATE_API = (os.environ.get("PLUMA_UPDATE_URL")
               or "https://api.github.com/repos/Charlotte0124/LaPluma/releases/latest")
 UPDATE_CACHE = os.path.join(USER_DIR, "update.json")
@@ -1949,6 +1950,8 @@ UPDATE_DIR = os.path.join(USER_DIR, "update")
 MAX_ASSET = 300 * 1024 * 1024        # 300 MB 上限：再大就不是更新包了
 UPD = {"busy": False, "asset": "", "ver": "", "got": 0, "total": 0, "pct": 0,
        "state": "idle", "error": "", "path": "", "sha256": "", "at": ""}
+# 资源包单独记一条：先下 exe 再下 res，两样都到齐才 apply（2026-11-17）
+UPD_RES = {"path": "", "ver": ""}
 
 
 def _parse_notes(text: str) -> tuple:
@@ -2103,6 +2106,8 @@ def _download_worker(url: str, dst: str, size_hint: int, sha: str, asset: str, v
         os.replace(tmp, dst)
         UPD.update(state="done", path=dst, sha256=digest, pct=100, got=got,
                    total=size_hint or got, busy=False)
+        if asset == "res":
+            UPD_RES.update(path=dst, ver=ver)
     except Exception as e:  # noqa: BLE001
         try:
             if os.path.exists(tmp):
@@ -2226,7 +2231,8 @@ def apply_update(asset: str = "exe") -> dict:
     target = app_exe()
     if not os.path.isfile(target):
         return {"ok": False, "error": "找不到要替换的程序：%s" % target}
-    res = os.environ.get("PLUMA_APPLY_RES", "")
+    res = UPD_RES["path"] if (UPD_RES.get("path") and UPD_RES.get("ver") == UPD.get("ver")
+                               and os.path.isfile(UPD_RES["path"])) else ""
     bat = write_apply_bat(UPD["path"], target, res,
                          relaunch=os.environ.get("PLUMA_NO_RELAUNCH") != "1")
     # 不能用 DETACHED_PROCESS：doteached 进程没有控制台，cmd 里的 tasklist | find 会挂死
@@ -2236,7 +2242,7 @@ def apply_update(asset: str = "exe") -> dict:
                      stderr=subprocess.DEVNULL, creationflags=0x08000000)
     threading.Timer(1.2, _quit_self).start()
     return {"ok": True, "restart": True, "target": target, "bat": bat,
-            "from": UPD["path"], "ver": UPD.get("ver")}
+            "from": UPD["path"], "ver": UPD.get("ver"), "res": res}
 
 
 
@@ -2371,7 +2377,7 @@ def run_window(url: str) -> int:
     #   pywebview 的 winforms 后端只有在 start(icon=...) 传了图标时才用自定义图标，
     #   不传就取 sys.executable 的图标 → 从源码跑时窗口与任务栏一直是 python.exe 的蓝黄头像。
     #   这里显式指定 assets\lapluma.ico（源码时在仓根，exe 时在 _MEIPASS）。
-    ico = paths.res("assets", "lapluma.ico")
+    ico = paths.data_or_res("assets", "lapluma.ico")
     if os.path.isfile(ico):
         webview.start(func=_enable_resize, icon=ico)
     else:

@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import importlib.util
 import os
+import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -342,7 +343,36 @@ def build(lesson: dict) -> str:
                % (a['no'], a['zh'], a['en'], a['lec'], srows, a['myths_title'], myths))
 
     out.append('\n</body>\n</html>\n')
-    return '\n\n'.join(out)
+    return number_figures('\n\n'.join(out))
+
+
+# 图 / 表自动编号（2026-11-17，优化项 L1：借 quarto 的「自动编号 + 交叉引用」）
+#   为什么放渲染末尾一次性数：图是逐块拼出来的，每个块自己不知道前面已有几张图；
+#   统一过一遍 HTML 才能保证「图 1、图 2…」连续且不重号。
+#   手写优先：已经以「图 N」开头的 figcaption 不再加前缀（人工标过的不动）。
+FIGCAP_RE = re.compile(r'(<figcaption[^>]*>)(\s*)(.*?)(</figcaption>)', re.S)
+TABCAP_RE = re.compile(r'(<caption[^>]*>)(\s*)(.*?)(</caption>)', re.S)
+
+
+def number_figures(html: str) -> str:
+    """给图片加「图 N · 」、给带 caption 的表加「表 N · 」；返回新 HTML。"""
+    state = {'fig': 0, 'tab': 0}
+
+    def fig(m):
+        text = m.group(3).strip()
+        if not text or re.match(r'^图\s*\d+', text):
+            return m.group(0)
+        state['fig'] += 1
+        return '%s%s图 %d · %s%s' % (m.group(1), m.group(2), state['fig'], text, m.group(4))
+
+    def tab(m):
+        text = m.group(3).strip()
+        if not text or re.match(r'^表\s*\d+', text):
+            return m.group(0)
+        state['tab'] += 1
+        return '%s%s表 %d · %s%s' % (m.group(1), m.group(2), state['tab'], text, m.group(4))
+
+    return TABCAP_RE.sub(tab, FIGCAP_RE.sub(fig, html))
 
 
 def load(no: str) -> dict:

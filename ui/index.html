@@ -2448,42 +2448,59 @@ document.addEventListener('keydown', e => {
   const mb = n => !n ? '' : (n >= 1048576 ? (n / 1048576).toFixed(0) + ' MB' : (n / 1024).toFixed(0) + ' KB');
 
   /* 应用内更新：下载 → 校验 → 重启自替换（2026-11-17 用户：「不跳 GitHub，直接一步下完」）*/
-  async function startUpdate(a){
+  function waitDownload(label){
+    const st = document.getElementById('updState');
+    const bar = document.getElementById('updBar');
+    return new Promise(resolve => {
+      const t0 = Date.now();
+      const timer = setInterval(async () => {
+        let p = null;
+        try{ p = await (await fetch('/api/update/progress')).json(); }catch(_){ return; }
+        if(!p) return;
+        const pct = Math.max(0, Math.min(100, p.pct || 0));
+        bar.style.width = pct + '%';
+        if(p.state === 'downloading'){
+          st.textContent = label + ' ' + pct + '%' + (p.total ? '（' + mb(p.got) + ' / ' + mb(p.total) + '）' : '');
+        } else if(p.state === 'done'){
+          clearInterval(timer); resolve(p);
+        } else if(p.state === 'error'){
+          clearInterval(timer); resolve({error: p.error || '下载失败'});
+        }
+        if(Date.now() - t0 > 20 * 60 * 1000){ clearInterval(timer); resolve({error: '等太久了，先停下'}); }
+      }, 600);
+    });
+  }
+
+  async function startUpdate(meta){
     const go = document.getElementById('updGo');
     const st = document.getElementById('updState');
     const prog = document.getElementById('updProg');
     const bar = document.getElementById('updBar');
     go.disabled = true;
     prog.classList.add('on'); st.classList.add('on');
+    bar.style.width = '0';
     st.textContent = '正在连接下载源…';
-    let r = null;
-    try{
-      r = await (await fetch('/api/update/download', {method:'POST',
-        headers:{'Content-Type':'application/json'}, body: JSON.stringify({asset:'exe'})})).json();
-    }catch(_){}
+    const post = async body => {
+      try{
+        return await (await fetch('/api/update/download', {method:'POST',
+          headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)})).json();
+      }catch(_){ return null; }
+    };
+    const r = await post({asset: 'exe'});
     if(!r || !r.ok){ st.textContent = '没能开始下载：（' + ((r && r.error) || '接口不通') + '）'; go.disabled = false; return; }
-    const t0 = Date.now();
-    const timer = setInterval(async () => {
-      let p = null;
-      try{ p = await (await fetch('/api/update/progress')).json(); }catch(_){ return; }
-      if(!p) return;
-      const pct = Math.max(0, Math.min(100, p.pct || 0));
-      bar.style.width = pct + '%';
-      if(p.state === 'downloading'){
-        st.textContent = '正在下载 ' + pct + '%' + (p.total ? '（' + mb(p.got) + ' / ' + mb(p.total) + '）' : '');
-      } else if(p.state === 'done'){
-        clearInterval(timer);
-        bar.style.width = '100%';
-        st.textContent = '下载完成，正在重启完成安装…（窗口会自动关掉再开）';
-        applyNow();
-      } else if(p.state === 'error'){
-        clearInterval(timer);
-        bar.style.width = '0';
-        st.textContent = '下载没成功：' + (p.error || '未知原因') + '；可以点「GitHub」手动下';
-        go.disabled = false;
+    const got1 = await waitDownload('正在下载程序');
+    if(got1.error){ st.textContent = '下载没成功：' + got1.error + '；可以点「GitHub」手动下'; go.disabled = false; return; }
+    // 资源包（若有）：只改文档 / 示例时只需要它，下不动也不阻断主程序更换
+    if(meta && meta.assets && meta.assets.res){
+      const r2 = await post({asset: 'res'});
+      if(r2 && r2.ok){
+        const got2 = await waitDownload('正在下载资源包');
+        if(got2 && got2.error){ st.textContent = '程序已下好（资源包没下完，不影响使用）…'; }
       }
-      if(Date.now() - t0 > 15 * 60 * 1000){ clearInterval(timer); st.textContent = '下载超时了，稍后再试'; go.disabled = false; }
-    }, 600);
+    }
+    bar.style.width = '100%';
+    st.textContent = '下载完成，正在重启完成安装…（窗口会自动关掉再开）';
+    applyNow();
   }
 
   async function applyNow(){
@@ -2526,7 +2543,7 @@ document.addEventListener('keydown', e => {
     if(exeA){
       // 清单里有包：一键在应用内下好、换掉、重启（不打开浏览器）
       go.textContent = '立即更新' + (exeA.size ? '（' + mb(exeA.size) + '）' : '');
-      go.onclick = () => startUpdate(exeA);
+      go.onclick = () => startUpdate(j);
     } else {
       go.textContent = '去看看';
       go.onclick = () => { if(j.url) window.open(j.url, '_blank'); box.hidden = true; };
