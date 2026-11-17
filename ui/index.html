@@ -506,6 +506,7 @@ footer{max-width:1080px;margin:26px auto 0;padding:0 16px;display:flex;align-ite
           <button class="btn ghost" id="lsnAll" style="padding:3px 12px;font-size:11.5px">全选</button>
         </div>
         <div class="lens lsn" id="lessonPick"></div>
+        <p class="hint" id="lsnOrig" style="display:none;border:0;padding:0;margin:8px 0 0"></p>
         <div class="tools" style="margin-top:12px">
           <button class="btn" id="btnGen">开始生成</button>
           <span class="hint" id="genHint" style="border:0;margin:0;padding:0">勾一讲或多讲；合订本模式不用勾（全部讲合一本）。</span>
@@ -1066,12 +1067,31 @@ $('#drAsk').onclick = () => { const c=DRAGGED; closeDrawer(); openChat(c); };
    两个入口共用一个后端：按钮→本机文件对话框（后端直接拷，不走浏览器，大 PDF 也快）；
    拖拽→浏览器读成 base64 再传（平板/手机那边也能用）。存到 <课程>/00_原件\。 */
 function currentCourse(){
-  // 2026-11-17：导入入口搬到「生成」页后，以那页选中的课程为准
-  const sel = $('#courseSel');
-  if(sel && sel.value) return sel.value;
-  if(DRAGGED && DRAGGED.code) return DRAGGED.code;
+  // 2026-11-17：导入去哪一门，按「人现在正在看什么」优先，而不是默认课程
+  if(DRAGGED && DRAGGED.code) return DRAGGED.code;       // 抽屉开着：放进正在看的那门
+  if(PAGE === 'read' && RD.code) return RD.code;         // 正在读：放进读的那门
+  if(PAGE === 'chat' && CHAT.code) return CHAT.code;     // 会话中：放进问的那门
+  const sel = $('#courseSel'); if(sel && sel.value) return sel.value;
   if(B.default) return B.default;
   return ((B.courses||[])[0] || {}).code || '';
+}
+/* 2026-11-17 用户：「检查什么时候拖动是不可跳转到生成以免冲突」——
+   下面这几种时候只导入、不跳页，跳过去会打断当前动作：
+     ① 弹窗开着（免责声明 / 设置 / 首次配置）
+     ② 正在生成（队列里有 run / wait）—— 跳到生成页会让人以为新一批已经开跑
+     ③ 正在阅读（page=read）—— 读到一半被拽走
+     ④ 正在会话（page=chat）—— 问答进行到一半 */
+function canJumpToGenerate(){
+  const veil = $('#veil');
+  if(veil && veil.classList.contains('on')) return false;
+  if((Q||[]).some(x => x.st === 'run' || x.st === 'wait')) return false;
+  if(PAGE === 'read' || PAGE === 'chat') return false;
+  return true;
+}
+function whereAmI(){
+  const veil = $('#veil');
+  if(veil && veil.classList.contains('on')) return '弹窗里';
+  return ({read:'阅读页', chat:'会话页', host:'上线页', courses:'课程页'})[PAGE] || '别的页';
 }
 function updateImpHint(){
   const h = $('#impHint'); if(!h) return;
@@ -1083,14 +1103,17 @@ async function afterImport(j, code){
     if(!j.canceled) toast('没导进来：' + (j.error || (j.skipped||[]).join('；') || '未知原因'));
     return;
   }
-  toast('已导入 ' + (j.added||[]).length + ' 份 → ' + (j.dir||''));
-  if((j.skipped||[]).length) setTimeout(()=>toast('跳过：' + j.skipped.join('；')), 1600);
+  const jump = canJumpToGenerate();
   await boot();
-  // 2026-11-17 用户定：「不如直接拖动之后直接跳转到生成那」——导完就落到生成页，课程也选好
+  // 2026-11-17 用户定：「不如直接拖动之后直接跳转到生成那」
   const sel = $('#courseSel');
   if(sel && code){ sel.value = code; syncLessons(); }
-  showPage('generate');
   updateImpHint();
+  if(jump) showPage('generate');
+  let msg = '已导入 ' + (j.added||[]).length + ' 份 → ' + (j.dir||'');
+  if(!jump) msg += '（现在在' + whereAmI() + '，没有跳页）';
+  toast(msg);
+  if((j.skipped||[]).length) setTimeout(()=>toast('跳过：' + j.skipped.join('；')), 1600);
 }
 $('#btnImport').onclick = async () => {
   const code = currentCourse();
@@ -1162,6 +1185,16 @@ function syncLessons(){
   LESSON_SEL = new Set();
   $('#lessonPick').innerHTML = les.map(n=>`<button data-lsn="${esc(n)}">${esc(n)}</button>`).join('')
     || '<span class="hint" style="border:0;padding:0;margin:0">这一门没有可生成的数据（缺 `_lessons`）</span>';
+  // 2026-11-17 用户：「拖进去之后要生成的批次那并没有更新」——导入的是原件，不是讲次；
+  //   讲次只能来自 <课程>\_lessons\*.py。这里把差异当场写清，免得以为导入坏了。
+  const ogN = ((c && c.originals) || []).length;
+  const ogEl = $('#lsnOrig');
+  if(ogEl){
+    if(ogN){
+      ogEl.style.display = '';
+      ogEl.textContent = '另有 ' + ogN + ' 份原件（你导入的 PDF）。原件是资料，不会自动变成讲次——要出讲义，仍需 _lessons 里有这一讲的数据。';
+    } else { ogEl.style.display = 'none'; }
+  }
   $('#lessonPick').querySelectorAll('[data-lsn]').forEach(b=>b.onclick=()=>{
     const k = b.dataset.lsn;
     LESSON_SEL.has(k) ? LESSON_SEL.delete(k) : LESSON_SEL.add(k);
