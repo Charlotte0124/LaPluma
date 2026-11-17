@@ -65,13 +65,16 @@ nav a.on{background:var(--ink);color:var(--bg)}
 .rcard h5 .n{font-weight:400;color:var(--faint);font-size:11.5px}
 .kv{display:flex;font-size:12.5px;padding:5px 0;color:var(--sub)}
 .kv b{margin-left:auto;font-weight:500;color:var(--ink);font-family:Consolas,monospace;font-size:12px}
-.hint{font-size:11.5px;color:var(--faint);line-height:1.65;margin-top:9px;border-top:1px solid var(--line2);padding-top:8px}
+.hint{font-size:11.5px;color:var(--sub);line-height:1.65;margin-top:9px;border-top:1px solid var(--line2);padding-top:8px}
 .btn{border:1px solid var(--ink);background:var(--ink);color:var(--bg);border-radius:9px;padding:7px 15px;
      font-size:12.5px;font-weight:500;transition:.16s}
 .btn:hover{opacity:.86}
 .btn:disabled{opacity:.35;cursor:not-allowed}
 .btn.ghost{background:transparent;color:var(--ink);border-color:var(--line)}
 .btn.ghost:hover{border-color:var(--ink)}
+/* 2026-11-17：删除类操作统一用红色主按钮，与「取消」分开，不靠颜色以外的暗示 */
+.btn.danger{background:var(--red);border-color:var(--red);color:#fff}
+.btn.danger:hover{opacity:.88;filter:none}
 .empty{color:var(--faint);font-size:12.5px;padding:26px 4px;line-height:1.9}
 
 /* 课程页 */
@@ -102,6 +105,10 @@ nav a.on{background:var(--ink);color:var(--bg)}
 .course .foot .expbtn{margin-left:auto;font-size:11.5px;color:var(--sub);border:1px solid var(--line);
   background:var(--card);border-radius:7px;padding:3px 10px;cursor:pointer;white-space:nowrap;transition:.14s}
 .course .foot .expbtn:hover{color:var(--ink);border-color:var(--ink)}
+/* 2026-11-17：一堂课也能整门删——按钮跟导出一排，悬停才变红，避开误点 */
+.course .foot .delbtn{font-size:11.5px;color:var(--faint);border:1px solid var(--line);background:var(--card);
+  border-radius:7px;padding:3px 10px;cursor:pointer;white-space:nowrap;transition:.14s}
+.course .foot .delbtn:hover{color:#fff;background:var(--red);border-color:var(--red)}
 
 /* 2026-11-17：课程标题右侧的放大镜 + 搜索面板（设计稿 15）
    没输字时按浏览器逻辑显示「最近搜索」前三条（本机 localStorage，不出这台电脑）。 */
@@ -171,15 +178,20 @@ nav a.on{background:var(--ink);color:var(--bg)}
 .dr-find input{flex:1;min-width:0;border:1px solid var(--line);background:var(--card);border-radius:8px;padding:7px 10px;font-size:12.5px;outline:none}
 .dr-find input:focus{border-color:var(--ink)}
 .dr-find .n{font-family:Consolas,monospace;font-size:11px;color:var(--faint);white-space:nowrap}
-.f{display:grid;grid-template-columns:1fr 56px 60px;gap:10px;align-items:center;padding:11px 22px;border-bottom:1px solid var(--line2);
+.f{display:grid;grid-template-columns:1fr 52px 76px 44px;gap:10px;align-items:center;padding:11px 22px;border-bottom:1px solid var(--line2);
    font-size:12.5px;cursor:pointer;transition:.14s}
 .f:hover{background:var(--card2)}
 /* 2026-11-17：每行原来还印一遍完整相对路径（课程/01_讲义/同名.pdf），120 份时纯噪音；改成单行截断、完整路径进 title */
 .f .n{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .f .n span{display:none}
 .f .pg{font-family:Consolas,monospace;font-size:11px;color:var(--sub);text-align:right}
-.f .op{font-size:11.5px;color:var(--faint);text-align:right}
+.f .op{font-size:11.5px;color:var(--faint);text-align:right;white-space:nowrap}
 .f:hover .op{color:var(--ink)}
+/* 2026-11-17：抽屉每行加删除（成品 / 原件同一套）；点删除不触发「打开阅读」 */
+.f .fdel{border:1px solid transparent;background:transparent;border-radius:6px;color:var(--faint);
+  font-size:11.5px;padding:2px 0;opacity:0;transition:.14s}
+.f:hover .fdel{opacity:1}
+.f .fdel:hover{color:var(--red);border-color:var(--red)}
 .dr-f{padding:9px 22px;border-top:1px solid var(--line);font-family:Consolas,monospace;font-size:10.5px;color:var(--faint)}
 .dr-ask{padding:13px 22px;border-top:1px solid var(--line);display:flex;align-items:center;gap:12px;background:var(--card2)}
 .dr-ask .note{font-size:11px;color:var(--faint);line-height:1.5}
@@ -275,6 +287,23 @@ nav a.on{background:var(--ink);color:var(--bg)}
 .lsn-h .n{font-size:11.5px;color:var(--faint);margin-left:7px}
 .lsn button{font-family:Consolas,monospace;padding:5px 12px}
 .lsn.dim{opacity:.45;pointer-events:none}
+/* 2026-11-17：讲次删除模式——点「删除」后每个讲号右上角出现红×，点×即删这一讲。
+   删除模式下点芯片本体不再改选中，避免「本来想删、结果改了生成范围」。 */
+.lsn button{position:relative}
+.lsn .kill{display:none}
+.lsn.deling button{padding-right:20px}
+.lsn.deling .kill{display:grid;place-items:center;position:absolute;right:-5px;top:-5px;width:15px;height:15px;
+  border-radius:50%;background:var(--red);color:#fff;font-size:11px;line-height:1;font-family:"Microsoft YaHei",sans-serif;
+  border:1px solid var(--card);box-shadow:0 1px 3px rgba(0,0,0,.22)}
+.lsn.deling .kill:hover{filter:brightness(1.12)}
+.lsn-h .deling-note{font-size:11.5px;color:var(--red)}
+/* 生成队列：每一项可取消（排队中的直接放弃，正在跑的这一讲仍会跑完但不收结果） */
+.qi{align-items:center;gap:10px}
+.qi .qi-l{display:flex;gap:6px;align-items:center;min-width:0;font-family:Consolas,monospace}
+.qi .qi-x{margin-left:auto;border:1px solid var(--line);background:var(--card);color:var(--sub);
+  border-radius:7px;padding:2px 9px;font-size:11.5px;white-space:nowrap}
+.qi .qi-x:hover{border-color:var(--red);color:var(--red)}
+.qi.cancel .st{color:var(--faint);text-decoration:line-through}
 
 /* 弹窗 */
 .veil{position:fixed;inset:0;background:rgba(10,10,9,.42);backdrop-filter:blur(2px);display:none;align-items:flex-start;
@@ -330,6 +359,18 @@ nav a.on{background:var(--ink);color:var(--bg)}
 .seg button:hover{background:var(--card2);color:var(--ink)}
 .seg .val{padding:5px 8px;font-family:Consolas,monospace;font-size:12px;min-width:56px;text-align:center}
 .read-body{display:grid;grid-template-columns:1fr 300px;align-items:start}
+/* 阅读器全屏（2026-11-17 用户：全屏模式不见了）：只把阅读卡全屏，顶栏与笔记栏一起进去。
+   注：嵌入环境（如预览框）可能拒绝 HTML5 全屏（实测报 Permissions check failed），
+   所以再留一条「满屏浮层」兜底——两条路径外观一致，Esc 都能退出。 */
+.read-card:fullscreen{background:var(--bg);border-radius:0;border:0;display:flex;flex-direction:column;height:100vh}
+.read-card:fullscreen .read-body{flex:1;min-height:0}
+.read-card:fullscreen .reader{max-height:none;height:100%}
+.read-card:fullscreen .side{max-height:none;overflow:auto}
+.read-card.fs{position:fixed;inset:0;z-index:70;border-radius:0;border:0;background:var(--bg);
+  display:flex;flex-direction:column;height:100vh;box-shadow:none}
+.read-card.fs .read-body{flex:1;min-height:0}
+.read-card.fs .reader{max-height:none;height:100%}
+.read-card.fs .side{max-height:none;overflow:auto}
 .reader{background:var(--reader-bg);padding:18px;min-height:560px;display:flex;justify-content:center;
    align-items:flex-start;overflow:auto;max-height:calc(100vh - 190px)}
 #pdfcanvas{background:var(--page);box-shadow:var(--sheet-shadow);border-radius:2px;display:block}
@@ -447,7 +488,7 @@ footer{max-width:1080px;margin:26px auto 0;padding:0 16px;display:flex;align-ite
   <div class="page on" id="page-courses">
     <div class="hero">
       <h1>把一讲的内容，出一份能核对的讲义</h1>
-      <p>数据 → 讲义源 → 打印 PDF → 过三道门。红项不出货。点课程卡看成品、问这一门、读讲义。</p>
+      <p>数据 → 讲义源 → 打印 PDF → 三道检查门，存在红项即不产出。点击课程卡可查看成品、提问与阅读讲义。</p>
       <div class="stats">
         <div><b id="sCourses">—</b><span>门课</span></div>
         <div><b id="sFiles">—</b><span>份讲义</span></div>
@@ -467,7 +508,7 @@ footer{max-width:1080px;margin:26px auto 0;padding:0 16px;display:flex;align-ite
     <div class="finder" id="finder">
       <div class="fd-in">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="11" cy="11" r="6.4"/><path d="M15.8 15.8 21 21"/></svg>
-        <input id="fdQ" placeholder="搜课程、讲号或课件关键词…" autocomplete="off">
+        <input id="fdQ" placeholder="搜索课程、讲号或课件关键词" autocomplete="off">
         <span class="kbd" id="fdEsc">Esc</span>
       </div>
       <div class="fd-body" id="fdBody"></div>
@@ -478,11 +519,10 @@ footer{max-width:1080px;margin:26px auto 0;padding:0 16px;display:flex;align-ite
   <!-- 生成 -->
   <div class="page" id="page-generate">
     <div class="hero" style="padding:22px 0 10px"><h1 style="font-size:24px">生成</h1>
-      <p style="font-size:13px">选课程与讲次 → 过免责声明 → 开始；成功后自动从队列消失。</p></div>
+      <p style="font-size:13px">选择课程与讲次，确认生成须知后开始。已完成的讲次会自动从队列移除。</p></div>
     <div class="grid2">
       <div class="card pad">
         <h3>输出方式</h3>
-        <p class="hint">二选一；生成的成品会复制到你设的保存目录。</p>
         <div class="opts">
           <div class="opt on" data-mode="local"><b>保存到本地</b><small>落到保存目录</small></div>
           <div class="opt" data-mode="repo"><b>推送到仓库</b><small>本仓提交即推送</small></div>
@@ -491,25 +531,28 @@ footer{max-width:1080px;margin:26px auto 0;padding:0 16px;display:flex;align-ite
           <code id="outPath">out</code><span id="dirHint" style="font-size:11.5px;color:var(--faint)">保存目录 · 点击选择</span></div>
         <p class="hint" id="dirFix" style="display:none;color:var(--red);border:0">保存目录在配置里是乱码（出现过 ?），已临时退回默认目录；请到「设置」里重填。</p>
         <h3 style="margin-top:16px">成品形态</h3>
-        <p class="hint">单本＝一讲一份 PDF（默认）；合订本＝全部讲合成一本，去掉各讲自带的封面与目录。</p>
+        <p class="hint">单本：一讲一份 PDF。合订本：全部讲次合为一本，不含各讲自带的封面与目录。</p>
         <div class="opts" id="formOpts">
           <div class="opt on" data-form="single"><b>单本</b><small>一讲一份</small></div>
           <div class="opt" data-form="book"><b>合订本</b><small>全部讲一本</small></div>
         </div>
         <div class="tools">
           <select id="courseSel"></select>
-          <button class="btn ghost" id="btnImport" title="把课件 PDF / 图片导入到这门课（也可以直接拖进窗口）">＋ 导入课件</button>
+          <button class="btn ghost" id="btnImport" title="为本课程导入课件 PDF 或图片，也可将文件拖入窗口">＋ 导入课件</button>
           <span class="hint" id="impHint" style="border:0;margin:0;padding:0;align-self:center">原件 —</span>
         </div>
         <div class="lsn-h">
           <span>要生成的讲次<span class="n" id="lsnCnt">可多选</span></span>
-          <button class="btn ghost" id="lsnAll" style="padding:3px 12px;font-size:11.5px">全选</button>
+          <span style="display:flex;gap:8px;align-items:center">
+            <button class="btn ghost" id="lsnDel" style="padding:3px 12px;font-size:11.5px">删除</button>
+            <button class="btn ghost" id="lsnAll" style="padding:3px 12px;font-size:11.5px">全选</button>
+          </span>
         </div>
         <div class="lens lsn" id="lessonPick"></div>
         <p class="hint" id="lsnOrig" style="display:none;border:0;padding:0;margin:8px 0 0"></p>
         <div class="tools" style="margin-top:12px">
           <button class="btn" id="btnGen">开始生成</button>
-          <span class="hint" id="genHint" style="border:0;margin:0;padding:0">勾一讲或多讲；合订本模式不用勾（全部讲合一本）。</span>
+          <span class="hint" id="genHint" style="border:0;margin:0;padding:0;align-self:center">单本模式需勾选至少一讲；合订本模式包含全部讲次。</span>
         </div>
         <div class="queue" id="queue"></div>
         <div class="log" id="log"></div>
@@ -517,13 +560,11 @@ footer{max-width:1080px;margin:26px auto 0;padding:0 16px;display:flex;align-ite
       <div>
         <div class="card pad">
           <h3>模型与用量</h3>
-          <p class="hint">真实余额来自接口；花费是按 token 估的，不是账单。</p>
           <div class="kv"><span>当前模型</span><b id="mModel">—</b></div>
           <div class="kv"><span>账户余额</span><b id="mBal">—</b></div>
           <div class="kv"><span>累计调用</span><b id="mCalls">—</b></div>
           <div class="kv"><span>token（入 / 出）</span><b id="mTok">—</b></div>
           <div class="kv"><span>估算花费</span><b id="mCost">—</b></div>
-          <p class="hint">不填 key 也能出 PDF：已有数据走本地渲染，不需要模型。只有「写新内容」才用得到。</p>
         </div>
         <div class="rcard" style="margin-top:12px">
           <h5>三道门<span class="n">任一门红即停</span></h5>
@@ -540,7 +581,7 @@ footer{max-width:1080px;margin:26px auto 0;padding:0 16px;display:flex;align-ite
         <div class="chat-h">
           <span class="back" id="chatBack">← 课程</span>
           <span class="ttl" id="chatWho">—</span>
-          <span class="pill" id="chatOnly">本会话只查这一门</span>
+          <span class="pill" id="chatOnly">仅检索本课程</span>
         </div>
         <div class="selbar">
           <label class="pick"><input type="checkbox" id="selAll"></label>
@@ -551,10 +592,10 @@ footer{max-width:1080px;margin:26px auto 0;padding:0 16px;display:flex;align-ite
         </div>
         <div class="msgs" id="msgs"></div>
         <div class="composer">
-          <label class="chip" id="crossChip" title="默认只在这门课里找；勾上才把别的课件一起检索">
+          <label class="chip" id="crossChip" title="默认仅检索本课程；启用后将同时检索其他课件">
             <input type="checkbox" id="allowCross" style="accent-color:currentColor"> 引用其他课件
           </label>
-          <input type="text" id="chatQ" placeholder="只在这一门里找；讲次在右边勾">
+          <input type="text" id="chatQ" placeholder="仅在本课程范围内检索；讲次在右侧选择">
           <button class="btn" id="btnSend">提问</button>
         </div>
       </div>
@@ -564,12 +605,11 @@ footer{max-width:1080px;margin:26px auto 0;padding:0 16px;display:flex;align-ite
           <div class="kv">范围<b id="cScope">—</b></div>
           <div class="kv">问答<b id="cCount">0 轮</b></div>
           <div class="kv">别的课件<b id="cCross">未接入</b></div>
-          <div class="hint">一个课件一个会话；换课件就是另一条会话，上下文不串。关掉再开还在。</div>
         </div>
         <div class="rcard">
           <h5>讲次范围<span class="n">勾选，可多选</span></h5>
           <div class="lens" id="lens"></div>
-          <div class="hint" id="lensHint">一个都不勾 = 整门课；勾了就只在这些讲里检索。</div>
+          <div class="hint" id="lensHint">未选择讲次时检索整门课程；选择后仅在这些讲次内检索。</div>
         </div>
         <div class="rcard">
           <h5>会话</h5>
@@ -587,11 +627,12 @@ footer{max-width:1080px;margin:26px auto 0;padding:0 16px;display:flex;align-ite
         <span class="back link" id="readBack">← 课程</span>
         <div>
           <div class="t" id="rTitle">还没有打开讲义</div>
-          <div class="p" id="rSub">从课程抽屉里点一份 PDF</div>
+          <div class="p" id="rSub">从课程抽屉中选择一份讲义</div>
         </div>
         <div class="read-ctl">
           <div class="seg"><button id="pgPrev">‹</button><span class="val" id="pgVal">— / —</span><button id="pgNext">›</button></div>
           <div class="seg"><button id="zOut">−</button><span class="val" id="zVal">100%</span><button id="zIn">＋</button></div>
+          <button class="tbtn" id="btnFs"><span id="fsIcon">⤢</span><span id="fsLabel">全屏</span></button>
           <button class="tbtn" id="btnTheme2"><span id="themeIcon2">◐</span><span id="themeLabel2">深色</span></button>
         </div>
       </div>
@@ -602,17 +643,17 @@ footer{max-width:1080px;margin:26px auto 0;padding:0 16px;display:flex;align-ite
             <h5 style="margin:0 0 10px;font-size:12.5px;font-weight:600;display:flex;justify-content:space-between">
               笔记<span style="color:var(--faint);font-weight:400;font-size:11.5px"><span id="nCount">0</span> 条</span></h5>
             <div class="hint" style="border:0;margin:0 0 10px;background:var(--card2);border-radius:7px;padding:6px 9px">
-              当前页 <b id="curP">p.1</b> · 新笔记挂在这一页
+              当前页 <b id="curP">p.1</b>
             </div>
             <div class="nlist" id="nlist"></div>
           </div>
           <div class="narea">
-            <textarea id="nDraft" placeholder="在这一页记一笔…（Ctrl+Enter 保存）"></textarea>
-            <div class="r"><span>挂在 <b id="curP2">p.1</b> · 自动存本机</span><button class="btn" id="nAdd">记一笔</button></div>
+            <textarea id="nDraft" placeholder="本页笔记（Ctrl+Enter 保存）"></textarea>
+            <div class="r"><span>记录于 <b id="curP2">p.1</b> · 自动保存到本机</span><button class="btn" id="nAdd">记一笔</button></div>
           </div>
           <div class="exp">
-            <div class="t">导出这些笔记</div>
-            <p>生成一份副本，把笔记作为附页追加到这份讲义末尾，不动原件。</p>
+            <div class="t">导出本页笔记</div>
+            <p>生成副本，并把笔记作为附页追加到讲义末尾；原件不改动。</p>
             <button class="btn" id="expBtn">添加到这份 PDF</button>
           </div>
         </div>
@@ -623,7 +664,7 @@ footer{max-width:1080px;margin:26px auto 0;padding:0 16px;display:flex;align-ite
   <!-- 上线 -->
   <div class="page" id="page-host">
     <div class="hero" style="padding:22px 0 12px"><h1 style="font-size:24px">主机上线</h1>
-      <p style="font-size:13px">这台电脑跑服务，同一 WiFi 的平板/手机输入 8 位访问码打开；数据都在本机。</p></div>
+      <p style="font-size:13px">本机运行服务；同一局域网内的平板或手机输入 8 位访问码后使用，数据均保存在本机。</p></div>
     <!-- 2026-11-17：一键上线开关（R93）——不用敲命令、不用重开软件 -->
     <div id="lanCard"></div>
     <div class="host-grid">
@@ -634,19 +675,19 @@ footer{max-width:1080px;margin:26px auto 0;padding:0 16px;display:flex;align-ite
           羽毛笔 <em>La Pluma</em>
         </div>
         <div class="addr" id="padAddr">—</div>
-        <div class="ask">平板端：请输入电脑上显示的访问码</div>
+        <div class="ask">平板端：请输入本机显示的访问码</div>
         <div class="digits" id="digits">
           <input maxlength="1" inputmode="numeric"><input maxlength="1" inputmode="numeric"><input maxlength="1" inputmode="numeric"><input maxlength="1" inputmode="numeric">
           <input maxlength="1" inputmode="numeric"><input maxlength="1" inputmode="numeric"><input maxlength="1" inputmode="numeric"><input maxlength="1" inputmode="numeric">
         </div>
         <button class="go" id="goBtn">进入</button>
-        <div class="fine" id="padFine">访问码每次启动都会换；这台电脑关掉或关窗口，平板立刻打不开。</div>
+        <div class="fine" id="padFine">访问码每次启动重新生成；关闭上线或退出程序后，外部设备立即无法访问。</div>
       </div>
     </div>
     <div class="notes3">
-      <div class="rcard"><h6>为什么要有访问码</h6><p>一上线，同网任何人都能敲这个地址。没码不上线：8 位数字，只给对一次，12 小时有效。</p></div>
-      <div class="rcard"><h6>怎么算「在线」<span class="tag">就一条</span></h6><p>只是这台电脑在跑 <span class="mono">ui\server.py --lan</span>。关掉窗口或关机 → 平板立即断，不是云端。</p></div>
-      <div class="rcard"><h6>防火墙<span class="tag">一次性</span></h6><p>第一次上线 Windows 会问是否允许 8765；选「专用网络」允许即可，公共网络别开。</p></div>
+      <div class="rcard"><h6>访问码的作用</h6><p>上线后，同一网络内均可访问该地址。8 位数字，验证一次后有效期 12 小时。</p></div>
+      <div class="rcard"><h6>「在线」的判定<span class="tag">一条</span></h6><p>运行 <span class="mono">ui\server.py --lan</span> 即视为在线。关闭窗口或关机会立即断开，不经过云端。</p></div>
+      <div class="rcard"><h6>防火墙<span class="tag">一次性</span></h6><p>首次上线时 Windows 会询问是否允许 8765；请在「专用网络」允许，公共网络不要开放。</p></div>
     </div>
   </div>
 </div>
@@ -657,8 +698,8 @@ footer{max-width:1080px;margin:26px auto 0;padding:0 16px;display:flex;align-ite
 </footer>
 
 <div class="dveil" id="dveil"></div>
-<div class="dropveil" id="dropveil"><div class="box"><b>松手放进 <span id="dropCourse">这门课</span></b>
-  <span>PDF / 图片会复制到该课程的「00_原件」目录，原文件不会被改</span></div></div>
+<div class="dropveil" id="dropveil"><div class="box"><b>释放以导入到 <span id="dropCourse">本课程</span></b>
+  <span>PDF / 图片将复制到该课程的「00_原件」目录，原文件不会修改</span></div></div>
 <div class="drawer" id="drawer">
   <div class="dr-h">
     <button class="x" id="drClose">关闭</button>
@@ -666,12 +707,12 @@ footer{max-width:1080px;margin:26px auto 0;padding:0 16px;display:flex;align-ite
     <h3 id="drTitle"></h3>
     <p id="drDesc"></p>
   </div>
-  <div class="dr-find"><input id="drFind" placeholder="找讲义：讲号或关键词" autocomplete="off"><span class="n" id="drCount"></span></div>
+  <div class="dr-find"><input id="drFind" placeholder="搜索讲义：讲号或关键词" autocomplete="off"><span class="n" id="drCount"></span></div>
   <div class="files" id="drFiles"></div>
   <div class="dr-f" id="drFoot"></div>
   <div class="dr-ask">
-    <button class="btn" id="drAsk">问这一门 →</button>
-    <div class="note">开一个只属于这门的会话，不带到别的课件</div>
+    <button class="btn" id="drAsk">提问本课程 →</button>
+    <div class="note">在本课程内新建一个独立会话，不携带其他课件</div>
   </div>
 </div>
 
@@ -762,12 +803,14 @@ function render(){
   list.forEach(c=>{
     const el = document.createElement('div'); el.className='course';
     const exp = `<button class="expbtn" data-exp="${esc(c.code)}" title="把这一门的成品打包下载">⇩ 导出 PDF</button>`;
+    const del = `<button class="delbtn" data-delc="${esc(c.code)}" title="删除整门课程（移入回收目录）">删除</button>`;
     el.innerHTML = `<span class="star ${c.fav?'on':''}" title="收藏">${c.fav?'★':'☆'}</span>
       <div class="code">${esc(c.code)}${c.en?' · '+esc(c.en):''}</div>
       <h3>${esc(c.title)}</h3><p>${esc(c.desc)}</p>
-      <div class="foot"><span>${c.files.length} 份</span><span>${c.files.reduce((a,f)=>a+f.pages,0)} 页</span><span>${c.lessons.length} 讲可生成</span>${exp}</div>`;
-    el.onclick = e => { if(e.target.classList.contains('star') || e.target.classList.contains('expbtn')) return; openDrawer(c); };
+      <div class="foot"><span>${c.files.length} 份</span><span>${c.files.reduce((a,f)=>a+f.pages,0)} 页</span><span>${c.lessons.length} 讲可生成</span>${exp}${del}</div>`;
+    el.onclick = e => { if(e.target.classList.contains('star') || e.target.classList.contains('expbtn') || e.target.classList.contains('delbtn')) return; openDrawer(c); };
     el.querySelector('.expbtn').onclick = e => { e.stopPropagation(); exportCourse(c); };
+    el.querySelector('.delbtn').onclick = e => { e.stopPropagation(); askDeleteCourse(c); };
     el.querySelector('.star').onclick = async e=>{
       e.stopPropagation();
       const j = await (await fetch('/api/favorites',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code:c.code})})).json();
@@ -833,12 +876,12 @@ function exportPdf(rel){
 function exportCourse(c){
   if(!c) return;
   const files = sortFiles(c.files || []);
-  if(!files.length){ toast('这一门还没有成品，先去生成页出一份'); return; }
+  if(!files.length){ toast('本课程暂无成品，请先在生成页生成'); return; }
   const sel = new Set(files.map(f => f.rel));      // 默认全选
   let mode = 'single';                              // single = 分册；book = 拼成一本
   $('#dlg').innerHTML = `
     <div class="eb">Export PDF</div><h4>导出 PDF · ${esc(c.title)}</h4>
-    <p class="desc">先选格式，再勾要哪几份。都存到浏览器的下载文件夹。</p>
+    <p class="desc">选择格式后勾选需要的文件，保存位置为浏览器下载目录。</p>
     <div class="opts" id="exMode" style="margin-bottom:14px">
       <div class="opt on" data-ex="single"><b>分册</b><small>一讲一份；多份打 zip</small></div>
       <div class="opt" data-ex="book"><b>合订本</b><small>勾中的几讲拼成一本</small></div>
@@ -847,7 +890,7 @@ function exportCourse(c){
       <button class="btn ghost" id="exAll" style="float:right;padding:2px 10px;font-size:11.5px;margin-top:-3px">全选 / 全不选</button></div>
     <div class="pdfs" id="exList">${files.map(f=>`<button data-rel="${esc(f.rel)}" data-name="${esc(f.name)}" class="on">
         <span class="ck" style="font-family:Consolas,monospace;color:var(--faint);font-size:11.5px">✓</span>${esc(f.name)}<b>${f.pages} p</b></button>`).join('')}</div>
-    <p class="fine" id="exHint">保存到浏览器的下载文件夹；只勾一份就直接下这份 PDF。</p>
+    <p class="fine" id="exHint">保存至浏览器下载目录；仅勾选一份时直接下载该 PDF。</p>
     <div class="acts"><button class="btn ghost" id="exNo">取消</button>
       <button class="btn" id="exGo">导出</button></div>`;
   openVeil();
@@ -859,10 +902,10 @@ function exportCourse(c){
     go.disabled = n === 0;
     if(mode === 'book'){
       go.textContent = n ? ('合成 1 本（' + n + ' 讲）') : '合成合订本';
-      $('#exHint').textContent = '合订本会把勾中的几讲按讲号顺序拼成一本（各讲自带的封面页保留）。';
+      $('#exHint').textContent = '合订本会把勾选的讲次按讲号顺序拼成一本（各讲自带的封面页保留）。';
     }else{
       go.textContent = n === 0 ? '导出' : (n === 1 ? '导出这 1 份' : ('导出 ' + n + ' 份（打包 zip）'));
-      $('#exHint').textContent = '保存到浏览器的下载文件夹；只勾一份就直接下这份 PDF。';
+      $('#exHint').textContent = '保存至浏览器下载目录；仅勾选一份时直接下载该 PDF。';
     }
   };
   $('#exMode').querySelectorAll('[data-ex]').forEach(o=>o.onclick=()=>{
@@ -916,10 +959,10 @@ function renderFind(){
   if(!kw){
     const rec = recentRead().slice(0,3);
     box.innerHTML = rec.length
-      ? `<div class="fd-grp"><div class="gt">最近搜索</div>` + rec.map(k =>
+      ? `<div class="fd-grp"><div class="gt">最近搜索<span class="fd-act" data-act="clear-recent" style="float:right;margin-top:-4px">清除记录</span></div>` + rec.map(k =>
           `<div class="fd-row" data-recent="${esc(k)}"><span class="tt">${esc(k)}</span>
             <span class="fd-act" data-act="again">再搜一次</span></div>`).join('') + `</div>`
-      : `<div class="fd-empty">还没有搜索记录。敲课程名、讲号（如 D01）或课件关键词就开始搜；<b>Ctrl+K</b> 随时唤出这一栏。</div>`;
+      : `<div class="fd-empty">暂无搜索记录。输入课程名、讲号（如 D01）或课件关键词开始搜索；<b>Ctrl+K</b> 可随时唤出搜索栏。</div>`;
   }else{
     const {cs, fs} = findHits(kw);
     const CAP = 12;
@@ -928,17 +971,19 @@ function renderFind(){
     html += cs.length ? cs.map(c => `<div class="fd-row" ${head}>
         <span class="tt">${esc(c.title)}<small>${esc(c.code)}${c.en?' · '+esc(c.en):''} · ${c.files.length} 份</small></span>
         <span class="fd-act" data-act="drawer" data-code="${esc(c.code)}">打开抽屉</span>
-        <span class="fd-act" data-act="export" data-code="${esc(c.code)}">导出</span></div>`).join('')
-      : `<div class="fd-empty" style="padding:4px 16px 8px">没有匹配的课程</div>`;
+        <span class="fd-act" data-act="export" data-code="${esc(c.code)}">导出</span>
+        <span class="fd-act" data-act="del-course" data-code="${esc(c.code)}">删除</span></div>`).join('')
+      : `<div class="fd-empty" style="padding:4px 16px 8px">无匹配课程</div>`;
     html += `</div><div class="fd-grp"><div class="gt">课件${fs.length?' · '+fs.length+' 份命中':''}</div>`;
     html += fs.length ? fs.slice(0,CAP).map(({c,f}) => `<div class="fd-row" ${head}>
         <span class="tt">${esc(f.name)}<small>${esc(c.code)}</small></span>
         <span class="meta">${f.pages} p</span>
         <span class="fd-act" data-act="read" data-rel="${esc(f.rel)}" data-name="${esc(f.name)}" data-code="${esc(c.code)}">在软件里读</span>
-        <span class="fd-act" data-act="export-pdf" data-rel="${esc(f.rel)}">导出</span></div>`).join('')
-      : `<div class="fd-empty" style="padding:4px 16px 8px">没有匹配的课件</div>`;
+        <span class="fd-act" data-act="export-pdf" data-rel="${esc(f.rel)}">导出</span>
+        <span class="fd-act" data-act="del-file" data-rel="${esc(f.rel)}" data-name="${esc(f.name)}" data-code="${esc(c.code)}">删除</span></div>`).join('')
+      : `<div class="fd-empty" style="padding:4px 16px 8px">无匹配课件</div>`;
     html += `</div>`;
-    if(fs.length > CAP) html += `<div class="fd-empty">还有 ${fs.length-CAP} 份没展开：再输入几个字窄一点。</div>`;
+    if(fs.length > CAP) html += `<div class="fd-empty">另有 ${fs.length-CAP} 份未展开，请补充关键词缩小范围。</div>`;
     box.innerHTML = html;
   }
   // 行点击：点文字/行体 = 默认动作（课程开抽屉、课件在软件里读）；右侧两个按钮各做各的
@@ -956,11 +1001,17 @@ function renderFind(){
   });
   box.querySelectorAll('.fd-act').forEach(b => {
     if(b.dataset.act === 'again') return;      // 走上面「再搜一次」
-    b.onclick = e => { e.stopPropagation(); fireFindAct(b, b.closest('.fd-row').dataset.kw || ''); };
+    b.onclick = e => { e.stopPropagation(); const row = b.closest('.fd-row'); fireFindAct(b, row ? (row.dataset.kw || '') : ''); };
   });
 }
 function fireFindAct(el, kw){
   const act = el.dataset.act;
+  if(act === 'clear-recent'){
+    try{ localStorage.removeItem(RECENT_KEY); }catch(e){}
+    renderFind();
+    toast('搜索记录已清除');
+    return;
+  }
   if(act === 'drawer'){
     const c = (B.courses||[]).find(x => x.code === el.dataset.code);
     if(!c) return; recentPush(kw); findOpen(false); openDrawer(c);
@@ -973,6 +1024,13 @@ function fireFindAct(el, kw){
     exportCourse(c);
   }else if(act === 'export-pdf'){
     recentPush(kw); exportPdf(el.dataset.rel);
+  }else if(act === 'del-course'){
+    const c = (B.courses||[]).find(x => x.code === el.dataset.code);
+    if(!c) return;
+    recentPush(kw); findOpen(false); askDeleteCourse(c);
+  }else if(act === 'del-file'){
+    recentPush(kw); findOpen(false);
+    askDeleteFile(el.dataset.rel, el.dataset.name, el.dataset.code);
   }
 }
 $('#btnFind').onclick = () => findOpen();
@@ -1030,23 +1088,30 @@ function renderFiles(){
   $('#drCount').textContent = kw ? ((list.length+origs.length)+' / '+tot) : (tot+' 份');
   let html = '';
   // 2026-11-17：抽屉分两段——原件（用户自己导进来的源课件）/ 成品（生成出来的讲义）
-  html += `<div class="dr-files-grp">原件 · ${org.length}<span>你导入的源课件</span></div>`;
+  html += `<div class="dr-files-grp">原件 · ${org.length}<span>导入的源课件</span></div>`;
   html += origs.length ? origs.map(f=>`
     <div class="f" data-pdf="${esc(f.rel)}" data-name="${esc(f.name)}" title="${esc(f.rel)}">
       <div class="n">${esc(f.name)}</div>
       <div class="pg">${f.size_kb} KB</div><div class="op">在软件里读 →</div>
+      <button class="fdel" data-fdel="${esc(f.rel)}" data-fname="${esc(f.name)}" title="删除这份原件">删除</button>
     </div>`).join('')
-    : '<div class="empty">'+(kw?'没有匹配的原件':'还没有原件。到「生成」页点「＋ 导入课件」，或把 PDF 拖进窗口。')+'</div>';
-  html += `<div class="dr-files-grp">成品 · ${all.length}<span>生成出来的讲义</span></div>`;
+    : '<div class="empty">'+(kw?'无匹配原件':'暂无原件。可在「生成」页点「＋ 导入课件」，或将 PDF 拖入窗口。')+'</div>';
+  html += `<div class="dr-files-grp">成品 · ${all.length}<span>已生成的讲义</span></div>`;
   html += list.length ? list.map(f=>`
     <div class="f" data-pdf="${esc(f.rel)}" data-name="${esc(f.name)}" title="${esc(f.rel)}">
       <div class="n">${esc(f.name)}</div>
       <div class="pg">${f.pages} p</div><div class="op">在软件里读 →</div>
-    </div>`).join('') : '<div class="empty">'+(kw?'没有匹配的成品':'这一门还没有成品。')+'</div>';
+      <button class="fdel" data-fdel="${esc(f.rel)}" data-fname="${esc(f.name)}" title="删除这份成品">删除</button>
+    </div>`).join('') : '<div class="empty">'+(kw?'无匹配成品':'本课程暂无成品。')+'</div>';
   $('#drFiles').innerHTML = html;
-  $('#drFiles').querySelectorAll('[data-pdf]').forEach(el=>el.onclick = () => {
+  $('#drFiles').querySelectorAll('[data-pdf]').forEach(el=>el.onclick = e => {
+    if(e.target.classList.contains('fdel')) return;
     closeDrawer();
     openReader(el.dataset.pdf, el.dataset.name, c.code);
+  });
+  $('#drFiles').querySelectorAll('[data-fdel]').forEach(b=>b.onclick = e => {
+    e.stopPropagation();
+    askDeleteFile(b.dataset.fdel, b.dataset.fname, c.code);
   });
 }
 function openDrawer(c){
@@ -1180,12 +1245,15 @@ function fillSelects(){
 /* 2026-11-17：生成页讲次改多选（用户：「开始生成也是可以多选生成哪几个的」）。
    LESSON_SEL 存勾中的讲号；换课程就清空，合订本模式下整块置灰（合订本 = 全部讲）。 */
 let LESSON_SEL = new Set();
+/* 2026-11-17 用户要求：全选旁加一个「删除」，点了之后每个讲号右上角出现红×。
+   删除模式下点芯片本体不改选中（否则「想删结果改了生成范围」）；只认右上角那个 ×。 */
+let DEL_MODE = false;
 function syncLessons(){
   const c = (B.courses||[]).find(x=>x.code===$('#courseSel').value) || (B.courses||[])[0];
   const les = (c ? c.lessons : []) || [];
   LESSON_SEL = new Set();
-  $('#lessonPick').innerHTML = les.map(n=>`<button data-lsn="${esc(n)}">${esc(n)}</button>`).join('')
-    || '<span class="hint" style="border:0;padding:0;margin:0">这一门没有可生成的数据（缺 `_lessons`）</span>';
+  $('#lessonPick').innerHTML = les.map(n=>`<button data-lsn="${esc(n)}">${esc(n)}<span class="kill" data-kill="${esc(n)}" title="删除这一讲">×</span></button>`).join('')
+    || '<span class="hint" style="border:0;padding:0;margin:0">本课程没有可生成的讲次数据（缺少 `_lessons` 目录）</span>';
   // 2026-11-17 用户：「拖进去之后要生成的批次那并没有更新」——导入的是原件，不是讲次；
   //   讲次只能来自 <课程>\_lessons\*.py。这里把差异当场写清，免得以为导入坏了。
   const ogN = ((c && c.originals) || []).length;
@@ -1193,11 +1261,12 @@ function syncLessons(){
   if(ogEl){
     if(ogN){
       ogEl.style.display = '';
-      ogEl.textContent = '另有 ' + ogN + ' 份原件（你导入的 PDF）。每导入一份会自动建一个占位讲次（正文待补）——改 <课程>\\_lessons\\<讲号>.py 里的 sections，重跑就能出 PDF。';
+      ogEl.textContent = '另有 ' + ogN + ' 份原件。每导入一份会自动建一个占位讲次（正文待补）——编辑 <课程>\\_lessons\\<讲号>.py 中的 sections 后重新生成即可出 PDF。';
     } else { ogEl.style.display = 'none'; }
   }
-  $('#lessonPick').querySelectorAll('[data-lsn]').forEach(b=>b.onclick=()=>{
+  $('#lessonPick').querySelectorAll('[data-lsn]').forEach(b=>b.onclick=e=>{
     const k = b.dataset.lsn;
+    if(DEL_MODE){ if(e.target.classList.contains('kill')) askDeleteLesson(k); return; }
     LESSON_SEL.has(k) ? LESSON_SEL.delete(k) : LESSON_SEL.add(k);
     b.classList.toggle('on', LESSON_SEL.has(k));
     syncLsnCnt();
@@ -1207,8 +1276,13 @@ function syncLessons(){
 function syncLsnCnt(){
   const all = $('#lessonPick').querySelectorAll('[data-lsn]').length;
   const n = LESSON_SEL.size;
-  $('#lsnCnt').textContent = FORM==='book' ? '合订本 = 全部讲' : ('可多选' + (n ? ' · 已选 '+n+'/'+all : ''));
-  $('#lsnAll').style.display = (FORM==='book' || !all) ? 'none' : '';
+  $('#lsnCnt').textContent = FORM==='book' ? '合订本 = 全部讲'
+    : (DEL_MODE ? '删除模式：点击讲号右上角的红 ×' : ('可多选' + (n ? ' · 已选 '+n+'/'+all : '')));
+  const hide = (FORM==='book' || !all);
+  $('#lsnAll').style.display = hide ? 'none' : '';
+  $('#lsnDel').style.display = hide ? 'none' : '';
+  $('#lsnDel').textContent = DEL_MODE ? '完成' : '删除';
+  $('#lessonPick').classList.toggle('deling', DEL_MODE && !hide);
   $('#lsnAll').textContent = (all && n === all) ? '全不选' : '全选';
   $('#lessonPick').classList.toggle('dim', FORM==='book');
   const go = $('#btnGen');
@@ -1224,6 +1298,91 @@ $('#lsnAll').onclick = () => {
   syncLsnCnt();
 };
 $('#courseSel').onchange = syncLessons;
+/* ---------- 删除（2026-11-17）----------
+   用户要求：讲次、成品、原件、整门课 都要能删。统一约定：
+   ① 入口就在那个对象旁边（讲次在讲次区、课件在抽屉行、课程在卡片底部）；
+   ② 一律先弹窗告知「删什么、影响什么、能不能找回」，再调 /api/delete；
+   ③ 后端只做「移入 _trash」，不做 unlink。 */
+async function postJson(url, body){
+  try{
+    const r = await fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body||{})});
+    return await r.json();
+  }catch(e){ return {ok:false, error:'请求失败：'+e}; }
+}
+/* 讲次删除模式：全选旁那个「删除」就是开关（再点一次变回「完成」） */
+$('#lsnDel').onclick = () => {
+  DEL_MODE = !DEL_MODE;
+  if(DEL_MODE) LESSON_SEL.clear();
+  $('#lessonPick').querySelectorAll('[data-lsn]').forEach(b=>b.classList.toggle('on', LESSON_SEL.has(b.dataset.lsn)));
+  syncLsnCnt();
+};
+function askDeleteLesson(no){
+  const code = $('#courseSel').value;
+  if(!code) return;
+  $('#dlg').innerHTML = `
+    <div class="eb">Delete lesson</div><h4>删除讲次 ${esc(no)}</h4>
+    <p class="desc">讲义源文件 <code>_lessons\\${esc(no)}.py</code> 将从本课程中移除；已生成的 PDF 与原件不受影响。</p>
+    <p class="fine">文件移入软件目录下的 <code>_trash</code> 回收目录，需要时可取回。</p>
+    <div class="acts"><button class="btn ghost" id="dlNo">取消</button>
+      <button class="btn danger" id="dlYes">删除这一讲</button></div>`;
+  openVeil();
+  $('#dlNo').onclick = () => closeVeil();
+  $('#dlYes').onclick = async () => {
+    $('#dlYes').disabled = true;
+    const j = await postJson('/api/delete', {kind:'lesson', course:code, no});
+    closeVeil();
+    if(!j.ok){ toast('未删除：'+(j.error||'未知原因')); return; }
+    await boot();
+    // 保持当前课程：boot() 会把下拉重置成默认课程，不拉回来的话删完一讲就跳到别的课
+    if($('#courseSel')){ $('#courseSel').value = code; syncLessons(); updateImpHint(); }
+    toast('已删除讲次 '+no+'；文件在 _trash，可取回');
+  };
+}
+/* 删除一份课件（成品或原件） */
+function askDeleteFile(rel, name, code){
+  $('#dlg').innerHTML = `
+    <div class="eb">Delete file</div><h4>删除课件 ${esc(name)}</h4>
+    <p class="desc">该文件将从本课程中移除。删除后可在生成页重新生成，或重新导入原件。</p>
+    <p class="fine">文件移入软件目录下的 <code>_trash</code> 回收目录，需要时可取回。</p>
+    <div class="acts"><button class="btn ghost" id="dlNo">取消</button>
+      <button class="btn danger" id="dlYes">删除这份课件</button></div>`;
+  openVeil();
+  $('#dlNo').onclick = () => closeVeil();
+  $('#dlYes').onclick = async () => {
+    $('#dlYes').disabled = true;
+    const j = await postJson('/api/delete', {kind:'file', course:code, rel});
+    closeVeil();
+    if(!j.ok){ toast('未删除：'+(j.error||'未知原因')); return; }
+    await boot();
+    if($('#courseSel')){ $('#courseSel').value = code; syncLessons(); }
+    const c = (B.courses||[]).find(x=>x.code===code);
+    if(c) { DRAGGED = c; renderFiles(); }
+    toast('已删除 '+name);
+  };
+}
+/* 删除整门课程：需照拄课程代号才能动；整个目录移入 _trash */
+function askDeleteCourse(c){
+  const files = (c.files||[]).length, orgs = (c.originals||[]).length, les = (c.lessons||[]).length;
+  $('#dlg').innerHTML = `
+    <div class="eb">Delete course</div><h4>删除课程 ${esc(c.title)}</h4>
+    <p class="desc">将删除整个课程目录 <code>${esc(c.code)}</code>：${les} 个讲次、${files} 份成品、${orgs} 份原件全部移除。</p>
+    <div class="selcap">此操作不可在软件内撤销。目录会整个移入 <code>_trash</code>，需要时可到软件目录取回。</div>
+    <p class="lbl">请输入课程代号 <b>${esc(c.code)}</b> 确认：</p>
+    <input type="text" id="delConfirm" autocomplete="off" placeholder="${esc(c.code)}">
+    <div class="acts"><button class="btn ghost" id="dlNo">取消</button>
+      <button class="btn danger" id="dlYes" disabled>删除这门课程</button></div>`;
+  openVeil();
+  $('#delConfirm').oninput = e => { $('#dlYes').disabled = e.target.value.trim() !== c.code; };
+  $('#dlNo').onclick = () => closeVeil();
+  $('#dlYes').onclick = async () => {
+    $('#dlYes').disabled = true;
+    const j = await postJson('/api/delete', {kind:'course', course:c.code, confirm:$('#delConfirm').value.trim()});
+    closeVeil();
+    if(!j.ok){ toast('未删除：'+(j.error||'未知原因')); return; }
+    await boot();
+    toast('已删除课程 '+c.code+'；目录在 _trash，可取回');
+  };
+}
 /* 2026-11-17：保存目录改可点选（用户：「输出模式那个按钮选目录压根就没做」）。
    弹的是这台电脑的系统文件夹对话框；请求会挂住直到选完或取消，所以先置灰。 */
 $('#dirPick').onclick = async () => {
@@ -1255,9 +1414,25 @@ document.querySelectorAll('.opt[data-form]').forEach(o=>o.onclick=()=>{
   o.classList.add('on'); FORM=o.dataset.form;
   syncLsnCnt();
 });
+/* 队列：每一项均可取消（2026-11-17 用户要求「队列要有取消按钮」）。
+   排队中的取消＝不再发送；正在执行的那一讲请求已发出，无法中途终止渲染，
+   因此取消后是「跑完丢弃结果」——界面必须这样写，不能假装已立即停止。 */
+const CANCEL = new Set();
+function queueSt(q){
+  return q.st==='run' ? '生成中…' : q.st==='wait' ? '排队中…' :
+         q.st==='cancel' ? '已取消' : q.st==='fail' ? ('失败：'+esc(q.msg||'详见日志')) : '完成';
+}
 function renderQueue(){
-  $('#queue').innerHTML = Q.map(q=>`<div class="qi ${q.st}"><span>${esc(q.course)} · ${esc(q.lesson)}</span>
-    <span class="st">${q.st==='run'?'生成中…':(q.st==='wait'?'排队中…':(q.st==='fail'?'失败：'+esc(q.msg||'看日志'):'完成'))}</span></div>`).join('');
+  $('#queue').innerHTML = Q.map((q,i)=>`<div class="qi ${q.st}"><span class="qi-l">${esc(q.course)} · ${esc(q.lesson)}</span>
+    <span class="st">${queueSt(q)}</span>${
+      (q.st==='run'||q.st==='wait') ? `<button class="qi-x" data-qi="${i}">取消</button>` : ''}</div>`).join('');
+  $('#queue').querySelectorAll('[data-qi]').forEach(b=>b.onclick=()=>cancelQueueItem(Q[+b.dataset.qi]));
+}
+function cancelQueueItem(q){
+  if(!q || (q.st!=='run' && q.st!=='wait')) return;
+  const wasRun = q.st === 'run';
+  q.st = 'cancel'; CANCEL.add(q); renderQueue();
+  toast(wasRun ? ('已取消：'+q.lesson+'；正在执行的一步会跑完，结果不保存') : ('已取消：'+q.lesson));
 }
 /* 批量生成：一次请求一讲（后端接口就是按讲走的），前端串行排队；
    队列里先把所有勾中的讲摆成「排队中」，跑一讲改一讲，完的消失。 */
@@ -1268,9 +1443,14 @@ async function runBatch(course, lessons, form){
   Q = items.slice(); renderQueue();
   try{
     for(let i=0;i<lessons.length;i++){
-      await runGenerate(course, lessons[i], form, items[i]);
+      const it = items[i];
+      if(CANCEL.has(it) || it.st==='cancel'){ it.st='cancel'; renderQueue(); continue; }
+      await runGenerate(course, lessons[i], form, it);
     }
-  } finally { GEN_BUSY = false; $('#btnGen').disabled = false; syncLsnCnt(); }
+  } finally {
+    GEN_BUSY = false; $('#btnGen').disabled = false;
+    Q = Q.filter(q => q.st !== 'cancel'); renderQueue(); syncLsnCnt();
+  }
 }
 $('#btnGen').onclick = () => {
   if(GEN_BUSY) return;
@@ -1308,6 +1488,13 @@ async function runGenerate(course, no, form, preset){
   try{
     const j = await (await fetch('/api/generate',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({course, lesson:no, form, mode:MODE, save_dir:B.save_dir})})).json();
+    if(CANCEL.has(item)){
+      // 用户在执行中取消了：请求已跑完，结果不落队列、不刷界面
+      CANCEL.delete(item); Q = Q.filter(q => q !== item); renderQueue();
+      log.textContent = '已取消：' + label + '（本次结果未保存）';
+      if(!preset) $('#btnGen').disabled = false;
+      return;
+    }
     log.textContent = (j.ok ? '成功（'+j.seconds+'s）\n\n' : '失败\n\n') + (j.log || j.error || '');
     if(j.ok){ Q = Q.filter(q=>q!==item); renderQueue(); B = await (await fetch('/api/bootstrap')).json(); render(); refreshUsage(); }
     else { item.st='fail'; item.msg=(j.error||'').slice(0,40); renderQueue(); }
@@ -1322,7 +1509,7 @@ async function openChat(c){
   $('#chatWho').textContent = c.title + ' · ' + c.code;
   $('#cScope').textContent = c.code + ' · ' + c.title;
   $('#allowCross').checked = false; $('#cCross').textContent = '未接入';
-  $('#chatOnly').textContent = '本会话只查这一门';
+  $('#chatOnly').textContent = '仅检索本课程';
   renderLens(); showPage('chat');
   try{
     const j = await (await fetch('/api/session?code='+encodeURIComponent(c.code))).json();
@@ -1334,11 +1521,11 @@ $('#chatBack').onclick = () => showPage('courses');
 $('#allowCross').onchange = e => {
   $('#crossChip').classList.toggle('on', e.target.checked);
   $('#cCross').textContent = e.target.checked ? '已接入（显式）' : '未接入';
-  $('#chatOnly').textContent = e.target.checked ? '本会话可引用其他课件' : '本会话只查这一门';
+  $('#chatOnly').textContent = e.target.checked ? '本会话可引用其他课件' : '仅检索本课程';
 };
 function renderLens(){
   $('#lens').innerHTML = (CHAT.lessons||[]).map(l=>`<button data-lens="${esc(l)}" class="${CHAT.lens.has(l)?'on':''}">${esc(l)}</button>`).join('')
-    || '<span class="hint" style="border:0;padding:0;margin:0">这一门没有可提问的讲次数据</span>';
+    || '<span class="hint" style="border:0;padding:0;margin:0">本课程暂无可用于提问的讲次数据</span>';
   $('#lens').querySelectorAll('[data-lens]').forEach(b=>b.onclick=()=>{
     const k = b.dataset.lens;
     CHAT.lens.has(k) ? CHAT.lens.delete(k) : CHAT.lens.add(k);
@@ -1346,14 +1533,14 @@ function renderLens(){
   });
   const n = CHAT.lessons.length;
   $('#lensHint').textContent = CHAT.lens.size===0
-    ? '一个都不勾 = 整门课'+(n?('（'+n+' 讲）'):'')+'；勾了就只在这些讲里检索。'
-    : '只在 '+[...CHAT.lens].join(' / ')+' 里检索（另 '+Math.max(0,n-CHAT.lens.size)+' 讲不参与）。';
+    ? '未选择讲次 = 整门课程'+(n?('（'+n+' 讲）'):'')+'；选择后仅在这些讲次内检索。'
+    : '仅检索 '+[...CHAT.lens].join(' / ')+'（另有 '+Math.max(0,n-CHAT.lens.size)+' 讲不参与）。';
 }
 function renderChat(){
   const box = $('#msgs');
   if(!CHAT.messages.length){
-    box.innerHTML = '<div class="empty">问这一门里的任何内容：答案只依据这一门的内容数据，并标出节号与课件页码。<br>'+
-      '想让它参考别的课件，勾上输入框左边那个开关。勾几条消息还能导成笔记追加到讲义末尾。</div>';
+    box.innerHTML = '<div class="empty">在本课程范围内提问：答案仅依据本课程的内容数据，并标出节号与课件页码。<br>'+
+      '需要参考其他课件时，启用输入框左侧的开关。勾选若干消息可导出为笔记并追加到讲义末尾。</div>';
   }else{
     box.innerHTML = CHAT.messages.map((m,i)=>{
       const refs = m.refs||[];
@@ -1400,12 +1587,12 @@ $('#selAll').onchange = e => {
 function moneyDialog(j){
   const bal = (j.balance && j.balance.ok) ? ('¥'+j.balance.balance) : ('读不到（'+(j.balance&&j.balance.error||'接口没回')+'）');
   $('#dlg').innerHTML = `
-    <div class="eb">Balance</div><h4>余额不足，这一问没法答</h4>
-    <p class="desc">接口回的是「Insufficient Balance」。账户余额 ${esc(bal)}，这次提问的大致花费见下。</p>
+    <div class="eb">Balance</div><h4>余额不足，本次提问未能执行</h4>
+    <p class="desc">接口返回「Insufficient Balance」。账户余额与本次提问的估算花费如下。</p>
     <div class="kv"><span>账户余额</span><b>${esc(bal)}</b></div>
     <div class="kv"><span>本次估算</span><b>${esc(j.cost_est||'约 ¥0.02')}（估）</b></div>
     <div class="kv"><span>当前模型</span><b>${esc(mname(j.model||MODEL))}</b></div>
-    <p class="note-s">充值到账后回来点「去充值并重试」；也可以先只看已经检索到的片段，不花钱。</p>
+    <p class="note-s">充值到账后点「去充值并重试」；也可先查看已检索到的片段，不产生费用。</p>
     <div class="acts"><button class="btn ghost" id="balSee">先看检索片段</button>
       <button class="btn" id="balGo">去充值并重试</button></div>`;
   openVeil();
@@ -1413,7 +1600,7 @@ function moneyDialog(j){
   $('#balGo').onclick = () => {
     window.open(j.topup || 'https://platform.deepseek.com/top_up', '_blank');
     closeVeil();
-    toast('充完回来说一声，重问一次就行');
+    toast('充值完成后重新提问即可');
   };
 }
 
@@ -1489,7 +1676,7 @@ $('#btnNote').onclick = () => {
       <div>${esc(plain(it.text).slice(0,150))}${(it.text||'').length>150?'…':''}</div></div>`).join('');
   $('#dlg').innerHTML = `
     <div class="eb">Export note</div><h4>把选中的对话导成笔记</h4>
-    <p class="desc">勾的这几条整理成一页笔记（保留出处），追加到选中的讲义末尾（可多份）；每份都另存副本，不动原件。</p>
+    <p class="desc">将勾选的消息整理为一页笔记（保留出处），追加到所选讲义末尾（可多份）；每份均另存副本，不改动原件。</p>
     <div class="selcap">已选 <b>${items.length} 条</b>：${items.filter(x=>x.role==='user').length} 个问题 · ${items.filter(x=>x.role!=='user').length} 个回答 · 来自 <b>${esc(CHAT.code)}</b>${CHAT.lens.size?' · '+[...CHAT.lens].join(' / '):''}</div>
     <div class="prev">${rows}</div>
     <div class="pickpdf">追加到哪份讲义末尾（可多选）<span id="pickCnt" style="color:var(--faint);font-size:11.5px;margin-left:7px"></span></div>
@@ -1497,9 +1684,9 @@ $('#btnNote').onclick = () => {
       <input id="pdfFind" placeholder="找讲义：讲号或关键词" autocomplete="off">
       <span class="n" id="pdfCount">${files.length} 份</span></div>`:''}
     <div class="pdfs" id="pdfPick">${sortFiles(files).map(f=>`<button data-rel="${esc(f.rel)}" data-name="${esc(f.name)}" class="${EXPORT.targets.has(f.rel)?'on':''}">
-        <span class="ck" style="font-family:Consolas,monospace;color:var(--faint);font-size:11.5px">${EXPORT.targets.has(f.rel)?'✓':'＋'}</span>${esc(f.name)}<b>${f.pages} p</b></button>`).join('') || '<div class="empty">这一门还没有 PDF：先去生成页出一份。</div>'}</div>
-    <label class="chk"><input type="checkbox" id="useModel">让模型整理成笔记（花 token；不勾则本地整理，不花钱）</label>
-    <p class="fine">页脚固定印「本内容由 AI 生成，请自行核实重要信息」；新页从原讲义末尾续，旧页码不动。</p>
+        <span class="ck" style="font-family:Consolas,monospace;color:var(--faint);font-size:11.5px">${EXPORT.targets.has(f.rel)?'✓':'＋'}</span>${esc(f.name)}<b>${f.pages} p</b></button>`).join('') || '<div class="empty">本课程暂无 PDF，请先在生成页生成。</div>'}</div>
+    <label class="chk"><input type="checkbox" id="useModel">由模型整理为笔记（消耗 token；不勾选则本地整理，不产生费用）</label>
+    <p class="fine">页脚固定印「本内容由 AI 生成，请自行核实重要信息」；新页接在原讲义末尾，原页码不变。</p>
     <div class="acts"><button class="btn ghost" id="expNo">取消</button>
       <button class="btn" id="expGo" ${files.length?'':'disabled'}>生成并追加</button></div>`;
   openVeil();
@@ -1623,17 +1810,21 @@ async function renderPdf(){
     const vp = page.getViewport({scale: fit});
     const canvas = $('#pdfcanvas');
     const Q2 = 2;                                     // 渲染 2 倍再缩回，字口清晰
-    canvas.width = Math.round(vp.width * Q2);
-    canvas.height = Math.round(vp.height * Q2);
+    // 2026-11-17 用户：「深色环境阅读切页会闪一下白光」。
+    // 原因：可见 canvas 上「先铺白 → 再渲染」，中间那一下是白底，深色下就成了白闪。
+    // 现在整页（含反相）先在离屏 canvas 上画完，再一次性贴到可见 canvas——中间态不上屏。
+    const off = document.createElement('canvas');
+    off.width = Math.round(vp.width * Q2);
+    off.height = Math.round(vp.height * Q2);
     canvas.style.width = Math.round(vp.width) + 'px';
     canvas.style.height = Math.round(vp.height) + 'px';
-    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    const ctx = off.getContext('2d', { willReadFrequently: true });
     ctx.setTransform(1,0,0,1,0,0);
     // 2026-11-16 真撞到：这份讲义 PDF 的页面本身没有白底（透明），
     // 之前深色下先铺深灰再反相，结果整页变成浅灰、字也糊掉。
     // 改成：不管什么主题都先铺白 → 渲染 → 深色再把像素反相（位图区回贴原色）。
     ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0,0,canvas.width,canvas.height);
+    ctx.fillRect(0,0,off.width,off.height);
     if(DBG) console.log('[dbg] after-fill', Array.from(ctx.getImageData(8,8,1,1).data));
     const zoomVp = page.getViewport({scale: fit * Q2});
     await page.render({ canvasContext: ctx, viewport: zoomVp }).promise;
@@ -1643,7 +1834,7 @@ async function renderPdf(){
       // 所以反相只在「浅色主题」下做：黑底→白底、白字→黑字，位图区域回贴原色；
       // 深色主题直接原样显示，正好就是夜读的样子。
       const boxes = await imageBoxes(page, zoomVp, await loadPdfjs());
-      const img = ctx.getImageData(0,0,canvas.width,canvas.height);
+      const img = ctx.getImageData(0,0,off.width,off.height);
       const d = img.data, orig = new Uint8ClampedArray(d);
       if(DBG) console.log('[dbg] pre-invert px', Array.from(d.slice((8*canvas.width+8)*4, (8*canvas.width+8)*4+3)));
       if(DBG){
@@ -1654,10 +1845,10 @@ async function renderPdf(){
       for(let i=0;i<d.length;i+=4){ d[i]=255-d[i]; d[i+1]=255-d[i+1]; d[i+2]=255-d[i+2]; }
       for(const [x0,y0,x1,y1] of boxes){
         const ax = Math.max(0, Math.floor(x0)-1), ay = Math.max(0, Math.floor(y0)-1);
-        const bx = Math.min(canvas.width, Math.ceil(x1)+1), by = Math.min(canvas.height, Math.ceil(y1)+1);
+        const bx = Math.min(off.width, Math.ceil(x1)+1), by = Math.min(off.height, Math.ceil(y1)+1);
         if(bx<=ax || by<=ay) continue;
         for(let y=ay;y<by;y++){
-          const o = (y*canvas.width + ax)*4;
+          const o = (y*off.width + ax)*4;
           const len = (bx-ax)*4;
           if(o>=0 && o+len<=d.length) d.set(orig.subarray(o, o+len), o);
         }
@@ -1665,16 +1856,21 @@ async function renderPdf(){
       ctx.putImageData(img, 0, 0);
       if(DBG){
         let s2=0, n2=0;
-        const after = ctx.getImageData(0,0,canvas.width,canvas.height).data;
+        const after = ctx.getImageData(0,0,off.width,off.height).data;
         for(let i=0;i<after.length;i+=4*997){ s2+=after[i]; n2++; }
         console.log('[dbg] mean-luma-after', (s2/n2).toFixed(1));
       }
       if(DBG){
         const rd2 = () => Array.from(ctx.getImageData(8,8,1,1).data).slice(0,3);
-        console.log('[dbg] invert', canvas.width+'x'+canvas.height, 'boxes', JSON.stringify(boxes), 'px', rd2());
+        console.log('[dbg] invert', off.width+'x'+off.height, 'boxes', JSON.stringify(boxes), 'px', rd2());
         setTimeout(()=>console.log('[dbg] px+700ms', rd2()), 700);
       }
     }
+    // 整页就绪，一次性上屏（尺寸变了也只在这一次赋值，不漏中间态）
+    if(canvas.width !== off.width || canvas.height !== off.height){
+      canvas.width = off.width; canvas.height = off.height;
+    }
+    canvas.getContext('2d').drawImage(off, 0, 0);
     $('#pgVal').textContent = RD.page + ' / ' + RD.doc.numPages;
     $('#zVal').textContent = Math.round(RD.zoom*100) + '%';
     $('#curP').textContent = 'p.' + RD.page; $('#curP2').textContent = 'p.' + RD.page;
@@ -1689,6 +1885,44 @@ $('#pgNext').onclick = () => { if(RD.doc && RD.page<RD.doc.numPages){ RD.page++;
 $('#zOut').onclick = () => { RD.zoom = Math.max(0.7, RD.zoom-0.1); renderPdf(); };
 $('#zIn').onclick = () => { RD.zoom = Math.min(1.5, RD.zoom+0.1); renderPdf(); };
 $('#readBack').onclick = () => showPage('courses');
+/* 全屏（2026-11-17 用户：「全屏模式不见了」）：只把阅读卡全屏，顶栏与笔记栏一起进去；
+   按下后重新排版一次（可视宽度变了，按旧的 fit 算会留白）。键盘 F 同效，Esc 由浏览器退出。 */
+function readCard(){ return document.querySelector('#page-read .read-card'); }
+function inFullscreen(){
+  const card = readCard();
+  return !!document.fullscreenElement || (card ? card.classList.contains('fs') : false);
+}
+function syncFsLabel(){
+  const on = inFullscreen();
+  if($('#fsIcon')) $('#fsIcon').textContent = on ? '⤡' : '⤢';
+  if($('#fsLabel')) $('#fsLabel').textContent = on ? '退出全屏' : '全屏';
+}
+async function setFullscreen(on){
+  const card = readCard(); if(!card) return;
+  if(!on){
+    try{ if(document.fullscreenElement) await document.exitFullscreen(); }catch(e){ /* 退出失败也继续撤满屏 */ }
+    card.classList.remove('fs'); syncFsLabel();
+    setTimeout(() => { if(RD.doc) renderPdf(); }, 140);
+    return;
+  }
+  // 先上满屏浮层（立即生效，不依赖全屏 API）；再试原生全屏，成功就撤掉浮层，避免两套叠加。
+  // 不用 await 直接等 requestFullscreen：实测被权限拒绝时它可能永远不 resolve。
+  card.classList.add('fs'); syncFsLabel();
+  try{
+    const p = card.requestFullscreen();
+    if(p && p.then) await Promise.race([p, new Promise(r => setTimeout(r, 700))]);
+  }catch(e){ /* 嵌入环境拒绝：保留满屏浮层 */ }
+  if(document.fullscreenElement) card.classList.remove('fs');
+  syncFsLabel();
+  setTimeout(() => { if(RD.doc) renderPdf(); }, 160);
+}
+$('#btnFs').onclick = () => setFullscreen(!inFullscreen());
+document.addEventListener('fullscreenchange', () => syncFsLabel());
+document.addEventListener('keydown', e=>{
+  if(PAGE!=='read' || !RD.doc) return;
+  if(['INPUT','TEXTAREA'].includes(document.activeElement.tagName)) return;
+  if(String(e.key).toLowerCase() === 'f'){ e.preventDefault(); $('#btnFs').click(); }
+});
 document.addEventListener('keydown', e=>{
   if(PAGE!=='read' || !RD.doc) return;
   if(['INPUT','TEXTAREA'].includes(document.activeElement.tagName)) return;
@@ -1707,7 +1941,7 @@ async function loadNotes(){
 function renderNotes(){
   $('#nCount').textContent = RD.notes.length;
   const box = $('#nlist');
-  if(!RD.notes.length){ box.innerHTML = '<div class="hint" style="border:0;padding:0;margin:0">还没有笔记。在下面写一句，就挂在当前页。</div>'; return; }
+  if(!RD.notes.length){ box.innerHTML = '<div class="hint" style="border:0;padding:0;margin:0">暂无笔记。在下方输入内容即可记录到当前页。</div>'; return; }
   box.innerHTML = RD.notes.map((n,i)=>`<div class="nitem" data-jump="${n.p}" data-i="${i}">
       <div class="m"><b>p.${n.p}</b><span>${esc(n.hhmm||n.at||'')}</span></div>
       <div>${esc(n.text)}</div><span class="del" data-del="${i}">删除</span></div>`).join('');
@@ -1728,8 +1962,8 @@ function renderNotes(){
 }
 $('#nAdd').onclick = async () => {
   const ta = $('#nDraft'), v = ta.value.trim();
-  if(!v){ toast('先写一句再记'); ta.focus(); return; }
-  if(!RD.doc){ toast('先打开一份讲义'); return; }
+  if(!v){ toast('请先输入笔记内容'); ta.focus(); return; }
+  if(!RD.doc){ toast('请先打开一份讲义'); return; }
   const j = await (await fetch('/api/notes',{method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({code:RD.code, doc:RD.rel, action:'add', note:{p:RD.page, text:v}})})).json();
   if(j.ok){ RD.notes = j.notes; ta.value=''; renderNotes(); toast('已记在 p.'+RD.page); }
@@ -1763,7 +1997,7 @@ function lanCard(h){
         <div style="font-size:13.5px;font-weight:600;display:flex;align-items:center;gap:7px">
           <i class="dot ok"></i>已上线 · <span class="mono" style="font-weight:400;font-size:12.5px">${host}</span></div>
         <p style="margin:6px 0 0;font-size:11.8px;color:var(--sub);line-height:1.75">
-          平板连同一 WiFi，打开上面的地址，输一次访问码即可。点「关闭上线」或关掉窗口就断。</p>
+          平板连接同一 WiFi 后打开上方地址，输入访问码即可。点「关闭上线」或退出程序后立即断开。</p>
       </div>
       <div style="display:flex;align-items:center;gap:10px">
         <span class="mono" style="font-size:15px;letter-spacing:.16em;border:1px solid var(--line);
@@ -1775,9 +2009,9 @@ function lanCard(h){
   return `<div class="card" style="padding:16px 20px;display:flex;align-items:center;gap:18px;margin:0 0 14px">
       <div style="flex:1">
         <div style="font-size:13.5px;font-weight:600;display:flex;align-items:center;gap:7px">
-          <i class="dot no"></i>这台电脑现在没上线</div>
+          <i class="dot no"></i>本机当前未上线</div>
         <p style="margin:6px 0 0;font-size:11.8px;color:var(--sub);line-height:1.75">
-          上线后，同一 WiFi 的平板/手机输一次访问码就能用。不用敲命令、不用重开软件；关掉窗口就自动断。</p>
+          启用后，同一局域网内的设备输入访问码即可使用；无需命令行，也无需重启程序。</p>
       </div>
       <button class="btn" id="lanOn" style="padding:9px 20px">一键上线</button></div>`;
 }
@@ -1787,7 +2021,7 @@ async function setLan(on){
       body:JSON.stringify({on:!!on})})).json();
     if(!j.ok){ toast('没开成：'+(j.error||'未知原因')); return; }
     await renderHost();
-    toast(on ? ('已上线 · '+String(j.url_lan||'').replace('http://','')) : '已关闭上线，平板立刻打不开');
+    toast(on ? ('已上线 · '+String(j.url_lan||'').replace('http://','')) : '已关闭上线；外部设备已无法访问');
   }catch(e){ toast('请求失败：'+e); }
 }
 
@@ -1800,31 +2034,31 @@ async function renderHost(){
   if($('#lanOff')) $('#lanOff').onclick = () => setLan(false);
   if($('#lanCopy')) $('#lanCopy').onclick = async () => {
     try{ await navigator.clipboard.writeText(code); toast('访问码已复制'); }
-    catch(e){ toast('复制失败，手抄一下：'+code); }
+    catch(e){ toast('复制失败，请手动输入：'+code); }
   };
   $('#term').innerHTML = h.lan ? `
-    <div><span class="ps">PS</span> 一键上线（界面上的按钮）</div>
+    <div><span class="ps">PS</span> 一键上线（界面按钮）</div>
     <div class="name">羽毛笔 La Pluma v${esc(B.version||'')} · 主机已上线</div>
     <div><span class="k">本机</span><span class="v">${esc(h.url_local)}</span></div>
-    <div><span class="k">局域网</span><span class="hl">${esc(h.url_lan)}</span> <span class="dim">← 平板 / 手机用这个</span></div>
-    <div><span class="k">访问码</span><span class="hl">${esc(code)}</span> <span class="dim">← 只给对一次（12 小时）</span></div>
-    <div style="margin-top:10px"><span class="dim">数据不出这台电脑：PDF、笔记、会话都存本机。</span></div>
-    <div><span class="dim">关闭上线或关窗口，平板立刻打不开。</span></div>
+    <div><span class="k">局域网</span><span class="hl">${esc(h.url_lan)}</span> <span class="dim">← 平板与手机访问地址</span></div>
+    <div><span class="k">访问码</span><span class="hl">${esc(code)}</span> <span class="dim">← 每次上线重新生成，有效期 12 小时</span></div>
+    <div style="margin-top:10px"><span class="dim">数据均保存在本机：PDF、笔记、会话不入云。</span></div>
+    <div><span class="dim">关闭上线或退出程序后，外部设备立即无法访问。</span></div>
     <div><span class="ps">PS</span><span class="cur"></span></div>`
   : `<div><span class="ps">PS</span> .\\一键启动.ps1</div>
-    <div class="name">羽毛笔 La Pluma v${esc(B.version||'')} · 只在本机</div>
+    <div class="name">羽毛笔 La Pluma v${esc(B.version||'')} · 仅本机</div>
     <div><span class="k">本机</span><span class="v">${esc(h.url_local)}</span></div>
-    <div><span class="k">局域网</span><span class="off">未上线</span> <span class="dim">← 点上面的「一键上线」</span></div>
+    <div><span class="k">局域网</span><span class="off">未上线</span> <span class="dim">← 使用上方「一键上线」</span></div>
     <div><span class="k">访问码</span><span class="off">—</span></div>
-    <div style="margin-top:10px"><span class="dim">只监听 127.0.0.1：同网的其他设备打不开，也不需要访问码。</span></div>
-    <div><span class="dim">要上线：点上面的「一键上线」</span></div>
+    <div style="margin-top:10px"><span class="dim">仅监听 127.0.0.1：其他设备无法访问，也不需要访问码。</span></div>
+    <div><span class="dim">启用访问：使用上方「一键上线」。</span></div>
     <div><span class="ps">PS</span><span class="cur"></span></div>`;
   $('#padAddr').innerHTML = h.lan
     ? '<i class="dot ok"></i>' + esc(String(h.url_lan||'').replace('http://','')) + ' · 主机在线'
-    : '<i class="dot no"></i>未上线：平板现在打不开';
+    : '<i class="dot no"></i>未上线：外部设备无法访问';
   $('#padFine').innerHTML = h.lan
-    ? '访问码每次上线都会换；这台电脑关掉或关窗口，平板立刻打不开。'
-    : '要让平板打开：在电脑上点上面的「一键上线」，再回这一页看码。';
+    ? '访问码每次上线重新生成；本机关闭上线或退出程序后，外部设备立即无法访问。'
+    : '启用方法：在本机点击「一键上线」，然后返回此页查看访问码。';
 }
 const dg = [...document.querySelectorAll('#digits input')];
 dg.forEach((b,i)=>{
@@ -1844,7 +2078,7 @@ async function checkCode(){
   if(code.length<8){ toast('访问码是 8 位，还差 '+(8-code.length)+' 位'); return; }
   try{
     const j = await (await fetch('/api/access',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code})})).json();
-    if(j.ok){ $('#padFine').innerHTML = '<span style="color:var(--ok)">✓ 对了 —— 平板端这时就进课程页了</span>'; toast('访问码正确'); return; }
+    if(j.ok){ $('#padFine').innerHTML = '<span style="color:var(--ok)">✓ 验证通过：外部设备此时已进入课程页</span>'; toast('访问码正确'); return; }
     $('#digits').classList.add('bad');
     $('#padFine').innerHTML = '<span style="color:var(--red)">' + esc(j.error||'访问码不对') + '</span>';
     setTimeout(()=>{ $('#digits').classList.remove('bad'); dg.forEach(b=>b.value=''); dg[0].focus(); }, 340);
@@ -1927,25 +2161,25 @@ function wizard(step){
   }
   if(step===0){
     body = `<h4>先选模型版本</h4>
-      <p class="note-s">只有两档：选哪个都能出 PDF，区别只在「让 AI 写新内容」时的质量和花费。以后随时可在设置里改。</p>
+      <p class="note-s">两个版本均可生成 PDF，区别仅在于生成新内容时的质量与花费；之后可在设置中修改。</p>
       <div class="pick-model">${(B.models||[]).map(m=>`<div class="p ${W.model===m.id?'on':''}" data-m="${esc(m.id)}">
         <b>${esc(m.name)}</b><small>${esc(m.note)}</small></div>`).join('')}</div>`;
   }else if(step===1){
-    body = `<h4>填 API 钥匙</h4>
-      <p class="note-s">只存本机（%USERPROFILE%\\.pluma\\api.json），不会进仓库。没有可以先跳过，之后在设置里补。</p>
+    body = `<h4>填写 API 密钥</h4>
+      <p class="note-s">仅保存在本机（%USERPROFILE%\\.pluma\\api.json），不进入仓库。可先跳过，稍后在设置中补充。</p>
       <input type="password" id="wKey" placeholder="sk-…" autocomplete="off">`;
   }else if(step===2){
-    body = `<h4>选保存目录</h4>
-      <p class="note-s">生成的讲义会复制到这里。填相对路径就以软件目录为根，也可以直接填绝对路径。</p>
+    body = `<h4>选择保存目录</h4>
+      <p class="note-s">生成的讲义会复制到此目录。相对路径以软件目录为根，也可直接填绝对路径。</p>
       <div class="dirline"><input type="text" id="wDir" value="${esc(B.save_dir||'')}">
         <button class="pickbtn" id="wPick">📁 选择文件夹…</button></div>
       <p class="pickfine" id="wFine">当前指向：<code>${esc(dirText(B.save_dir))}</code></p>`;
   }else{
     body = `<h4>可以开始了</h4>
       <div class="kv"><span>模型</span><b>${esc(W.model?mname(W.model):mname(MODEL))}</b></div>
-      <div class="kv"><span>API 钥匙</span><b>${W.key?'已填写':'未填（不影响出 PDF）'}</b></div>
+      <div class="kv"><span>API 密钥</span><b>${W.key?'已填写':'未填写（不影响生成 PDF）'}</b></div>
       <div class="kv"><span>保存目录</span><b>${esc(W.dir||B.save_dir||'')}</b></div>
-      <p class="note-s">点「完成」会写入本机配置。想改随时点右上「设置」。</p>`;
+      <p class="note-s">点击「完成」写入本机配置；之后可随时在「设置」中修改。</p>`;
   }
   $('#dlg').innerHTML = `<div class="eb">首次配置</div>${steps}${depWarn}${body}
     <div class="acts">${step>0?'<button class="btn ghost" id="wBack">上一步</button>':''}
@@ -1977,10 +2211,10 @@ function wizard(step){
 $('#btnSet').onclick = () => {
   $('#dlg').innerHTML = `
     <div class="eb">Settings</div><h4>设置</h4>
-    <p class="note-s">改动即刻写本机配置；密钥只留在本机。模型随时可换，改完下一次提问/生成即生效。</p>
-    <div class="lbl">模型版本（只有这两档，随时可改）</div>
+    <p class="note-s">改动即时写入本机配置；密钥仅保存在本机。模型可随时更换，保存后下一问或下一次生成即生效。</p>
+    <div class="lbl">模型版本</div>
     <select id="sModel">${(B.models||[]).map(m=>`<option value="${esc(m.id)}" ${m.id===MODEL?'selected':''}>${esc(m.name)} — ${esc(m.note)}</option>`).join('')}</select>
-    <div class="lbl">API 钥匙（留空表示不改）</div>
+    <div class="lbl">API 密钥（留空表示不修改）</div>
     <input type="password" id="sKey" placeholder="sk-…" autocomplete="off">
     <div class="lbl">保存目录</div>
     <div class="dirline"><input type="text" id="sDir" value="${esc(B.save_dir||'')}">
@@ -2012,11 +2246,11 @@ function showTut(){
   $('#dlg').innerHTML = `
     <div class="eb">Getting started</div><h4>五步用起来</h4>
     <div class="prev" style="max-height:none">
-      <div class="row"><span>①</span><div><b>课程</b>里点任一门 → 右侧抽屉列出成品；卡片右上 ☆ 收进收藏夹。</div></div>
-      <div class="row"><span>②</span><div>点成品 → <b>在软件里读</b>（不再新开标签）：翻页、缩放、右侧写笔记。</div></div>
-      <div class="row"><span>③</span><div>抽屉底部<b>「问这一门」</b> → 这门自己的会话；右边可多选讲次，答案带节号与课件页码。</div></div>
-      <div class="row"><span>④</span><div>会话里勾几条消息 → <b>生成笔记</b> → 选一份讲义 → 追加到末尾（另存副本）。</div></div>
-      <div class="row"><span>⑤</span><div>右上 <b>◐</b> 切深色：阅读器里文字反相、位图保持原色；<b>上线</b>页给平板用访问码。</div></div>
+      <div class="row"><span>①</span><div><b>课程</b>中选择任一门，右侧抽屉列出成品；卡片右上 ☆ 可加入收藏。</div></div>
+      <div class="row"><span>②</span><div>点击成品 → <b>在软件内阅读</b>：翻页、缩放、在右侧记录笔记。</div></div>
+      <div class="row"><span>③</span><div>抽屉底部<b>「提问本课程」</b>进入本课程会话；右侧可多选讲次，答案标注节号与课件页码。</div></div>
+      <div class="row"><span>④</span><div>会话中勾选若干消息 → <b>生成笔记</b> → 选择讲义 → 追加到末尾（另存副本）。</div></div>
+      <div class="row"><span>⑤</span><div>右上 <b>◐</b> 切换深色主题：阅读器文字反相、位图保持原色；<b>上线</b>页为平板提供访问码。</div></div>
     </div>
     <div class="acts"><button class="btn" id="tutOk">知道了</button></div>`;
   openVeil();
@@ -2047,10 +2281,12 @@ function closeDrawer(){
 $('#dveil').onclick = closeDrawer;
 // 点遮罩空白关弹窗（点弹窗内容不关：target 不等于 #veil）
 document.addEventListener('click', e => { if(e.target === $('#veil')) closeVeil(); });
-// Esc：搜索面板自己处理（先清空再一次收起），剩下的先关弹窗、再关抽屉
+// Esc：满屏浮层先退（不关弹窗、不关抽屉）；搜索面板自己处理（先清空再一次收起），剩下的先关弹窗、再关抽屉
 document.addEventListener('keydown', e => {
   if(e.key !== 'Escape') return;
   if(FIND.open) return;
+  const card = readCard();
+  if(card && card.classList.contains('fs')){ e.preventDefault(); setFullscreen(false); return; }
   if($('#veil').classList.contains('on')){ e.preventDefault(); closeVeil(); return; }
   if($('#drawer').classList.contains('on')){ e.preventDefault(); closeDrawer(); }
 });
@@ -2070,7 +2306,10 @@ document.addEventListener('keydown', e => {
   if(wzN !== null) setTimeout(()=>wizard(Math.max(0, Math.min(3, (parseInt(wzN, 10) || 1) - 1))), 400);
   // 2026-11-17：截图 / 回归要能拨一拨状态（比如公开仓截图不能出现真实课程，
   //   需要临时滤掉非示例课）。模块作用域的东西外部拿不到，带 ?dbg 时挂一个小口子。
-  if(DBG) window.__pluma = { B, render, showPage, openDrawer, renderHost, fillSelects, state:()=>({B, MODE, FORM}) };
+  if(DBG) window.__pluma = { B, render, showPage, openDrawer, renderHost, fillSelects,
+    // 2026-11-17：队列与删除的回归入口（仅 ?dbg=1）——不这样暴露，就没法单独测「取消一项」
+    queue:()=>Q, renderQueue, cancelQueueItem, askDeleteLesson, askDeleteFile, askDeleteCourse,
+    state:()=>({B, MODE, FORM}) };
   if(/settings=1/.test(location.search)) setTimeout(()=>$('#btnSet').click(), 400);
   // 2026-11-17：?open=1 开第一门；?open=DEMO 开指定那门（截图与复现用）
   const mo = location.search.match(/open=([A-Za-z0-9_-]+)/);

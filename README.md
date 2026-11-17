@@ -4,20 +4,20 @@
 
 <br><br>
 
-### ⭐ 如果这个项目对你有用，欢迎点一下右上角的 ⭐
-**这是对我开发最大的鼓励。**
+### ⭐ 如果本项目对你有帮助，欢迎 Star
+**这是我继续开发的最大支持。**
 
 </div>
 
 <div align="center">
 
-<a href="https://github.com/Charlotte0124/LaPluma/releases/latest"><img src="https://img.shields.io/badge/⬇_下载_v1.9.2-C8202C?style=for-the-badge&logo=windows&logoColor=white" height="40" alt="下载"></a>
+<a href="https://github.com/Charlotte0124/LaPluma/releases/latest"><img src="https://img.shields.io/badge/⬇_下载_v1.9.3-C8202C?style=for-the-badge&logo=windows&logoColor=white" height="40" alt="下载"></a>
 &nbsp;
 <a href="一键启动.ps1"><img src="https://img.shields.io/badge/▶_一键启动-2F7D4F?style=for-the-badge&logo=powershell&logoColor=white" height="40" alt="一键启动"></a>
 &nbsp;
 <a href="docs/00-总索引.md"><img src="https://img.shields.io/badge/📖_文档-6C6A63?style=for-the-badge&logo=readthedocs&logoColor=white" height="40" alt="文档"></a>
 
-<sub>↑ 上面三个是按钮，可以直接点：下载、一键启动、文档</sub>
+<sub>↑ 以上三项均可直接点击：下载 / 一键启动 / 文档</sub>
 
 </div>
 
@@ -25,7 +25,7 @@
 
 ![license](https://img.shields.io/badge/license-MIT-171714?style=flat-square)
 ![python](https://img.shields.io/badge/python-3.12-171714?style=flat-square)
-![version](https://img.shields.io/badge/version-1.9.2-171714?style=flat-square)
+![version](https://img.shields.io/badge/version-1.9.3-171714?style=flat-square)
 ![gates](https://img.shields.io/badge/三道门-绿才出门-C8202C?style=flat-square)
 ![offline](https://img.shields.io/badge/出_PDF-不需要密钥-2F7D4F?style=flat-square)
 
@@ -66,7 +66,7 @@
 | 装上直接用 | [下载](#下载) · [一键启动](#一键启动) |
 | 先看它长什么样 | [界面](#界面)（真截图） |
 | 看「原始课件 → 成品」差多少 | [示例：桃花源记](docs/示例/README.md)（4 页 → 13 页） |
-| 把自己的课件丢进去 | 点课程卡 → 抽屉顶部「＋ 导入课件」，或直接把 PDF 拖进窗口 |
+| 导入自己的课件 | 点课程卡 → 抽屉顶部「＋ 导入课件」，或将 PDF 直接拖入窗口 |
 | 给平板 / 手机用 | [一键启动](#一键启动) 里的「一键上线」（8 位访问码） |
 | 知道生成怎么跑 | [一条命令](#一条命令) · [三道门](#三道门) |
 | 懂它分几层、怎么改 | [分五层](#分五层每层可单独换) |
@@ -82,10 +82,10 @@
 **直接运行（Windows，最简单）**
 
 从 [Releases](https://github.com/Charlotte0124/LaPluma/releases/latest) 下载 `LaPluma.exe`（约 108 MB），双击运行：
-直接开出羽毛笔自己的窗口（标题栏带版本号），关掉窗口就是退出。首次启动要解包，慢几秒。
+打开独立窗口（标题栏显示版本号），关闭窗口即退出；首次启动需解包，约需数秒。
 **不需要 Python，也不需要装任何依赖**——运行环境已经打在里面。
 
-- 你放进去的课程、生成的 PDF 与日志都在 **exe 旁边**；配置在 `%USERPROFILE%\.pluma`
+- 导入的课程、生成的 PDF 与日志均位于 **exe 旁**；配置在 `%USERPROFILE%\.pluma`
 - 自带示例课程 `DEMO`（2 讲），内容数据齐备，**不配密钥也能出 PDF**；要换成自己的课，在 exe 旁边建 `<课程代码>\_lessons\` 并在 `courses.json` 里登记
 - 需要本机 Chrome 或 Edge（打印 PDF 用），无需另装
 
@@ -99,7 +99,7 @@ cd LaPluma
 
 - 双击 `一键启动.bat`；**不要直接双击 `.ps1`**（默认设置下它会被记事本打开，不运行）
 - 需要 Python 3.12（脚本会检查版本并提示），依赖只有 `pymupdf`——缺了脚本会自动装
-- 自动装不上时看 [用 CMD 装依赖](docs/使用/07-装依赖-用CMD.md)（三步，粘两行命令）
+- 自动安装失败时参见 [用 CMD 装依赖](docs/使用/07-装依赖-用CMD.md)（三步，粘贴两行命令）
 - 需要本机 Chrome 或 Edge（用于打印 PDF，无需另行安装）
 - **仓库自带示例课程 `DEMO`**：无需准备任何教材，即可完整走一遍「数据 → 讲义 → PDF → 三道门」：
 
@@ -162,13 +162,14 @@ python engine\_make.py L01
 <p align="center"><sub><b>主机上线</b>：一键上线后给出局域网地址与 8 位访问码，同一局域网内输入访问码即可使用。（图中地址与访问码为文档示例值）</sub></p>
 
 - **课程**（分页一）：按目录自动识别；卡片右上 ☆ 加入收藏，顶部可切换「全部 / 收藏」；标题右侧**放大镜**（Ctrl+K）可检索课程与课件；卡片右下「⇩ 导出 PDF」导出该门成品
+- **删除**：讲次区「全选」左侧「删除」进入删除模式（每个讲号右上角出现红 ×）；抽屉内每份原件 / 成品行右侧「删除」；课程卡底部「删除」整门移除（需照抄课程代号确认）。全部删除均为**移入 `<软件目录>\_trash\<时间戳>\`**，可手动取回，不做物理删除
 - **成品**：点击课程 → 右侧抽屉列出该门讲义 → 点击文件名在软件内阅读（不打开新标签页）
 - **导入原件**：抽屉顶部「＋ 导入课件」选文件，或把 PDF / 图片直接拖进窗口；原件存到该课 `00_原件\`，与成品分两段列出，同样可点开在内读
-- **阅读**（分页三）：应用内阅读 PDF，支持翻页、缩放，右侧栏可边读边记；深色主题下正文反相，位图（课件原图）保持原色
+- **阅读**（分页三）：应用内阅读 PDF，支持翻页、缩放、**全屏**（按钮或 F 键，Esc 退出），右侧栏可边读边记；深色主题下正文反相，位图（课件原图）保持原色
 - **笔记**：记录在当前页；「添加到这份 PDF」生成副本，将笔记作为附页追加至末尾（不改动原件）
-- **会话**：抽屉底部「问这一门 →」进入该课程专属会话，答案附节号与课件页码；讲次可多选，跨课件引用需显式开启
+- **会话**：抽屉底部「提问本课程 →」进入该课程专属会话，答案附节号与课件页码；讲次可多选，跨课件引用需显式开启
 - **导出笔记**：勾选消息 → 生成笔记 → 选择讲义（可多选）追加至末尾（默认本地整理，不消耗 token）
-- **生成**（分页二）：选择课程与讲次（可多选）→ 确认免责声明 → 开始；任务进入队列，成功后自动移除，失败标红
+- **生成**（分页二）：选择课程与讲次（可多选）→ 确认免责声明 → 开始；任务进入队列（可逐项取消），成功后自动移除，失败标红
 - **上线**（分页四）：一键上线 → 局域网地址 + 8 位访问码；数据全部留在本机
 - **设置**：模型版本（4.1 两档）、API 密钥、保存目录、账户余额、累计 token 与估算花费
 - **界面改动流程**：尚未实现的稿件在 [`docs/预览`](docs/预览/README.md)；修改 `ui\` 后需运行 `python tools\check\check-ui-preview.py`
@@ -229,12 +230,12 @@ A/B/C 三层可离线运行；仅「让模型撰写新内容」时才需要 D �
 <!-- 最近更新:begin（由 tools/sync-readme.py 生成，别手改） -->
 | 版本 | 日期 | 这一版做了什么 |
 |:--|:--|:--|
-| **v1.9.2** | 11-17 | 终于有「把课件丢进去」的地方了——课程抽屉里选文件，或直接把 PDF 拖进窗口 |
+| **v1.9.3** | 11-17 | 讲次、课件、整门课都能删（进回收站可取回）；生成队列可逐项取消；界面文案改为书面语；深色翻页不再白闪，阅读页恢复全屏 |
+| **v1.9.2** | 11-17 | 新增「导入课件」入口：生成页点「＋ 导入课件」，或把 PDF 直接拖入窗口，导入后自动跳至生成页 |
 | **v1.9.1** | 11-17 | 保存目录能选文件夹、不再把本机路径印在界面上；标签页有羽毛图标；一键启动会查 Python 版本并自动装依赖 |
 | **v1.9.0** | 11-17 | 双击就是一个自己的窗口（不再是浏览器页），带羽毛图标；界面上线方式可用 --no-window 退回 |
 | **v1.8.2** | 11-17 | 双击 exe 不再「黑框一闪就没了」：端口被占用时自动换一个，崩了也把原因留在窗口里 |
-| **v1.8.1** | 11-17 | 推出单文件 exe（LaPluma.exe）；修好打包后才暴露的三处问题 |
-| — | — | 更早的 14 个版本 → [CHANGELOG](CHANGELOG.md) |
+| — | — | 更早的 15 个版本 → [CHANGELOG](CHANGELOG.md) |
 <!-- 最近更新:end -->
 
 ## 目录

@@ -76,7 +76,7 @@ HOST, PORT = "127.0.0.1", 8765
 #   每次打开/刷新阅读器都全量重传（本机无感，平板走 WiFi 明显）。
 #   index.html 必须仍走 no-store（改完界面要能立刻看到新版）。
 _STATIC_ETAG = {}
-VERSION = "1.9.2"
+VERSION = "1.9.3"
 APP_NAME = "羽毛笔 La Pluma"
 BOOK_NAME = DEFAULT_COURSE + "_九讲合订本_讲义.pdf"
 
@@ -399,6 +399,27 @@ def safe_join(*parts):
         if os.path.isfile(p):
             return p
     return cands[0]      # 都不存在：回数据根，交给调用方报「文件不存在」
+
+
+# ---------- 删除（移入回收站）----------
+# 2026-11-17 用户要求：讲次（要生成的批次）、成品、原件、整门课程都要能删。
+# 删除一律「移进 <数据根>\_trash\<时间戳>\」，不做 unlink：讲次数据是手写的、
+# 课程目录里还有导入的原件，误点一次要能拿回来。
+TRASH_DIR = "_trash"
+
+
+def _in_data_root(p: str) -> bool:
+    """是否在可写数据根内。资源根是随程序发布的示例课程（exe 里只读），不能删。"""
+    return os.path.abspath(p).startswith(os.path.abspath(ROOT) + os.sep)
+
+
+def trash_move(src: str) -> str:
+    """把文件或目录移进回收站，返回新位置。"""
+    dst_root = os.path.join(ROOT, TRASH_DIR, time.strftime("%Y%m%d-%H%M%S"))
+    os.makedirs(dst_root, exist_ok=True)
+    dst = _unique_path(dst_root, os.path.basename(src.rstrip("\\/")))
+    shutil.move(src, dst)
+    return dst
 
 
 def originals_dir(code: str) -> str:
@@ -1064,7 +1085,7 @@ class Handler(BaseHTTPRequestHandler):
             if not self._authed():
                 if u.path.startswith("/api/"):
                     return self._json({"ok": False, "need_access": True,
-                                       "error": "需要访问码：在平板输一次就行"}, 401)
+                                       "error": "需要访问码：请在平板端输入一次"}, 401)
                 return self._file(os.path.join(UI_DIR, "access.html"))
             if u.path in ("/access", "/access.html"):
                 return self._file(os.path.join(UI_DIR, "access.html"))
@@ -1436,6 +1457,58 @@ class Handler(BaseHTTPRequestHandler):
                 codes.symmetric_difference_update({code})
                 _write_json(FAV_PATH, {"codes": sorted(codes)})
                 return self._json({"ok": True, "fav": code in codes})
+            if u.path == "/api/delete":
+                # 2026-11-17：讲次 / 成品 / 原件 / 整门课 四种删除。全部移入 _trash，不真删。
+                kind = str(body.get("kind") or "").strip()
+                code = _safe_code(str(body.get("course") or "").strip())
+                cdir = os.path.abspath(paths.course_dir(code))
+                if not code or not os.path.isdir(cdir):
+                    return self._json({"ok": False, "error": "没有这门课：%s" % (code or "（空）")}, 404)
+                if not _in_data_root(cdir):
+                    return self._json({"ok": False,
+                                       "error": "这是随程序发布的示例课程（只读），不能删除；要改先复制到软件目录"}, 403)
+                moved = []
+                if kind == "lesson":
+                    no = re.sub(r"[^A-Za-z0-9_.-]", "_", str(body.get("no") or "").strip())
+                    src = os.path.join(cdir, "_lessons", no + ".py")
+                    if not no or not os.path.isfile(src):
+                        return self._json({"ok": False, "error": "没有这一讲：%s" % (no or "（空）")}, 404)
+                    moved.append(trash_move(src))
+                elif kind == "file":
+                    # 只认这门课自己的 01_讲义（成品）与 00_原件（导入的原件），路径绕不出去
+                    rel = str(body.get("rel") or "").replace("\\", "/")
+                    parts = [x for x in rel.split("/") if x]
+                    if (len(parts) != 3 or _safe_code(parts[0]) != code
+                            or parts[1] not in ("01_讲义", ORIG_DIR)):
+                        return self._json({"ok": False, "error": "只能删这门课的成品或原件：%s" % rel}, 400)
+                    name = os.path.basename(parts[2])
+                    src = os.path.join(cdir, parts[1], name)
+                    if not os.path.isfile(src):
+                        return self._json({"ok": False, "error": "文件不存在：%s" % rel}, 404)
+                    moved.append(trash_move(src))
+                elif kind == "course":
+                    if str(body.get("confirm") or "").strip() != code:
+                        return self._json({"ok": False,
+                                           "error": "确认字串不一致：请照抄课程代号 %s" % code}, 400)
+                    moved.append(trash_move(cdir))
+                    # 课程没了，收藏夹里不能留空壳
+                    fav = _read_json(FAV_PATH, {"codes": []})
+                    _write_json(FAV_PATH, {"codes": [x for x in fav.get("codes", []) if x != code]})
+                else:
+                    return self._json({"ok": False, "error": "未知删除类型：%s" % (kind or "（空）")}, 400)
+                # 2026-11-17：删除必须留痕。之前没有日志，本轮到过一次「课程目录不见了」，
+                #   却无法从软件侧确认是谁删的（只能靠 git 恢复）；现在每次删除写一行。
+                try:
+                    os.makedirs(LOG_DIR, exist_ok=True)
+                    with open(os.path.join(LOG_DIR, "delete.log"), "a", encoding="utf-8") as _fh:
+                        _fh.write("%s\t%s\t%s\t%s\t%s\n" % (
+                            time.strftime("%Y-%m-%d %H:%M:%S"), kind, code,
+                            str(body.get("no") or body.get("rel") or code), moved[0] if moved else ""))
+                except Exception:  # noqa: BLE001
+                    pass
+                return self._json({"ok": True, "kind": kind, "count": len(moved),
+                                   "trash": moved[0] if moved else "",
+                                   "trash_dir": os.path.join(ROOT, TRASH_DIR)})
             if u.path == "/api/generate":
                 no = str(body.get("lesson", "")).strip()
                 course = str(body.get("course", DEFAULT_COURSE)).strip()
