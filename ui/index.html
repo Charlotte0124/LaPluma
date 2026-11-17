@@ -144,13 +144,6 @@ nav a.on{background:var(--ink);color:var(--bg)}
 .dveil{position:fixed;inset:0;background:rgba(10,10,9,.26);opacity:0;pointer-events:none;
   transition:opacity .22s ease;z-index:29}
 .dveil.on{opacity:1;pointer-events:auto}
-/* 2026-11-17：导入资料（用户：「他怎么只有保存的地方，没让我能丢进去的地方」） */
-.dr-tools{display:flex;gap:10px;align-items:center;padding:0 18px 10px}
-.dr-import{border:1px solid var(--ink);background:var(--ink);color:var(--bg);border-radius:9px;
-  padding:7px 14px;font-size:12.5px;cursor:pointer;transition:.16s;white-space:nowrap}
-.dr-import:hover{opacity:.86}
-.dr-import.busy{opacity:.5;pointer-events:none}
-.dr-tip{font-size:11.5px;color:var(--faint);line-height:1.5}
 .dr-files-grp{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);
   padding:12px 22px 6px;display:flex;gap:8px;align-items:baseline}
 .dr-files-grp span{letter-spacing:0;text-transform:none;font-size:11.5px;color:var(--faint);opacity:.8}
@@ -503,7 +496,11 @@ footer{max-width:1080px;margin:26px auto 0;padding:0 16px;display:flex;align-ite
           <div class="opt on" data-form="single"><b>单本</b><small>一讲一份</small></div>
           <div class="opt" data-form="book"><b>合订本</b><small>全部讲一本</small></div>
         </div>
-        <div class="tools"><select id="courseSel"></select></div>
+        <div class="tools">
+          <select id="courseSel"></select>
+          <button class="btn ghost" id="btnImport" title="把课件 PDF / 图片导入到这门课（也可以直接拖进窗口）">＋ 导入课件</button>
+          <span class="hint" id="impHint" style="border:0;margin:0;padding:0;align-self:center">原件 —</span>
+        </div>
         <div class="lsn-h">
           <span>要生成的讲次<span class="n" id="lsnCnt">可多选</span></span>
           <button class="btn ghost" id="lsnAll" style="padding:3px 12px;font-size:11.5px">全选</button>
@@ -667,10 +664,6 @@ footer{max-width:1080px;margin:26px auto 0;padding:0 16px;display:flex;align-ite
     <div class="c" id="drCode"></div>
     <h3 id="drTitle"></h3>
     <p id="drDesc"></p>
-  </div>
-  <div class="dr-tools">
-    <button class="dr-import" id="drImport">＋ 导入课件</button>
-    <div class="dr-tip">选文件，或把 PDF / 图片直接拖进窗口</div>
   </div>
   <div class="dr-find"><input id="drFind" placeholder="找讲义：讲号或关键词" autocomplete="off"><span class="n" id="drCount"></span></div>
   <div class="files" id="drFiles"></div>
@@ -1042,7 +1035,7 @@ function renderFiles(){
       <div class="n">${esc(f.name)}</div>
       <div class="pg">${f.size_kb} KB</div><div class="op">在软件里读 →</div>
     </div>`).join('')
-    : '<div class="empty">'+(kw?'没有匹配的原件':'还没有原件。点上面「＋ 导入课件」，或直接把 PDF 拖进窗口。')+'</div>';
+    : '<div class="empty">'+(kw?'没有匹配的原件':'还没有原件。到「生成」页点「＋ 导入课件」，或把 PDF 拖进窗口。')+'</div>';
   html += `<div class="dr-files-grp">成品 · ${all.length}<span>生成出来的讲义</span></div>`;
   html += list.length ? list.map(f=>`
     <div class="f" data-pdf="${esc(f.rel)}" data-name="${esc(f.name)}" title="${esc(f.rel)}">
@@ -1073,9 +1066,17 @@ $('#drAsk').onclick = () => { const c=DRAGGED; closeDrawer(); openChat(c); };
    两个入口共用一个后端：按钮→本机文件对话框（后端直接拷，不走浏览器，大 PDF 也快）；
    拖拽→浏览器读成 base64 再传（平板/手机那边也能用）。存到 <课程>/00_原件\。 */
 function currentCourse(){
+  // 2026-11-17：导入入口搬到「生成」页后，以那页选中的课程为准
+  const sel = $('#courseSel');
+  if(sel && sel.value) return sel.value;
   if(DRAGGED && DRAGGED.code) return DRAGGED.code;
   if(B.default) return B.default;
   return ((B.courses||[])[0] || {}).code || '';
+}
+function updateImpHint(){
+  const h = $('#impHint'); if(!h) return;
+  const c = (B.courses||[]).find(x=>x.code===currentCourse());
+  h.textContent = '原件 ' + (((c && c.originals) || []).length) + ' 份';
 }
 async function afterImport(j, code){
   if(!j.ok){
@@ -1085,19 +1086,22 @@ async function afterImport(j, code){
   toast('已导入 ' + (j.added||[]).length + ' 份 → ' + (j.dir||''));
   if((j.skipped||[]).length) setTimeout(()=>toast('跳过：' + j.skipped.join('；')), 1600);
   await boot();
-  const c = (B.courses||[]).find(x=>x.code===code);
-  if(c) openDrawer(c);
+  // 2026-11-17 用户定：「不如直接拖动之后直接跳转到生成那」——导完就落到生成页，课程也选好
+  const sel = $('#courseSel');
+  if(sel && code){ sel.value = code; syncLessons(); }
+  showPage('generate');
+  updateImpHint();
 }
-$('#drImport').onclick = async () => {
+$('#btnImport').onclick = async () => {
   const code = currentCourse();
-  const btn = $('#drImport'), old = btn.innerHTML;
-  btn.classList.add('busy'); btn.textContent = '等你在对话框里选…';
+  const btn = $('#btnImport'), old = btn.innerHTML;
+  btn.disabled = true; btn.textContent = '等你在对话框里选…';
   try{
     const j = await (await fetch('/api/import',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({course:code, mode:'pick'})})).json();
     await afterImport(j, code);
   }catch(e){ toast('请求失败：' + e); }
-  finally{ btn.classList.remove('busy'); btn.innerHTML = old; }
+  finally{ btn.disabled = false; btn.innerHTML = old; }
 };
 let dropDepth = 0;
 function setDrop(on, code){
@@ -1147,6 +1151,7 @@ function fillSelects(){
   const list = (B.courses||[]).slice().sort((a,b)=>((a.code===d)?-1:0) - ((b.code===d)?-1:0));
   $('#courseSel').innerHTML = list.map(c=>`<option value="${esc(c.code)}">${esc(c.title)}</option>`).join('');
   syncLessons();
+  updateImpHint();
 }
 /* 2026-11-17：生成页讲次改多选（用户：「开始生成也是可以多选生成哪几个的」）。
    LESSON_SEL 存勾中的讲号；换课程就清空，合订本模式下整块置灰（合订本 = 全部讲）。 */
@@ -2023,6 +2028,8 @@ document.addEventListener('keydown', e => {
   const sp = new URLSearchParams(location.search);
   if(sp.get('theme')) applyTheme(sp.get('theme'));
   if(sp.get('page')==='generate') showPage('generate');
+  // 2026-11-17：?course=DEMO 指定课程（截图与复现用，避免把真实课件名拍进图里）
+  if(sp.get('course')){ const cs=$('#courseSel'); if(cs){ cs.value = sp.get('course'); syncLessons(); updateImpHint(); } }
   if(sp.get('page')==='host'){ showPage('host'); renderHost(); }
   // 2026-11-17：?wizard=1 打开向导；?wizard=3 直接到第 3 步（截图与复现用，平时不带）
   const wzN = sp.get('wizard');
