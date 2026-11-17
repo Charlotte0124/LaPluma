@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import base64
+import ctypes
 import io
 import json
 import hashlib
@@ -21,6 +22,7 @@ import sys
 import threading
 import time
 import urllib.parse
+import urllib.request
 import webbrowser
 import zipfile
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -76,7 +78,7 @@ HOST, PORT = "127.0.0.1", 8765
 #   每次打开/刷新阅读器都全量重传（本机无感，平板走 WiFi 明显）。
 #   index.html 必须仍走 no-store（改完界面要能立刻看到新版）。
 _STATIC_ETAG = {}
-VERSION = "1.9.3"
+VERSION = "1.9.4"
 APP_NAME = "羽毛笔 La Pluma"
 BOOK_NAME = DEFAULT_COURSE + "_九讲合订本_讲义.pdf"
 
@@ -89,7 +91,96 @@ HOST_PATH = os.path.join(os.path.expanduser("~"), ".pluma", "host.json")
 NOTES_DIR = os.path.join(os.path.expanduser("~"), ".pluma", "notes")
 PDFJS_DIR = paths.res("tools", "print", "pdfjs")
 
+# ---------- 启动自保（2026-11-17 别人机器上「双击打不开」的复盘）----------
+# 现场：%TEMP%\clr.py（外来的调试脚本）顶掉了 pythonnet 的 clr，双击 exe 直接崩在
+#   pywebview 导入上；弹窗只截到一张图，没有日志可查。
+# 为什么会被顶掉：单文件版把解包根目录（%TEMP%）和 exe 所在目录都挂在 sys.path 上，
+#   而且排在包内资源之前（实测 sys.path：%TEMP% 在第 5 项，_MEIxxxx 在第 8 项），
+#   那两个目录里只要有一个与包内模块同名的 .py，`import clr` 就命中它。
+# 做法：启动时先摘掉这类「遮蔽目录」，再把 stdout 兜成可写，最后才碰 webview。
+SHADOW_NAMES = ("clr", "clr_loader", "pythonnet", "webview", "fitz", "tkinter")
+LOG_DIR_UI = os.path.join(USER_DIR, "logs")
+
+
+def _inside_res(path: str) -> bool:
+    """这个路径是不是包内资源（RES_ROOT）自己或它的子目录。"""
+    try:
+        p = os.path.abspath(path).lower().rstrip("\\/")
+        r = os.path.abspath(paths.RES_ROOT).lower().rstrip("\\/")
+    except Exception:  # noqa: BLE001
+        return False
+    return p == r or p.startswith(r + os.sep)
+
+
+def _strip_shadowed() -> list:
+    """摘掉 sys.path 上「含与包内模块同名 .py」的外来目录，返回 [(目录, 命中文件名)]。
+
+    只动包外的临时目录 / exe 旁边这类地方；包内资源（RES_ROOT）与 site-packages
+    一律不碰——真装机器上 pythonnet 本来就该在 site-packages 里。
+    """
+    hit = []
+    for entry in list(sys.path):
+        if not entry or _inside_res(entry):
+            continue
+        low = entry.lower()
+        if "site-packages" in low or "dist-packages" in low:
+            continue
+        try:
+            d = os.path.abspath(entry)
+            if not os.path.isdir(d):
+                continue
+            bad = [n for n in SHADOW_NAMES if os.path.isfile(os.path.join(d, n + ".py"))]
+        except Exception:  # noqa: BLE001
+            continue
+        if not bad:
+            continue
+        while entry in sys.path:
+            sys.path.remove(entry)
+        hit.append((entry, ", ".join(b + ".py" for b in bad)))
+    return hit
+
+
+def _safe_stdio() -> None:
+    """窗口版 exe 的 stdout/stderr 是 nul 流，还可能已被关掉；换成可写的哑流。"""
+    for name in ("stdout", "stderr"):
+        s = getattr(sys, name, None)
+        if s is not None and not getattr(s, "closed", False) and hasattr(s, "write"):
+            continue
+        try:
+            setattr(sys, name, open(os.devnull, "w", encoding="utf-8",
+                                    errors="replace", buffering=1))
+        except Exception:  # noqa: BLE001
+            pass
+
+
+def _log_write(name: str, text: str) -> str:
+    r"""写 %USERPROFILE%\.pluma\logs\<name>，返回路径；写不进去返回空串（不抛）。"""
+    try:
+        os.makedirs(LOG_DIR_UI, exist_ok=True)
+        p = os.path.join(LOG_DIR_UI, name)
+        with open(p, "a", encoding="utf-8") as f:
+            f.write(text if text.endswith("\n") else text + "\n")
+        return p
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def _log_error(where: str, e: BaseException) -> None:
+    """请求里出事时留一行：服务不崩、用户看到一句话，事后能查是哪条路由。"""
+    try:
+        os.makedirs(LOG_DIR, exist_ok=True)
+        with open(os.path.join(LOG_DIR, "error.log"), "a", encoding="utf-8") as f:
+            f.write("%s\t%s\t%r\n" % (time.strftime("%Y-%m-%d %H:%M:%S"), where, e))
+    except Exception:  # noqa: BLE001
+        pass
+
 sys.path.insert(0, API_DIR)
+# 2026-11-17 Word / PPT / 纯文本导入：转换器在 engine\_office.py（只用标准库 + PyMuPDF）
+sys.path.insert(0, paths.res("engine"))
+try:
+    import _office  # noqa: E402
+except Exception:  # noqa: BLE001
+    _office = None
 try:
     import client as api_client  # noqa: E402
 except Exception:  # noqa: BLE001
@@ -437,7 +528,10 @@ def list_originals(code: str) -> list:
     for fn in os.listdir(d):
         p = os.path.join(d, fn)
         if os.path.isfile(p):
+            ext = os.path.splitext(fn)[1].lower()
+            kind = (_office.SUFFIX_LABEL.get(ext) if _office else None) or "其他"
             out.append({"name": fn, "size_kb": max(1, round(os.path.getsize(p) / 1024)),
+                        "kind": kind, "converted": "（转换）" in fn,
                         "rel": "%s/%s/%s" % (_safe_code(code), ORIG_DIR, fn)})
     out.sort(key=lambda x: nat_key(x["name"]))
     return out
@@ -535,7 +629,7 @@ def pick_files(initial: str = "") -> list:
         "r = tk.Tk(); r.withdraw(); r.attributes('-topmost', True)\n"
         "init = sys.argv[1] if len(sys.argv) > 1 else ''\n"
         "ps = filedialog.askopenfilenames(title='选择要导入的课件', initialdir=init or None,\n"
-        "    filetypes=[('PDF 与图片', '*.pdf *.png *.jpg *.jpeg'), ('所有文件', '*.*')])\n"
+        "    filetypes=[('课件', '*.pdf *.png *.jpg *.jpeg *.docx *.pptx *.txt *.md'), ('所有文件', '*.*')])\n"
         "r.destroy()\n"
         "for p in (ps or ()): print('PICK:' + p)\n"
     )
@@ -548,7 +642,7 @@ def pick_files(initial: str = "") -> list:
             r.attributes("-topmost", True)
             ps = filedialog.askopenfilenames(
                 title="选择要导入的课件", initialdir=initial or None,
-                filetypes=[("PDF 与图片", "*.pdf *.png *.jpg *.jpeg"), ("所有文件", "*.*")])
+                filetypes=[("课件", "*.pdf *.png *.jpg *.jpeg *.docx *.pptx *.txt *.md"), ("所有文件", "*.*")])
             r.destroy()
             return [p for p in (ps or ()) if p]
         out = subprocess.run([sys.executable, "-c", code, initial or ""],
@@ -974,6 +1068,16 @@ class Handler(BaseHTTPRequestHandler):
         pass
 
     # ---- 回应工具 ----
+    def log_message(self, fmt, *args):
+        """2026-11-17：http.server 默认把请求行原样写成 ASCII 日志，中文文件名会直接
+        抛 UnicodeEncodeError 把连接断掉（实测：带中文名的课件请求直接断开）。
+        这里统一转 ASCII，非 ASCII 字符替换掉——日志肉一点，但连接不断。"""
+        try:
+            line = "%s - %s" % (self.address_string(), fmt % args)
+            sys.stderr.write(line.encode("ascii", "replace").decode("ascii") + "\n")
+        except Exception:  # noqa: BLE001
+            pass
+
     def _json(self, obj, code=200):
         body = json.dumps(obj, ensure_ascii=False).encode("utf-8")
         self.send_response(code)
@@ -1195,10 +1299,21 @@ class Handler(BaseHTTPRequestHandler):
                 # dl=1 → 当附件下载（导出用）；默认 inline 给 pdf.js 读
                 dl = str(q.get("dl", [""])[0]).lower() in ("1", "true", "yes")
                 return self._file(safe_join(*rel.split("/")), inline=not dl)
+            if u.path == "/api/update":
+                # 2026-11-17 用户：想知道有没有新版、修了什么（给用户看，不写技术细节）
+                return self._json(check_update(bool(q.get("force", [""])[0])))
+            if u.path == "/doc":
+                # 向导里的「怎么拿到密钥」「支持哪些格式」直接打开本机文档（新标签可读）
+                p = _doc_path(q.get("p", [""])[0])
+                if not p:
+                    return self._json({"ok": False, "error": "没有这篇文档"}, 404)
+                return self._bytes(_render_md(p), os.path.basename(p) + ".html",
+                                   "text/html; charset=utf-8")
             return self._json({"ok": False, "error": "无此路由"}, 404)
         except PermissionError as e:
             return self._json({"ok": False, "error": str(e)}, 403)
         except Exception as e:  # noqa: BLE001
+            _log_error("GET %s" % u.path, e)
             return self._json({"ok": False, "error": repr(e)}, 500)
 
     # ---- POST ----
@@ -1384,6 +1499,17 @@ class Handler(BaseHTTPRequestHandler):
                             added.append(os.path.basename(dst))
                         except Exception as e:  # noqa: BLE001
                             skipped.append(name + "：%s" % e)
+                # 2026-11-17 Word / PPT / 纯文本：导入当场就排成分页 PDF，
+                #   后面的阅读页、页码定位（「课件 p.N」）、三道门一行代码都不用改。
+                converted = []
+                for nm in list(added):
+                    try:
+                        r = _office.ensure_pdf(os.path.join(d, nm)) if _office else None
+                        if r:
+                            converted.append("%s → %s（%d 页）" % (nm, os.path.basename(r["pdf"]), r["pages"]))
+                    except Exception as e:  # noqa: BLE001
+                        _log_error("import/转换 %s" % nm, e)
+                        skipped.append("%s：转成分页 PDF 失败（%s）；原件已存下" % (nm, e))
                 # 2026-11-17：导入同时建一讲骨架——用户要的是「导进来就能在要生成的批次里看到」
                 stubs = []
                 for nm in added:
@@ -1394,8 +1520,8 @@ class Handler(BaseHTTPRequestHandler):
                     except Exception as e:  # noqa: BLE001
                         skipped.append("建讲次失败（%s）：%s" % (nm, e))
                 return self._json({"ok": bool(added), "course": code, "dir": d,
-                                   "added": added, "skipped": skipped, "stubs": stubs,
-                                   "files": list_originals(code)})
+                                   "added": added, "converted": converted, "skipped": skipped,
+                                   "stubs": stubs, "files": list_originals(code)})
             if u.path == "/api/pick-dir":
                 # 选保存目录（原生文件夹对话框）。只接本机：平板端弹不出这台电脑的对话框，
                 # 那边只能到「设置」里手填；请求会一直挂着直到用户选完或取消。
@@ -1618,6 +1744,7 @@ class Handler(BaseHTTPRequestHandler):
                                              "cross": allow_cross}})
             return self._json({"ok": False, "error": "无此路由"}, 404)
         except Exception as e:  # noqa: BLE001
+            _log_error("POST %s" % u.path, e)
             return self._json({"ok": False, "error": repr(e)}, 500)
 
     def _copy_out(self, course, no, dest):
@@ -1654,6 +1781,248 @@ def _balance_now(cfg) -> dict:
         return {"ok": False, "error": str(e)}
 
 
+# ---------- 文档打开与更新检查（2026-11-17）----------
+DOC_ROOT = paths.res("docs")
+UPDATE_API = (os.environ.get("PLUMA_UPDATE_URL")
+              or "https://api.github.com/repos/Charlotte0124/LaPluma/releases/latest")
+UPDATE_CACHE = os.path.join(USER_DIR, "update.json")
+UPDATE_TTL = 6 * 3600        # 6 小时内不重复问 GitHub（人家有限流，也不该一直转）
+
+
+def _doc_path(rel: str) -> str:
+    r"""把 /doc?p=使用/08-…md 限在 docs\ 里（绕不出去）。"""
+    rel = str(rel or "").replace("\\", "/").lstrip("/")
+    root = os.path.abspath(DOC_ROOT)
+    p = os.path.abspath(os.path.join(root, rel))
+    if not p.startswith(root + os.sep) or not p.lower().endswith(".md") or not os.path.isfile(p):
+        return ""
+    return p
+
+
+def _render_md(path: str) -> bytes:
+    """极简 Markdown → 网页（不引第三方库：只认标题 / 列表 / 表格 / 代码块 / 行内码）。"""
+    txt = open(path, encoding="utf-8").read()
+    out, i, lines = [], 0, txt.splitlines()
+
+    def inline(s: str) -> str:
+        s = s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        s = re.sub(r"`([^`]+)`", r"<code>\1</code>", s)
+        s = re.sub(r"\*\*([^*]+)\*\*", r"<b>\1</b>", s)
+        s = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", r'<a href="\2">\1</a>', s)
+        return s
+
+    while i < len(lines):
+        ln = lines[i]
+        s = ln.strip()
+        if s.startswith("```"):
+            i += 1
+            buf = []
+            while i < len(lines) and not lines[i].strip().startswith("```"):
+                buf.append(lines[i])
+                i += 1
+            i += 1
+            out.append("<pre>%s</pre>" % ("\n".join(buf).replace("<", "&lt;").replace(">", "&gt;")))
+            continue
+        m = re.match(r"^(#{1,6})\s+(.*)$", s)
+        if m:
+            n = len(m.group(1))
+            out.append("<h%d>%s</h%d>" % (n, inline(m.group(2)), n))
+            i += 1
+            continue
+        if s.startswith("|") and i + 1 < len(lines) and re.match(r"^\|[\s:\-|]+\|$", lines[i + 1].strip()):
+            head = [c.strip() for c in s.strip("|").split("|")]
+            i += 2
+            rows = []
+            while i < len(lines) and lines[i].strip().startswith("|"):
+                rows.append([c.strip() for c in lines[i].strip().strip("|").split("|")])
+                i += 1
+            out.append("<table><tr>%s</tr>%s</table>" % (
+                "".join("<th>%s</th>" % inline(c) for c in head),
+                "".join("<tr>%s</tr>" % "".join("<td>%s</td>" % inline(c) for c in r) for r in rows)))
+            continue
+        if re.match(r"^[-*]\s+", s):
+            out.append("<ul>")
+            while i < len(lines) and re.match(r"^[-*]\s+", lines[i].strip()):
+                out.append("<li>%s</li>" % inline(re.sub(r"^[-*]\s+", "", lines[i].strip())))
+                i += 1
+            out.append("</ul>")
+            continue
+        if re.match(r"^\d+\.\s+", s):
+            out.append("<ol>")
+            while i < len(lines) and re.match(r"^\d+\.\s+", lines[i].strip()):
+                out.append("<li>%s</li>" % inline(re.sub(r"^\d+\.\s+", "", lines[i].strip())))
+                i += 1
+            out.append("</ol>")
+            continue
+        if s in ("---", "***"):
+            out.append("<hr>")
+            i += 1
+            continue
+        if not s:
+            i += 1
+            continue
+        out.append("<p>%s</p>" % inline(s))
+        i += 1
+    body = "\n".join(out)
+    html = ("<!doctype html><meta charset='utf-8'><title>%s</title>"
+            "<style>body{max-width:820px;margin:36px auto;padding:0 20px;font:15px/1.85 "
+            "'Microsoft YaHei',system-ui;color:#1b1a17;background:#F7F5EF}"
+            "h1{font-size:26px}h2{font-size:20px;margin-top:34px}h3{font-size:17px}"
+            "code{background:#ece8de;padding:1px 5px;border-radius:4px;font-size:13px}"
+            "pre{background:#1d1c19;color:#e9e6dd;padding:14px 16px;border-radius:8px;overflow:auto}"
+            "table{border-collapse:collapse;margin:14px 0}th,td{border:1px solid #d9d4c6;padding:6px 10px;"
+            "text-align:left;vertical-align:top}th{background:#efece2}a{color:#2F7D4F}"
+            "</style>[PAGE]" % os.path.basename(path))
+    return (html.replace("[PAGE]", body)).encode("utf-8")
+
+
+def _ver_num(s: str) -> tuple:
+    parts = re.findall(r"\d+", str(s))[:3]
+    return tuple(int(x) for x in parts) + (0,) * (3 - len(parts))
+
+
+def check_update(force: bool = False) -> dict:
+    """问 GitHub 有没有新版。断网/超时/限流一律回 ok:False，界面就静默（不打扰用户）。
+
+    给用户看的是「修了什么」：release 正文里以 - / * / • 开头的行，最多 8 条。
+    """
+    now = time.time()
+    cached = _read_json(UPDATE_CACHE, {})
+    data = cached.get("data") if isinstance(cached, dict) else None
+    if not force and data and now - float(cached.get("ts") or 0) < UPDATE_TTL:
+        return dict(data, cached=True)
+    try:
+        req = urllib.request.Request(UPDATE_API, headers={
+            "User-Agent": "LaPluma/%s" % VERSION, "Accept": "application/vnd.github+json"})
+        with urllib.request.urlopen(req, timeout=4) as r:
+            body = json.loads(r.read().decode("utf-8-sig"))
+        latest = str(body.get("tag_name") or "").lstrip("vV")
+        summary, notes = "", []
+        for ln in str(body.get("body") or "").splitlines():
+            t = ln.strip()
+            if not t:
+                continue
+            m = re.match(r"^<!--\s*摘要[:：]\s*(.*?)\s*-->$", t)
+            if m:
+                summary = m.group(1)
+                continue
+            if t.startswith(("-", "*", "•")):
+                s = re.sub(r"\*\*|`", "", t.lstrip("-*• ").strip())
+                s = re.split(r"[。；;]", s)[0][:100]      # 只留第一句：用户看的是「改了什么」，不是实现
+                if s:
+                    notes.append(s)
+        data = {"ok": True, "current": VERSION, "latest": latest,
+                "newer": _ver_num(latest) > _ver_num(VERSION),
+                "title": str(body.get("name") or ("v" + latest)),
+                "summary": summary, "notes": notes[:6], "url": str(body.get("html_url") or ""),
+                "checked": time.strftime("%Y-%m-%d %H:%M")}
+        _write_json(UPDATE_CACHE, {"ts": now, "data": data})
+        return data
+    except Exception as e:  # noqa: BLE001
+        # 失败不写缓存：下次启动再试（但要 4 秒内就放手，不能拖慢启动）
+        return {"ok": False, "current": VERSION,
+                "error": "没连上 GitHub（%s），不影响使用" % e.__class__.__name__}
+
+
+class _WinApi:
+    """自绘标题栏的窗口控制（JS 侧 pywebview.api.minimize() / close() 等）。"""
+
+    def __init__(self):
+        self.maxed = False
+
+    def _win(self):
+        try:
+            import webview
+            return webview.windows[0] if webview.windows else None
+        except Exception:  # noqa: BLE001
+            return None
+
+    def minimize(self):
+        w = self._win()
+        if w:
+            w.minimize()
+        return {"ok": bool(w)}
+
+    def toggle_max(self):
+        w = self._win()
+        if not w:
+            return {"ok": False}
+        try:
+            if self.maxed:
+                w.restore()
+            else:
+                w.maximize()
+            self.maxed = not self.maxed
+        except Exception as e:  # noqa: BLE001
+            return {"ok": False, "error": str(e)}
+        return {"ok": True, "maxed": self.maxed}
+
+    def close(self):
+        w = self._win()
+        if w:
+            w.destroy()
+        return {"ok": bool(w)}
+
+    def move_by(self, dx: int, dy: int):
+        """拖标题栏：增量移动（用绝对坐标，避免累计误差）。"""
+        w = self._win()
+        if not w or self.maxed:
+            return {"ok": False}
+        try:
+            w.move(int(w.x + int(dx)), int(w.y + int(dy)))
+        except Exception:  # noqa: BLE001
+            return {"ok": False}
+        return {"ok": True}
+
+
+def _enable_resize() -> None:
+    """无边框窗口默认丢了拉边缩放与贴边；把 WS_THICKFRAME / 最大最小化位补回去。
+
+    2026-11-17：pywebview 6.2.1 的 window.native 是 None（拿不到句柄），改用
+    EnumWindows 找本进程的可见顶层窗口。webview.start(func=) 里调一次，
+    窗体可能还没显示，所以再延时重试一次。
+    """
+    def apply(tag: str = "") -> bool:
+        try:
+            import ctypes
+            import ctypes.wintypes as wt
+            u = ctypes.windll.user32
+            GWL_STYLE, WS_VISIBLE = -16, 0x10000000
+            add = 0x00040000 | 0x00010000 | 0x00020000       # THICKFRAME | MAXIMIZEBOX | MINIMIZEBOX
+            hits = []
+            CB = ctypes.WINFUNCTYPE(ctypes.c_bool, wt.HWND, wt.LPARAM)
+
+            def cb(hwnd, _l):
+                pid = wt.DWORD()
+                u.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+                if pid.value == os.getpid():
+                    st = u.GetWindowLongW(hwnd, GWL_STYLE)
+                    if st & WS_VISIBLE:
+                        u.SetWindowLongW(hwnd, GWL_STYLE, st | add)
+                        u.SetWindowPos(hwnd, 0, 0, 0, 0, 0, 0x0027)
+                        hits.append((hwnd, st, u.GetWindowLongW(hwnd, GWL_STYLE)))
+                return True
+
+            u.EnumWindows(CB(cb), 0)
+            if hits:
+                _log_write("startup.log", "%s 补回窗口可缩放样式%s：%d 个窗口，首个 0x%X → 0x%X"
+                           % (time.strftime("%Y-%m-%d %H:%M:%S"), tag, len(hits),
+                              hits[0][1] & 0xFFFFFFFF, hits[0][2] & 0xFFFFFFFF))
+                return True
+            _log_write("startup.log", "%s 没找到可用的顶层窗口（可缩放未补）%s"
+                       % (time.strftime("%Y-%m-%d %H:%M:%S"), tag))
+        except Exception as e:  # noqa: BLE001
+            _log_error("enable_resize", e)
+        return False
+
+    def later():
+        time.sleep(1.2)
+        apply("（重试）")
+
+    if not apply():
+        threading.Thread(target=later, daemon=True).start()
+
+
 def run_window(url: str) -> int:
     """把界面放进一个原生窗口（Windows 上走 WebView2 / Edge）。
 
@@ -1662,17 +2031,35 @@ def run_window(url: str) -> int:
     想要回浏览器（例如平板、远程调试）用 --no-window。
     """
     import webview
-    webview.create_window("%s v%s" % (APP_NAME, VERSION), url,
-                          width=1280, height=880, min_size=(980, 640))
+    # 2026-11-17 用户：「exe 顶栏能不能和软件 UI 融为一体，系统那个太突出了」——
+    #   改成无边框窗口（frameless），标题栏由界面自己画（拖拽 / 最小化 / 最大化 / 关闭都走 _WinApi）。
+    #   缩放与贴边靠 _enable_resize() 把 WS_THICKFRAME 补回去，不让用户丢掉拉边与 Win+←→。
+    api = _WinApi()
+    win_url = url + ("&" if "?" in url else "?") + "win=1"   # 页面靠它判断「该不该画自绘标题栏」
+    # 2026-11-17：默认 1280×880 在 1366×768 的笔记本上比屏幕还高，窗口底部与右下角的提示卡
+    #   会跑到屏幕外面（实测截图只看到卡片的上边缘）。按屏幕工作区的 86% 收一下，但不小于最小值。
+    def _fit_size() -> tuple:
+        try:
+            u = ctypes.windll.user32
+            sw, sh = u.GetSystemMetrics(0), u.GetSystemMetrics(1)
+            return (min(1280, max(980, int(sw * 0.86))), min(880, max(640, int(sh * 0.86))))
+        except Exception:  # noqa: BLE001
+            return 1280, 880
+
+    w0, h0 = _fit_size()
+    webview.create_window("%s v%s" % (APP_NAME, VERSION), win_url,
+                          width=w0, height=h0, min_size=(980, 640),
+                          frameless=True, easy_drag=False, js_api=api,
+                          background_color="#F7F5EF")
     # 2026-11-17 用户：「为什么我本地的软件的图标还是一样的」——
     #   pywebview 的 winforms 后端只有在 start(icon=...) 传了图标时才用自定义图标，
     #   不传就取 sys.executable 的图标 → 从源码跑时窗口与任务栏一直是 python.exe 的蓝黄头像。
     #   这里显式指定 assets\lapluma.ico（源码时在仓根，exe 时在 _MEIPASS）。
     ico = paths.res("assets", "lapluma.ico")
     if os.path.isfile(ico):
-        webview.start(icon=ico)
+        webview.start(func=_enable_resize, icon=ico)
     else:
-        webview.start()
+        webview.start(func=_enable_resize)
     return 0
 
 
@@ -1680,12 +2067,17 @@ def main() -> int:
     global PORT
     argv = sys.argv[1:]
     # 输出重定向到文件（或 double-click 的控制台）时行缓冲更靠谱：不然启动提示一个字都看不到
+    _safe_stdio()
     try:
         sys.stdout.reconfigure(line_buffering=True)
     except Exception:  # noqa: BLE001
         pass
     # 冻结后（exe）先把两根与 engine\ tools\print\ api\ 挂上 sys.path；源码下是幂等的
     paths.bootstrap()
+    # 2026-11-17 见文件上方「启动自保」：先摘遮蔽目录，再碰 webview（webview 后面才导入）
+    for _d, _f in _strip_shadowed():
+        _log_write("startup.log", "%s 摘掉遮蔽目录 %s（含 %s）"
+                   % (time.strftime("%Y-%m-%d %H:%M:%S"), _d, _f))
     # 2026-11-17：--lan 不再自己绑 0.0.0.0，改成与「一键上线」走同一条路（start_lan），
     #   这样启动就上线与点按钮上线行为一致，关闭按钮也不会只能对一半有效。
     want_lan = ("--lan" in argv) or ("-lan" in argv)
@@ -1789,6 +2181,12 @@ if __name__ == "__main__":
     except Exception:
         import traceback
         msg = traceback.format_exc()
+        # 2026-11-17 别人机器上只有一张截图，没法查；全量记录落盘，弹窗里给路径。
+        _logp = _log_write(
+            time.strftime("startup-%Y%m%d-%H%M%S.log"),
+            "LaPluma v%s\n启动时间 %s\nexe %s\ncwd %s\nsys.path %r\n\n%s"
+            % (VERSION, time.strftime("%Y-%m-%d %H:%M:%S"), sys.executable,
+               os.getcwd(), sys.path, msg))
         try:
             sys.stderr.write(msg)
         except Exception:  # noqa: BLE001
@@ -1798,7 +2196,12 @@ if __name__ == "__main__":
             from tkinter import messagebox as _mb
             _r = _tk.Tk()
             _r.withdraw()
-            _mb.showerror("羽毛笔 La Pluma · 启动失败", msg[-1500:])
+            _tail = msg[-1200:]
+            if _logp:
+                _tail += "\n\n完整记录已写到：\n" + _logp
+            else:
+                _tail += "\n\n（日志没写进去，请把这段截图发我）"
+            _mb.showerror("羽毛笔 La Pluma · 启动失败", _tail)
             _r.destroy()
         except Exception:  # noqa: BLE001
             pass

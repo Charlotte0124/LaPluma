@@ -459,9 +459,59 @@ footer{max-width:1080px;margin:26px auto 0;padding:0 16px;display:flex;align-ite
   .top{gap:12px;flex-wrap:wrap}
   .reader{padding:12px}
 }
+/* 自绘标题栏（2026-11-17 用户：系统顶栏太突出，要和软件 UI 融为一体）*/
+.tbar{position:relative;z-index:80;display:flex;align-items:center;gap:10px;height:36px;padding:0 8px 0 12px;
+  background:var(--card);border-bottom:1px solid var(--line);user-select:none;
+  -webkit-user-select:none;cursor:default}
+.tbar[hidden]{display:none}
+.tbar .tb-name{display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:600;letter-spacing:.03em;color:var(--ink)}
+.tbar .tb-name svg{stroke:var(--ink)}
+.tbar .tb-ver{font-size:11px;color:var(--faint);font-weight:400;letter-spacing:0}
+.tbar .tb-btns{margin-left:auto;display:flex;align-items:stretch;height:100%}
+.tbar .tb-btn{width:42px;height:100%;border:0;background:transparent;color:var(--sub);font-size:13px;
+  line-height:1;display:flex;align-items:center;justify-content:center;transition:background .12s,color .12s}
+.tbar .tb-btn:hover{background:var(--card2);color:var(--ink)}
+.tbar .tb-btn.tb-close:hover{background:#c8202c;color:#fff}
+/* 更新提示卡（右下角，可一天内不再提醒）*/
+.upd{position:fixed;right:20px;bottom:20px;z-index:75;width:min(420px,calc(100vw - 40px));
+  background:var(--card);border:1px solid var(--ink);border-radius:14px;padding:15px 16px 13px;
+  box-shadow:0 14px 38px rgba(10,10,9,.18);animation:dropIn .18s ease}
+.upd[hidden]{display:none}
+.upd h5{margin:0 0 4px;font-size:13.5px;color:var(--ink)}
+.upd .upd-sum{margin:0 0 8px;font-size:12.5px;line-height:1.7;color:var(--sub)}
+.upd ul{margin:0 0 10px;padding-left:18px;font-size:12.3px;line-height:1.75;color:var(--sub);max-height:150px;overflow:auto}
+.upd .upd-act{display:flex;gap:8px;align-items:center}
+.upd .upd-act .btn{padding:5px 12px;font-size:12.5px}
+.upd .upd-x{margin-left:auto;border:0;background:transparent;color:var(--faint);font-size:15px;padding:2px 6px}
+.upd .upd-x:hover{color:var(--ink)}
 </style>
 </head>
 <body>
+<!-- 2026-11-17 无边框窗口的自绘标题栏：只有从软件窗口打开时显示（url 带 ?win=1），浏览器里不出现 -->
+<div class="tbar" id="tbar" hidden>
+  <div class="tb-name">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round">
+      <path d="M4 20c6-1 9-4 11-9 1.4-3.4 2-6 2-7-2 0-5 .5-8 2C5 8 3.6 12.4 4 20z"/><path d="M4 20c2-4 5-6 9-8"/>
+    </svg>
+    羽毛笔 La Pluma<span class="tb-ver" id="tbVer"></span>
+  </div>
+  <div class="tb-btns">
+    <button class="tb-btn" id="tbMin" title="最小化">—</button>
+    <button class="tb-btn" id="tbMax" title="最大化 / 还原">□</button>
+    <button class="tb-btn tb-close" id="tbClose" title="关闭">✕</button>
+  </div>
+</div>
+<!-- 有新版本时才出现的提示卡 -->
+<div class="upd" id="upd" hidden>
+  <h5 id="updTitle">发现新版本</h5>
+  <p class="upd-sum" id="updSum"></p>
+  <ul id="updNotes"></ul>
+  <div class="upd-act">
+    <button class="btn" id="updGo">去看看</button>
+    <button class="btn ghost" id="updSnooze">一天内不再提醒</button>
+    <button class="upd-x" id="updX" title="关掉">✕</button>
+  </div>
+</div>
 <div class="top">
   <div class="brand">
     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round">
@@ -1221,6 +1271,9 @@ document.addEventListener('drop', async e => {
   const arr = [];
   for(const f of files){
     if(f.size > 50 * 1024 * 1024){ toast(f.name + ' 太大（>50 MB），请用「＋ 导入课件」'); continue; }
+    // 2026-11-17 Word / PPT / 纯文本也能拖：服务端导入时自动排成分页 PDF
+    const OK = ['.pdf','.png','.jpg','.jpeg','.docx','.pptx','.txt','.md'];
+    if(!OK.some(x=>f.name.toLowerCase().endsWith(x))){ toast(f.name + ' 不是支持的格式（PDF / 图片 / Word / PowerPoint / 文本）'); continue; }
     const b64 = await new Promise(res => { const r = new FileReader(); r.onload = () => res(String(r.result || '')); r.readAsDataURL(f); });
     arr.push({ name: f.name, b64 });
   }
@@ -2167,6 +2220,7 @@ function wizard(step){
   }else if(step===1){
     body = `<h4>填写 API 密钥</h4>
       <p class="note-s">仅保存在本机（%USERPROFILE%\\.pluma\\api.json），不进入仓库。可先跳过，稍后在设置中补充。</p>
+      <p class="note-s">还没有密钥？<a href="/doc?p=使用/08-怎么拿到API密钥.md" target="_blank" style="color:var(--ok);text-decoration:underline">怎么拿到 API 密钥（手把手教程）</a></p>
       <input type="password" id="wKey" placeholder="sk-…" autocomplete="off">`;
   }else if(step===2){
     body = `<h4>选择保存目录</h4>
@@ -2331,6 +2385,88 @@ document.addEventListener('keydown', e => {
     await openChat(c);
     CHAT.sel = new Set(CHAT.messages.map((_,i)=>i)); renderChat(); $('#btnNote').click();
   }, 900);
+})();
+</script>
+<script>
+/* 2026-11-17：自绘标题栏（仅软件窗口）+ 更新提示（可一天内不再提醒）*/
+(function(){
+  const SNOOZE = 'pluma.updateSnooze';
+  const WIN = new URLSearchParams(location.search).get('win') === '1';
+
+  function api(){ return (window.pywebview && window.pywebview.api) || null; }
+
+  /* ---- 标题栏 ---- */
+  function initBar(){
+    if(!WIN) return;
+    const bar = document.getElementById('tbar');
+    const ver = document.getElementById('tbVer');
+    if(!bar) return;
+    bar.hidden = false;
+    // 版本号：B 在另一段脚本的闭包里，取不到；直接问本地接口（毫秒级）
+    fetch('/api/bootstrap').then(r => r.json()).then(j => {
+      if (ver && j && j.version) ver.textContent = 'v' + j.version;
+    }).catch(() => {});
+    const a = api();
+    let drag = false, lx = 0, ly = 0;
+    bar.addEventListener('pointerdown', e => {
+      if(e.target.closest('.tb-btn')) return;
+      drag = true; lx = e.screenX; ly = e.screenY;
+      try{ bar.setPointerCapture(e.pointerId); }catch(_){}
+    });
+    bar.addEventListener('pointermove', e => {
+      if(!drag || !a) return;
+      const dx = e.screenX - lx, dy = e.screenY - ly;
+      if(Math.abs(dx) < 2 && Math.abs(dy) < 2) return;
+      lx = e.screenX; ly = e.screenY;
+      try{ a.move_by(dx, dy); }catch(_){}
+    });
+    const stop = () => { drag = false; };
+    bar.addEventListener('pointerup', stop);
+    bar.addEventListener('pointercancel', stop);
+    bar.addEventListener('dblclick', () => { if(a) a.toggle_max(); });
+    const bind = (id, fn) => { const el = document.getElementById(id); if(el) el.onclick = () => { if(a) fn(a); }; };
+    bind('tbMin', a2 => a2.minimize());
+    bind('tbMax', a2 => a2.toggle_max());
+    bind('tbClose', a2 => a2.close());
+  }
+
+  /* ---- 更新提示 ---- */
+  function snoozed(){
+    try{ const t = Number(localStorage.getItem(SNOOZE) || 0); return !!t && Date.now() < t; }
+    catch(_){ return false; }        // 隐私模式下 localStorage 可能不可用，不能因此不检查
+  }
+  async function checkUpdate(){
+    if(snoozed()) return;
+    let j;
+    try{ j = await (await fetch('/api/update')).json(); }catch(_){ return; }
+    if(!j || !j.ok || !j.newer) return;
+    const box = document.getElementById('upd');
+    if(!box) return;
+    document.getElementById('updTitle').textContent = '有新版本 ' + (j.latest || '') + '（当前 ' + (j.current || '') + '）';
+    document.getElementById('updSum').textContent = j.summary || '这一版改了什么，点「去看看」看详情。';
+    const ul = document.getElementById('updNotes');
+    ul.innerHTML = (j.notes || []).slice(0, 6).map(t => '<li>' + String(t).replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c])) + '</li>').join('');
+    box.hidden = false;
+    document.getElementById('updGo').onclick = () => { if(j.url) window.open(j.url, '_blank'); box.hidden = true; };
+    document.getElementById('updSnooze').onclick = () => {
+      try{ localStorage.setItem(SNOOZE, String(Date.now() + 24 * 3600 * 1000)); }catch(_){}
+      box.hidden = true; toast('一天内不再提示');
+    };
+    document.getElementById('updX').onclick = () => { box.hidden = true; };
+  }
+
+  let barDone = false;
+  function initBarOnce(){ if(barDone) return; barDone = true; initBar(); }
+
+  window.addEventListener('pywebviewready', () => { if(WIN) initBarOnce(); });
+  // 2026-11-17：窗口里脚本可能跑在 DOMContentLoaded 之后（嵌入环境下实测没触发），
+  //   所以按 readyState 自己判断，不能只靠监听事件。
+  function boot(){
+    if(WIN) initBarOnce();          // 已就绪就先把顶栏铺上
+    setTimeout(checkUpdate, 1200);  // 先让界面出来，再问 GitHub
+  }
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+  else boot();
 })();
 </script>
 </body></html>

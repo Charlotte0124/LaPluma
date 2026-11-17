@@ -21,6 +21,11 @@ datas = [
     (os.path.join(ROOT, "DEMO"), "DEMO"),
     # 2026-11-17：资产目录必须打进去——/favicon.ico 与窗口图标都读 assets\lapluma.ico
     (os.path.join(ROOT, "assets"), "assets"),
+    # 2026-11-17：文档也要打进去——向导里的「怎么拿到 API 密钥」「支持哪些格式」
+    #   点开就是本机的 docs\（/doc?p=… 渲染），exe 用户不用去 GitHub 找。
+    (os.path.join(ROOT, "docs"), "docs"),
+    (os.path.join(ROOT, "CHANGELOG.md"), "."),
+    (os.path.join(ROOT, "README.md"), "."),
     (os.path.join(ROOT, "courses.json"), "."),
     (os.path.join(ROOT, "paths.py"), "."),
     # 2026-11-17：许可分层落地——分发件必须带版权与许可声明（MIT 的要求）。

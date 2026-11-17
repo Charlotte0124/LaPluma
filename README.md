@@ -15,7 +15,7 @@
 
 <div align="center">
 
-<a href="https://github.com/Charlotte0124/LaPluma/releases/latest"><img src="https://img.shields.io/badge/⬇_下载_v1.9.3-C8202C?style=for-the-badge&logo=windows&logoColor=white" height="40" alt="下载"></a>
+<a href="https://github.com/Charlotte0124/LaPluma/releases/latest"><img src="https://img.shields.io/badge/⬇_下载_v1.9.4-C8202C?style=for-the-badge&logo=windows&logoColor=white" height="40" alt="下载"></a>
 &nbsp;
 <a href="一键启动.ps1"><img src="https://img.shields.io/badge/▶_一键启动-2F7D4F?style=for-the-badge&logo=powershell&logoColor=white" height="40" alt="一键启动"></a>
 &nbsp;
@@ -30,7 +30,7 @@
 ![license](https://img.shields.io/badge/license-MIT-171714?style=flat-square)
 ![content](https://img.shields.io/badge/示例内容-CC_BY--NC_4.0-171714?style=flat-square)
 ![python](https://img.shields.io/badge/python-3.12-171714?style=flat-square)
-![version](https://img.shields.io/badge/version-1.9.3-171714?style=flat-square)
+![version](https://img.shields.io/badge/version-1.9.4-171714?style=flat-square)
 ![gates](https://img.shields.io/badge/三道门-绿才出门-C8202C?style=flat-square)
 ![offline](https://img.shields.io/badge/出_PDF-不需要密钥-2F7D4F?style=flat-square)
 
@@ -71,7 +71,8 @@
 | 装上直接用 | [下载](#下载) · [一键启动](#一键启动) |
 | 先看它长什么样 | [界面](#界面)（真截图） |
 | 看「原始课件 → 成品」差多少 | [示例：桃花源记](docs/示例/README.md)（4 页 → 13 页） |
-| 导入自己的课件 | 点课程卡 → 抽屉顶部「＋ 导入课件」，或将 PDF 直接拖入窗口 |
+| 导入自己的课件 | 点课程卡 → 抽屉顶部「＋ 导入课件」，或将文件直接拖入窗口（PDF / 图片 / Word / PowerPoint / 文本 / Markdown，见[支持哪些格式](docs/使用/09-支持的文件格式.md)） |
+| **弄到一串 API 密钥**（手把手，带常见报错对照） | [怎么拿到 API 密钥](docs/使用/08-怎么拿到API密钥.md) |
 | 给平板 / 手机用 | [一键启动](#一键启动) 里的「一键上线」（8 位访问码） |
 | 知道生成怎么跑 | [一条命令](#一条命令) · [三道门](#三道门) |
 | 懂它分几层、怎么改 | [分五层](#分五层每层可单独换) |
@@ -248,12 +249,12 @@ A/B/C 三层可离线运行；仅「让模型撰写新内容」时才需要 D �
 <!-- 最近更新:begin（由 tools/sync-readme.py 生成，别手改） -->
 | 版本 | 日期 | 这一版做了什么 |
 |:--|:--|:--|
+| **v1.9.4** | 11-17 | 顶栏画进界面里；Word / PowerPoint 课件直接导入；有新版右下角提示；「双击打不开」的坑修了 |
 | **v1.9.3** | 11-17 | 讲次、课件、整门课都能删（进回收站可取回）；生成队列可逐项取消；界面文案改为书面语；深色翻页不再白闪，阅读页恢复全屏 |
-| **v1.9.2** | 11-17 | 新增「导入课件」入口：生成页点「＋ 导入课件」，或把 PDF 直接拖入窗口，导入后自动跳至生成页 |
+| **v1.9.2** | 11-17 | 终于有「把课件丢进去」的地方了——生成页点「＋ 导入课件」，或直接把 PDF 拖进窗口，拖完自动跳到生成页 |
 | **v1.9.1** | 11-17 | 保存目录能选文件夹、不再把本机路径印在界面上；标签页有羽毛图标；一键启动会查 Python 版本并自动装依赖 |
 | **v1.9.0** | 11-17 | 双击就是一个自己的窗口（不再是浏览器页），带羽毛图标；界面上线方式可用 --no-window 退回 |
-| **v1.8.2** | 11-17 | 双击 exe 不再「黑框一闪就没了」：端口被占用时自动换一个，崩了也把原因留在窗口里 |
-| — | — | 更早的 15 个版本 → [CHANGELOG](CHANGELOG.md) |
+| — | — | 更早的 16 个版本 → [CHANGELOG](CHANGELOG.md) |
 <!-- 最近更新:end -->
 
 ## 目录
