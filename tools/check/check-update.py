@@ -11,10 +11,11 @@
                     退出后替换并重启，全程不打开浏览器。
     渠道 B（github）Release API → 只给页面与改了什么，点「去看看」走浏览器。
 
-查七项（全部在临时目录里造，不动真实 dist\\ 与 %USERPROFILE%\\.pluma）：
+查十项（全部在临时目录里造，不动真实 dist\\ 与 %USERPROFILE%\\.pluma）：
   1 清单解析：schema / latest / notes / assets(exe) 都读得出来，且认得出「有新版」
   2 下载校验：真下载一个假包，字节数与 sha256 都对得上，落在 update\\v<版本>\\ 下
-  3 自替换：apply 之后目标文件变成新包、旧文件留 .bak、apply.bat 自己删掉
+  3 资源包与本体：先下本体再下资源包，换上去的仍是本体且 zip 真解压
+4 自替换：apply 之后目标文件变成新包、旧文件留 .bak、apply.bat 自己删掉
   4 拒绝坏源：sha256 对不上必须报错且不留 .part
   5 拒绝坏地址：清单里给 http://外网/ 或 file:// 一律不下
   6 只接本机：/api/update/download 与 /apply 不允许非本机来源
@@ -130,7 +131,7 @@ def run_checks(raise_on_fail: bool = False) -> int:
     os.makedirs(pub)
     home = os.path.join(tmp, "home")        # 假 %USERPROFILE%\.pluma
     os.makedirs(home)
-    target_dir = os.path.join(tmp, "app")
+    target_dir = os.path.join(tmp, "应用目录")
     os.makedirs(target_dir)
     target = os.path.join(target_dir, "LaPluma.exe")
     with open(target, "wb") as f:
@@ -142,6 +143,14 @@ def run_checks(raise_on_fail: bool = False) -> int:
     try:
         sha, size = make_fake_exe(os.path.join(pub, "LaPluma.exe"))
         need.update(sha=sha, size=size)
+        # 资源包：造一个真 zip（里面放一个文件），用来验「先下本体再下资源包，换上去的仍是本体」
+        import zipfile
+        respath = os.path.join(pub, "LaPluma-res.zip")
+        with zipfile.ZipFile(respath, "w", zipfile.ZIP_DEFLATED) as z:
+            z.writestr("docs/使用/resource-probe.md", "# 资源包探针\n")
+        res_b = open(respath, "rb").read()
+        res_sha = hashlib.sha256(res_b).hexdigest()
+        res_size = len(res_b)
         srv, base_pub = need["srv"], None
         srv, pub_base = serve_dir(pub)
         feed = {
@@ -150,7 +159,9 @@ def run_checks(raise_on_fail: bool = False) -> int:
             "notes": ["PDF 页脚印软件名、项目地址与 AI 免责", "应用内一键下载并替换 exe"],
             "page": "https://github.com/Charlotte0124/LaPluma/releases/tag/v9.9.9",
             "assets": {"exe": {"url": pub_base + "/LaPluma.exe", "size": size,
-                               "sha256": sha, "name": "LaPluma.exe"}},
+                               "sha256": sha, "name": "LaPluma.exe"},
+                       "res": {"url": pub_base + "/LaPluma-res.zip", "size": res_size,
+                               "sha256": res_sha, "name": "LaPluma-res.zip"}},
         }
         with open(os.path.join(pub, "feed.json"), "w", encoding="utf-8") as f:
             json.dump(feed, f, ensure_ascii=False)
@@ -202,7 +213,20 @@ def run_checks(raise_on_fail: bool = False) -> int:
              "state=%s pct=%s size=%s/%s sha=%s" % (got_state, got_pct, real, size, digest[:12]))
         red += 0 if ok else 1
 
-        # --- 3 自替换 ---
+        # --- 3 自替换（真机顺序：本体 → 资源包 → apply；换上去的必须是本体而不是 zip）---
+        rr = http_json(base + "/api/update/download", {"asset": "res"})
+        res_state = ""
+        end = time.time() + 60
+        while time.time() < end:
+            p = http_json(base + "/api/update/progress")
+            res_state = p.get("state")
+            if res_state in ("done", "error"):
+                break
+            time.sleep(0.3)
+        note(rr.get("ok") and res_state == "done", "资源包也能下（状态 done）",
+             "res=%s state=%s" % (rr.get("ok"), res_state))
+        red += 0 if (rr.get("ok") and res_state == "done") else 1
+
         ra = http_json(base + "/api/update/apply", {"asset": "exe"})
         # apply 会让服务自己退出，等它真退
         end = time.time() + 40
@@ -231,9 +255,14 @@ def run_checks(raise_on_fail: bool = False) -> int:
         logtxt = open(logf, encoding="utf-8", errors="replace").read().strip() if os.path.isfile(logf) else "(无 update.log)"
         ok = (ra.get("ok") and gone and len(new_bytes) == size
               and _h.sha256(new_bytes).hexdigest() == sha and bak_ok and not bat_left)
-        note(ok, "自替换（服务退出 / 目标换成新包 / 旧文件留 .bak / apply.bat 自删）",
-             "apply=%s 退出=%s 新字节=%d 备份=%s bat残留=%s 日志=%r"
-             % (ra.get("ok"), gone, len(new_bytes), bak_ok, bat_left, logtxt[-260:]))
+        # 2026-11-17 真机整程捉到的 bug：先下 res 再 apply，zip 被当成 exe 换上去。
+        # 这里把它固化成判据：目标字节数必须等于本体（不是资源包），且资源包真解压了。
+        probe = os.path.join(target_dir, "docs", "使用", "resource-probe.md")
+        ok = ok and os.path.isfile(probe)
+        note(ok, "自替换（服务退出 / 目标换成新包 / 旧文件留 .bak / apply.bat 自删 / 资源包已解压）",
+             "apply=%s 退出=%s 新字节=%d（本体 %d / 资源包 %d）备份=%s bat残留=%s 解压=%s 日志=%r"
+             % (ra.get("ok"), gone, len(new_bytes), size, res_size, bak_ok, bat_left,
+                os.path.isfile(probe), logtxt[-200:]))
         red += 0 if ok else 1
 
         # --- 4/5 两个负例：坏校验值、坏地址（另起一次服务，用它自己跑） ---
@@ -289,6 +318,39 @@ def run_checks(raise_on_fail: bool = False) -> int:
                 except Exception:  # noqa: BLE001
                     pass
 
+        # --- 6/7 只接本机与两渠道 ---
+        # --- 先验一下缓存不会让「刚升完版」继续报有新版本 ---
+        hcache = os.path.join(tmp, "home_cache")
+        os.makedirs(hcache, exist_ok=True)
+        port4 = free_port()
+        base4 = "http://127.0.0.1:%d" % port4
+        app4 = start_app(port4, {"PLUMA_HOME": hcache,
+                                 "PLUMA_FEED_URLS": pub_base + "/feed.json"},
+                         os.path.join(tmp, "app4.log"))
+        try:
+            if wait_up(base4):
+                # 缓存文件在服务起来后、第一次请求前写（服务只在请求时读缓存）
+                cur = http_json(base4 + "/api/bootstrap").get("version") or "0"
+                with open(os.path.join(hcache, "update.json"), "w", encoding="utf-8") as f:
+                    json.dump({"ts": time.time(), "data": {
+                        "ok": True, "channel": "feed", "latest": cur, "current": "0.0.1",
+                        "newer": True, "title": "x", "summary": "", "notes": [], "url": "",
+                        "assets": {}, "checked": ""}}, f)
+                u4 = http_json(base4 + "/api/update")      # 不带 force：逼它走缓存
+                ok4 = (u4.get("newer") is False and u4.get("current") == cur)
+                note(ok4, "缓存不会让刚升完版继续报「有新版本」（newer 按当前版本重算）",
+                     "回包 newer=%s current=%s 缓存 latest=%s" % (u4.get("newer"),
+                                                              u4.get("current"), u4.get("latest")))
+                red += 0 if ok4 else 1
+            else:
+                note(False, "缓存判据：第四个服务没起来")
+                red += 1
+        finally:
+            try:
+                app4.terminate()
+            except Exception:  # noqa: BLE001
+                pass
+
         # --- 6 只接本机（源码层判：非本机地址必须 403）---
         srv_src = open(os.path.join(ROOT, "ui", "server.py"), encoding="utf-8").read()
         ok = ("/api/update/download\", \"/api/update/apply\"" in srv_src
@@ -296,6 +358,14 @@ def run_checks(raise_on_fail: bool = False) -> int:
         note(ok, "只接本机（download / apply 有 127.0.0.1 判定）",
              "ui\\server.py 里没找到本机判定")
         red += 0 if ok else 1
+
+        # --- 8 中文路径：apply.bat 必须先 chcp 65001，否则中文目录被 GBK 读成乱码
+        #   （上面 target 已放在「应用目录」下，能换上就算过一半；这里再从源码确认有 chcp，
+        #     否则英文路径下能过、中文路径下静默失败）
+        ok8 = "chcp 65001" in srv_src and any(ord(c) > 127 for c in target)
+        note(ok8, "中文路径能换（apply.bat 带 chcp 65001，target 在「应用目录」下）",
+             "源码 %s · target=%s" % ("有 chcp" if "chcp 65001" in srv_src else "没 chcp", target))
+        red += 0 if ok8 else 1
 
         # --- 7 两渠道并存 ---
         p3 = free_port()
@@ -346,7 +416,7 @@ def main() -> int:
     if red:
         print("\n结论：%d 条红" % red)
         return 1
-    print("\n结论：七项全绿")
+    print("\n结论：十项全绿")
     return 0
 
 

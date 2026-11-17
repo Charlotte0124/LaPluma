@@ -78,7 +78,7 @@ HOST, PORT = "127.0.0.1", 8765
 #   每次打开/刷新阅读器都全量重传（本机无感，平板走 WiFi 明显）。
 #   index.html 必须仍走 no-store（改完界面要能立刻看到新版）。
 _STATIC_ETAG = {}
-VERSION = "1.9.6"
+VERSION = "1.9.7"
 APP_NAME = "羽毛笔 La Pluma"
 
 
@@ -1950,7 +1950,9 @@ UPDATE_DIR = os.path.join(USER_DIR, "update")
 MAX_ASSET = 300 * 1024 * 1024        # 300 MB 上限：再大就不是更新包了
 UPD = {"busy": False, "asset": "", "ver": "", "got": 0, "total": 0, "pct": 0,
        "state": "idle", "error": "", "path": "", "sha256": "", "at": ""}
-# 资源包单独记一条：先下 exe 再下 res，两样都到齐才 apply（2026-11-17）
+# 本体与资源包各记一条（2026-11-17 真机整程抳出的 bug：共用一个 UPD 时，
+#   先下 exe 再下 res，UPD["path"] 被 res 覆盖 → apply 把 zip 当成 exe 换上去了）
+UPD_EXE = {"path": "", "ver": ""}
 UPD_RES = {"path": "", "ver": ""}
 
 
@@ -2050,7 +2052,11 @@ def check_update(force: bool = False, channel: str = "auto") -> dict:
     if (not force and isinstance(data, dict) and data.get("ok")
             and now - float(cached.get("ts") or 0) < UPDATE_TTL
             and channel in ("auto", data.get("channel"))):
-        return dict(data, cached=True)
+        # 2026-11-17：缓存里存的是「当时算出来的 newer」。升完版新进程读缓存会继续报有新版，
+        # 所以按当前 VERSION 重算一次，不信缓存里的布尔值。
+        data = dict(data, cached=True, current=VERSION,
+                    newer=_ver_num(data.get("latest")) > _ver_num(VERSION))
+        return data
     errs = []
     if channel in ("auto", "feed"):
         try:
@@ -2108,6 +2114,8 @@ def _download_worker(url: str, dst: str, size_hint: int, sha: str, asset: str, v
                    total=size_hint or got, busy=False)
         if asset == "res":
             UPD_RES.update(path=dst, ver=ver)
+        else:
+            UPD_EXE.update(path=dst, ver=ver)
     except Exception as e:  # noqa: BLE001
         try:
             if os.path.exists(tmp):
@@ -2174,6 +2182,10 @@ def write_apply_bat(new_path: str, target: str, res_zip: str = "",
     appdir = os.path.dirname(os.path.abspath(target))
     lines = [
         "@echo off",
+        # 路径里可能有中文（用户的目录常在中文盘/中文文件夹）。cmd 逐行按当前码页读 bat，
+        # 不先切到 65001 的话，下面的 set "TGT=F:\文件\..." 会被当 GBK 读成乱码。
+        # （真机整程在 %TEMP% 英文路径下跑，不会暴露这一条）
+        "chcp 65001 >nul 2>&1",
         "setlocal",
         'set "PID=%d"' % (os.getpid() if pid is None else int(pid)),
         'set "NEW=%s"' % new_path,
@@ -2226,14 +2238,21 @@ def _quit_self() -> None:
 
 def apply_update(asset: str = "exe") -> dict:
     """把下好的包换上并重启。只接本机请求（局域网里的人不能替你重启程序）。"""
-    if UPD.get("state") != "done" or not os.path.isfile(str(UPD.get("path") or "")):
-        return {"ok": False, "error": "还没下好（当前状态：%s）" % UPD.get("state")}
+    exe_path = UPD_EXE.get("path") or ""
+    if not exe_path or not os.path.isfile(exe_path):
+        return {"ok": False, "error": "还没下好程序本体（当前状态：%s）" % UPD.get("state")}
+    # 防呆：换上去的必须是本体。真机整程揭过一个 bug——资源包（zip）被当成 exe 换了。
+    if os.path.getsize(exe_path) < 64 * 1024:
+        return {"ok": False, "error": "下到的本体只有 %d 字节，不是程序，已拒绝" % os.path.getsize(exe_path)}
+    if not exe_path.lower().endswith(".exe"):
+        return {"ok": False, "error": "要换上去的不是 .exe（%s），已拒绝" % os.path.basename(exe_path)}
     target = app_exe()
     if not os.path.isfile(target):
         return {"ok": False, "error": "找不到要替换的程序：%s" % target}
-    res = UPD_RES["path"] if (UPD_RES.get("path") and UPD_RES.get("ver") == UPD.get("ver")
+    ver = UPD_EXE.get("ver") or UPD.get("ver")
+    res = UPD_RES["path"] if (UPD_RES.get("path") and UPD_RES.get("ver") == ver
                                and os.path.isfile(UPD_RES["path"])) else ""
-    bat = write_apply_bat(UPD["path"], target, res,
+    bat = write_apply_bat(exe_path, target, res,
                          relaunch=os.environ.get("PLUMA_NO_RELAUNCH") != "1")
     # 不能用 DETACHED_PROCESS：doteached 进程没有控制台，cmd 里的 tasklist | find 会挂死
     # （实测：日志只写到 start 就不动，等满两分钟也不换文件）。CREATE_NO_WINDOW 有控制台但隐藏。
@@ -2242,7 +2261,7 @@ def apply_update(asset: str = "exe") -> dict:
                      stderr=subprocess.DEVNULL, creationflags=0x08000000)
     threading.Timer(1.2, _quit_self).start()
     return {"ok": True, "restart": True, "target": target, "bat": bat,
-            "from": UPD["path"], "ver": UPD.get("ver"), "res": res}
+            "from": exe_path, "ver": ver, "res": res}
 
 
 
