@@ -10,7 +10,12 @@
     标题改了、加节了，页码自动跟着变，不用手抄。
 
 --footer
-    打完在每页底部写「左：标签 / 右：N / M」，颜色与讲义一致的弱色。
+    第一行左侧的讲次标签（如「L01-02 · 强化学习基础与贝尔曼方程」），右侧自动跟 N / M。
+
+页脚三要素（2026-11-17 用户定，成品 PDF 一律带、不可关）
+    第二行固定印「软件名 · 项目地址（可点）」与「本内容由 AI 生成，仅供参考…」，
+    文案与地址的唯一出处是 tools\\print\\_brand.py。颜色跟着底色自动反转（深底浅字）。
+    --no-post 只给调试用：正式成品不许少了这三样。
 
 退出码
     0 正常；2 参数或文件有问题；3 找不到 Chrome 或打印失败
@@ -26,6 +31,19 @@ from pathlib import Path
 
 import pymupdf
 
+# 品牌常量（软件名 / 项目地址 / 免责）在同目录的 _brand.py，改一处全仓生效
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+try:
+    import _brand as BRAND
+except Exception:  # noqa: BLE001  万一打包漏了，页脚也不能空着
+    class BRAND:  # type: ignore[no-redef]
+        PRODUCT_NAME = "羽毛笔 La Pluma"
+        PROJECT_URL = "https://github.com/Charlotte0124/LaPluma"
+        PROJECT_URL_TEXT = "github.com/Charlotte0124/LaPluma"
+        DISCLAIMER = "本内容由 AI 生成，仅供参考；重要信息请自行核实"
+        DISCLAIMER_SHORT = "AI 生成，仅供参考"
+        SEP = "·"
+
 CHROME_CANDIDATES = [
     r"C:\Program Files\Google\Chrome\Application\chrome.exe",
     r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
@@ -34,7 +52,9 @@ CHROME_CANDIDATES = [
 ]
 
 CJK_FONT = r"C:\Windows\Fonts\msyh.ttc"   # 仅备用；页脚优先用内置 CJK 字体
-MUTED = (0.43, 0.42, 0.38)                # #6E6B61
+MUTED = (0.43, 0.42, 0.38)                # #6E6B61（浅底页脚用；深底另有一套，见 postprocess）
+MM = 72 / 25.4                            # 1 毫米 = 2.8346 pt
+FOOT = {"rule": 14.0, "row1": 11.0, "row2": 7.2}   # 页脚三条线离页底的距离（毫米）：细线在上，讲次居中，品牌在下
 TOC_ITEM = re.compile(r'<span class="pg" data-head="([^"]+)">[^<]*</span>')
 
 
@@ -103,11 +123,60 @@ def fill_toc(html: str, pdf: Path) -> tuple:
     return html, miss
 
 
+def _runs(text: str) -> list:
+    """按字符集切段：ASCII 走 helv、其余走内置 CJK。
+
+    实测（2026-11-17）内置 china-s 把拉丁画成全角：「La Pluma」度量 27.9pt、实际占 52.8pt，
+    混排时 URL 会叠到中文上。所以拉丁一行只能走 helv，中文一行只能走 CJK。
+    """
+    out, buf, kind = [], "", None
+    for ch in text:
+        k = "lat" if ord(ch) < 128 else "zh"
+        if k != kind and buf:
+            out.append((buf, kind))
+            buf = ""
+        kind, buf = k, buf + ch
+    if buf:
+        out.append((buf, kind))
+    return out
+
+
+def _width(text: str, size: float, zh, lat) -> float:
+    return sum((zh if k == "zh" else lat).text_length(r, fontsize=size) for r, k in _runs(text))
+
+
+def _lum(rgb) -> float:
+    return 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]
+
+
+def _page_is_dark(page) -> bool:
+    """没传 --bg 时探一眼页脚那一条的底色（深色讲义否则会拿深灰字写上看不见）。"""
+    try:
+        clip = pymupdf.Rect(6 * MM, page.rect.height - 15 * MM,
+                            min(page.rect.width, 60 * MM), page.rect.height - 5 * MM)
+        pm = page.get_pixmap(clip=clip, colorspace=pymupdf.csRGB)
+        s, acc, cnt = pm.samples, [0, 0, 0], 0
+        for i in range(0, len(s) - 3, 3 * 11):
+            acc[0] += s[i]; acc[1] += s[i + 1]; acc[2] += s[i + 2]; cnt += 1
+        if not cnt:
+            return False
+        return _lum([c / cnt / 255 for c in acc]) < 0.45
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def postprocess(pdf: Path, label: str, bg: str = "") -> None:
     """在 Chrome 输出上铺底色（补上页边距那圈）+ 写页脚。
 
     Chrome 不会把 html/body 背景画进 @page 的页边距区，所以想要「有边距 + 黑底满页」
     只能打完再填一层底色（overlay=False 画在内容下层）。
+
+    页脚（每页固定，2026-11-17 用户定：软件名 / 项目地址 / AI 免责）：
+        细线 ───────────────────────────────────────────────
+        左 讲次标签（长则截断）                右 N / M
+        左 软件名 · 项目地址（可点）            右 免责文案
+    导航效果靠层次，不靠砌字：主行较实、品牌行次之、免责最淡，细线把页脚与正文隔开。
+    颜色跟着底色反转——以前写死深灰，深色讲义上这行等于没印（#0E0E0C 底 + #6E6B61 字）。
     """
     doc = pymupdf.open(pdf)
     total = doc.page_count
@@ -123,21 +192,69 @@ def postprocess(pdf: Path, label: str, bg: str = "") -> None:
             break
         except Exception:
             continue
-    latin = pymupdf.Font("helv")
+    fn = "china-s" if cjk else "helv"
+    zh, latin = (cjk or pymupdf.Font("helv")), pymupdf.Font("helv")
+
     try:
+        # 深浅只需要定一次：传了 --bg 看它，没传就看页脚那一带实际像素
+        dark = _lum(fill) < 0.45 if fill else _page_is_dark(doc[0])
+        if dark:
+            c_label, c_page = (0.80, 0.79, 0.75), (0.60, 0.59, 0.55)
+            c_brand, c_link = (0.66, 0.65, 0.61), (0.46, 0.80, 0.58)
+            c_note, c_rule = (0.50, 0.49, 0.45), (0.24, 0.24, 0.22)
+        else:
+            c_label, c_page = (0.30, 0.29, 0.26), (0.50, 0.49, 0.45)
+            c_brand, c_link = (0.42, 0.41, 0.37), (0.13, 0.45, 0.28)
+            c_note, c_rule = (0.55, 0.54, 0.50), (0.84, 0.82, 0.78)
+
+        pre = BRAND.PRODUCT_NAME + " " + BRAND.SEP + " "
+        y1, y2 = FOOT["row1"] * MM, FOOT["row2"] * MM
+        s_label, s_brand = 7.2, 6.6
+
+        def put(page, x: float, base: float, text: str, size: float, color) -> float:
+            """从 x 起按字符集分段画一行（同色），返回结束位置。"""
+            for run, kind in _runs(text):
+                f = zh if kind == "zh" else latin
+                page.insert_text((x, base), run,
+                                 fontname=(fn if kind == "zh" else "helv"),
+                                 fontsize=size, color=color)
+                x += f.text_length(run, fontsize=size)
+            return x
+
         for i, page in enumerate(doc, 1):
             if fill:
                 page.draw_rect(page.rect, color=None, fill=fill, overlay=False)
-            h = page.rect.height
-            y = h - 8 * 72 / 25.4
-            if label:
-                page.insert_text((16 * 72 / 25.4, y), label,
-                                 fontname="china-s" if cjk else "helv",
-                                 fontsize=7.2, color=MUTED)
+            h, w = page.rect.height, page.rect.width
+            left, right = 16 * MM, w - 16 * MM
+            page.draw_line((left, h - FOOT["rule"] * MM), (right, h - FOOT["rule"] * MM),
+                           color=c_rule, width=0.5)
+
+            # ---- 第一行：讲次标签 ←→ N / M ----
             num = f"{i} / {total}"
-            width = latin.text_length(num, fontsize=7.6)
-            page.insert_text((page.rect.width - 16 * 72 / 25.4 - width, y), num,
-                             fontname="helv", fontsize=7.6, color=MUTED)
+            num_w = latin.text_length(num, fontsize=7.6)
+            page.insert_text((right - num_w, h - y1), num,
+                             fontname="helv", fontsize=7.6, color=c_page)
+            if label:
+                avail = right - num_w - 6 * MM - left
+                text = label
+                while _width(text, s_label, zh, latin) > avail and len(text) > 6:
+                    text = text[:-2]
+                if text != label:
+                    text = text[:-1] + "…"
+                put(page, left, h - y1, text, s_label, c_label)
+
+            # ---- 第二行：软件名 · 地址（可点） ←→ 免责 ----
+            note = BRAND.DISCLAIMER
+            need = (_width(pre + BRAND.PROJECT_URL_TEXT, s_brand, zh, latin)
+                    + _width(note, s_brand, zh, latin) + 10 * MM)
+            if need > right - left:
+                note = BRAND.DISCLAIMER_SHORT
+            put(page, right - _width(note, s_brand, zh, latin), h - y2, note, s_brand, c_note)
+            x0 = put(page, left, h - y2, pre, s_brand, c_brand)
+            x1 = put(page, x0, h - y2, BRAND.PROJECT_URL_TEXT, s_brand, c_link)
+            page.draw_line((x0, h - y2 + 1.1), (x1, h - y2 + 1.1), color=c_link, width=0.35)
+            page.insert_link({"kind": pymupdf.LINK_URI, "uri": BRAND.PROJECT_URL,
+                              "from": pymupdf.Rect(x0, h - y2 - 6.2, x1, h - y2 + 2.0)})
         try:
             doc.subset_fonts()
         except Exception:
@@ -160,6 +277,8 @@ def main(argv: list | None = None) -> int:
     ap.add_argument("--toc", action="store_true", help="自动回填目录页码（多打一遍草稿）")
     ap.add_argument("--footer", default="", help="页脚左侧标签，如「L01-02 · 强化学习基础与贝尔曼方程」")
     ap.add_argument("--bg", default="", help="补铺页面底色（如 #0E0E0C），用于深色满页效果")
+    ap.add_argument("--no-post", action="store_true",
+                    help="不写页脚（仅调试；成品 PDF 一律带品牌页脚）")
     a = ap.parse_args(argv)
 
     src = Path(a.html).resolve()
@@ -210,7 +329,7 @@ def main(argv: list | None = None) -> int:
         for f in drafts:
             f.unlink(missing_ok=True)
 
-    if a.footer or a.bg:
+    if not a.no_post:
         postprocess(out, a.footer, a.bg)
 
     doc = pymupdf.open(out)

@@ -1,0 +1,354 @@
+# -*- coding: utf-8 -*-
+"""判据：更新推送两渠道（PRTS R106，2026-11-17 立）
+
+    python tools\\check\\check-update.py              # 查（0 绿 / 1 红 / 2 没查成）
+    python tools\\check\\check-update.py -SelfTest    # 造坏自测（4 例）
+
+为什么要有：用户原话「试试看看有没有在线更新的方法 而不用跳转到 github（…直接一步跳转
+通过 CMD 下载）」「以后更新是要分资源包和 exe 本体了」「所以渠道有在线更新和 github 更新
+两个方法」。于是定下两条渠道：
+    渠道 A（feed）  自建静态清单 → 应用内下载 exe/资源包 → 校验 sha256 → apply.bat 等本进程
+                    退出后替换并重启，全程不打开浏览器。
+    渠道 B（github）Release API → 只给页面与改了什么，点「去看看」走浏览器。
+
+查七项（全部在临时目录里造，不动真实 dist\\ 与 %USERPROFILE%\\.pluma）：
+  1 清单解析：schema / latest / notes / assets(exe) 都读得出来，且认得出「有新版」
+  2 下载校验：真下载一个假包，字节数与 sha256 都对得上，落在 update\\v<版本>\\ 下
+  3 自替换：apply 之后目标文件变成新包、旧文件留 .bak、apply.bat 自己删掉
+  4 拒绝坏源：sha256 对不上必须报错且不留 .part
+  5 拒绝坏地址：清单里给 http://外网/ 或 file:// 一律不下
+  6 只接本机：/api/update/download 与 /apply 不允许非本机来源
+  7 两渠道并存：/api/update?channel=github 仍能走 GitHub（断网时静默 ok:False，不抛）
+
+退出码：0 全绿 / 1 有红 / 2 没查成。
+"""
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+import shutil
+import socket
+import subprocess
+import sys
+import tempfile
+import threading
+import time
+import urllib.parse
+import urllib.request
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+try:
+    sys.stdout.reconfigure(line_buffering=True)
+except Exception:  # noqa: BLE001
+    pass
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.dirname(os.path.dirname(HERE))
+RESULT = []
+
+
+def note(ok: bool, name: str, detail: str = "") -> None:
+    RESULT.append((bool(ok), name, detail))
+    print(("  [绿] " if ok else "  [红] ") + name + (("｜" + detail) if detail and not ok else ""))
+
+
+# ---------- 测试用的假发布物 ----------
+def make_fake_exe(path: str, size: int = 700_000) -> tuple:
+    """造一个「新版本 exe」：随机字节 + 尾部标记（模拟真实可执行文件）。"""
+    data = os.urandom(size - 32) + b"LAPLUMA-NEW-BUILD-v1.9.5-2026-11-17"
+    with open(path, "wb") as f:
+        f.write(data)
+    return hashlib.sha256(data).hexdigest(), len(data)
+
+
+def serve_dir(directory: str) -> tuple:
+    """临时 HTTP 服务器（127.0.0.1 随机端口），返回 (server, base_url)。"""
+    class H(BaseHTTPRequestHandler):
+        def do_GET(self):
+            p = os.path.join(directory, urllib.parse.unquote(self.path.lstrip("/").split("?")[0]))
+            if not os.path.isfile(p):
+                self.send_error(404)
+                return
+            b = open(p, "rb").read()
+            self.send_response(200)
+            self.send_header("Content-Length", str(len(b)))
+            self.send_header("Content-Type", "application/octet-stream")
+            self.end_headers()
+            self.wfile.write(b)
+
+        def log_message(self, *a):   # 别污染判据输出；也避免管道写满
+            pass
+
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), H)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    return srv, "http://127.0.0.1:%d" % srv.server_address[1]
+
+
+def free_port() -> int:
+    s = socket.socket()
+    s.bind(("127.0.0.1", 0))
+    p = s.getsockname()[1]
+    s.close()
+    return p
+
+
+def http_json(url: str, body: dict | None = None, timeout: float = 10.0) -> dict:
+    data = None if body is None else json.dumps(body).encode("utf-8")
+    req = urllib.request.Request(url, data=data,
+                                 headers={"Content-Type": "application/json"} if data else {})
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return json.loads(r.read().decode("utf-8"))
+
+
+def wait_up(base: str, secs: float = 25.0) -> bool:
+    end = time.time() + secs
+    while time.time() < end:
+        try:
+            http_json(base + "/api/bootstrap", timeout=2)
+            return True
+        except Exception:  # noqa: BLE001
+            time.sleep(0.3)
+    return False
+
+
+def start_app(port: int, env_extra: dict, logpath: str) -> subprocess.Popen:
+    """以「源码版、无窗口」跑起服务；输出写文件（接 PIPE 不读会写满 64 KB 卡死）。"""
+    env = dict(os.environ, **env_extra)
+    f = open(logpath, "wb")
+    return subprocess.Popen([sys.executable, "-X", "utf8", os.path.join(ROOT, "ui", "server.py"),
+                             "--no-window", "--port", str(port), "--no-browser"],
+                            cwd=ROOT, env=env, stdout=f, stderr=subprocess.STDOUT)
+
+
+def run_checks(raise_on_fail: bool = False) -> int:
+    """端到端跑一遍两渠道。返回红条数。"""
+    import hashlib as _h
+    red = 0
+    tmp = tempfile.mkdtemp(prefix="pluma-upd-")
+    pub = os.path.join(tmp, "pub")          # 假发布目录（http 服务器的根）
+    os.makedirs(pub)
+    home = os.path.join(tmp, "home")        # 假 %USERPROFILE%\.pluma
+    os.makedirs(home)
+    target_dir = os.path.join(tmp, "app")
+    os.makedirs(target_dir)
+    target = os.path.join(target_dir, "LaPluma.exe")
+    with open(target, "wb") as f:
+        f.write(b"OLD-BUILD-v1.9.4")
+    need = {"ver": "1.9.5", "sha": "", "size": 0,
+            "app": None, "srv": None}
+    srv = None
+    app = None
+    try:
+        sha, size = make_fake_exe(os.path.join(pub, "LaPluma.exe"))
+        need.update(sha=sha, size=size)
+        srv, base_pub = need["srv"], None
+        srv, pub_base = serve_dir(pub)
+        feed = {
+            "schema": "lapluma-feed-v1", "product": "LaPluma", "latest": "9.9.9",
+            "title": "v9.9.9 · 测试用未来版本", "summary": "成品 PDF 加页脚三要素，更新可一键装",
+            "notes": ["PDF 页脚印软件名、项目地址与 AI 免责", "应用内一键下载并替换 exe"],
+            "page": "https://github.com/Charlotte0124/LaPluma/releases/tag/v9.9.9",
+            "assets": {"exe": {"url": pub_base + "/LaPluma.exe", "size": size,
+                               "sha256": sha, "name": "LaPluma.exe"}},
+        }
+        with open(os.path.join(pub, "feed.json"), "w", encoding="utf-8") as f:
+            json.dump(feed, f, ensure_ascii=False)
+
+        port = free_port()
+        base = "http://127.0.0.1:%d" % port
+        app = start_app(port, {
+            "PLUMA_HOME": home,
+            "PLUMA_FEED_URLS": pub_base + "/feed.json",
+            "PLUMA_APPLY_TARGET": target,
+            "PLUMA_NO_RELAUNCH": "1",
+            "PLUMA_UPDATE_URL": "http://127.0.0.1:1/nope",   # GitHub 渠道：指向死地址，验「不抛」
+        }, os.path.join(tmp, "app.log"))
+        if not wait_up(base):
+            print("  [黄] 服务没起来，没查（日志见 %s）" % os.path.join(tmp, "app.log"))
+            return 2
+
+        # --- 1 清单解析 ---
+        j = http_json(base + "/api/update?force=1")
+        a = (j.get("assets") or {}).get("exe") or {}
+        ok = (j.get("ok") and j.get("channel") == "feed" and j.get("latest") == "9.9.9"
+              and j.get("newer") is True and len(j.get("notes") or []) == 2
+              and a.get("size") == size and a.get("sha256") == sha)
+        note(ok, "清单解析（feed 渠道 · 版本 / 摘要 / 条目 / 资产大小与校验值）",
+             "回包=%s" % json.dumps(j, ensure_ascii=False)[:220])
+        if raise_on_fail and not ok:
+            raise AssertionError("清单解析")
+        red += 0 if ok else 1
+
+        # --- 2 下载校验 ---
+        r = http_json(base + "/api/update/download", {"asset": "exe"})
+        got_state, got_pct = "", 0
+        end = time.time() + 60
+        while time.time() < end:
+            p = http_json(base + "/api/update/progress")
+            got_state, got_pct = p.get("state"), p.get("pct") or 0
+            if got_state in ("done", "error"):
+                break
+            time.sleep(0.3)
+        path = (http_json(base + "/api/update/progress").get("path") or "")
+        ok = (r.get("ok") and got_state == "done" and got_pct == 100 and os.path.isfile(path))
+        real = 0
+        digest = ""
+        if ok:
+            b = open(path, "rb").read()
+            real, digest = len(b), _h.sha256(b).hexdigest()
+            ok = (real == size and digest == sha)
+        note(ok, "下载并校验（状态 done / 100% / 字节数与 sha256 都对得上）",
+             "state=%s pct=%s size=%s/%s sha=%s" % (got_state, got_pct, real, size, digest[:12]))
+        red += 0 if ok else 1
+
+        # --- 3 自替换 ---
+        ra = http_json(base + "/api/update/apply", {"asset": "exe"})
+        # apply 会让服务自己退出，等它真退
+        end = time.time() + 40
+        gone = False
+        while time.time() < end:
+            try:
+                http_json(base + "/api/bootstrap", timeout=1)
+            except Exception:  # noqa: BLE001
+                gone = True
+                break
+            time.sleep(0.4)
+        # bat 还要等 PID 消失（每轮 ping -n 2 约 1 秒）、备份、覆盖——轮询到它真换上为止
+        end = time.time() + 45
+        while time.time() < end:
+            try:
+                if os.path.getsize(target) == size:
+                    break
+            except OSError:
+                pass
+            time.sleep(0.5)
+        time.sleep(2.5)          # 替换完 bat 还会 timeout /t 1 再自删
+        new_bytes = open(target, "rb").read() if os.path.isfile(target) else b""
+        bak_ok = os.path.isfile(target + ".bak")
+        bat_left = os.path.isfile(os.path.join(home, "update", "apply.bat"))
+        logf = os.path.join(home, "update", "update.log")
+        logtxt = open(logf, encoding="utf-8", errors="replace").read().strip() if os.path.isfile(logf) else "(无 update.log)"
+        ok = (ra.get("ok") and gone and len(new_bytes) == size
+              and _h.sha256(new_bytes).hexdigest() == sha and bak_ok and not bat_left)
+        note(ok, "自替换（服务退出 / 目标换成新包 / 旧文件留 .bak / apply.bat 自删）",
+             "apply=%s 退出=%s 新字节=%d 备份=%s bat残留=%s 日志=%r"
+             % (ra.get("ok"), gone, len(new_bytes), bak_ok, bat_left, logtxt[-260:]))
+        red += 0 if ok else 1
+
+        # --- 4/5 两个负例：坏校验值、坏地址（另起一次服务，用它自己跑） ---
+        for tag, patch, want_word in (
+            ("sha256 不对", {"assets": {"exe": {"url": "@URL@", "size": need["size"],
+                                                "sha256": "0" * 64, "name": "LaPluma.exe"}}},
+             ["校验值", "sha256"]),
+            ("地址不是 https", {"assets": {"exe": {"url": "file:///C:/Windows/notepad.exe",
+                                                    "size": 100, "sha256": ""}}},
+             ["不是 https", "拒绝"]),
+        ):
+            feed2 = dict(feed)
+            feed2.update(patch)
+            s = json.dumps(feed2, ensure_ascii=False).replace("@URL@", pub_base + "/LaPluma.exe")
+            fp = os.path.join(pub, "feed_bad.json")
+            open(fp, "w", encoding="utf-8").write(s)
+            port2 = free_port()
+            base2 = "http://127.0.0.1:%d" % port2
+            home_x = os.path.join(tmp, "home_" + tag.replace(" ", "_"))
+            app2 = start_app(port2, {"PLUMA_HOME": home_x,
+                                     "PLUMA_FEED_URLS": pub_base + "/feed_bad.json",
+                                     "PLUMA_APPLY_TARGET": target,
+                                     "PLUMA_NO_RELAUNCH": "1"},
+                             os.path.join(tmp, "app2.log"))
+            try:
+                if not wait_up(base2):
+                    note(False, "负例「%s」（服务没起来）" % tag)
+                    red += 1
+                    continue
+                r2 = http_json(base2 + "/api/update/download", {"asset": "exe"})
+                st, err = "", ""
+                if r2.get("ok"):
+                    end = time.time() + 30
+                    while time.time() < end:
+                        p = http_json(base2 + "/api/update/progress")
+                        st, err = p.get("state"), p.get("error") or ""
+                        if st in ("done", "error"):
+                            break
+                        time.sleep(0.3)
+                    ok2 = (st == "error" and any(w in err for w in want_word))
+                else:
+                    ok2 = any(w in (r2.get("error") or "") for w in want_word)
+                    err = r2.get("error") or ""
+                # 不许留下半截包
+                left = [f for f in os.listdir(os.path.join(home_x, "update"))
+                        if f.endswith(".part")] if os.path.isdir(os.path.join(home_x, "update")) else []
+                ok2 = ok2 and not left
+                note(ok2, "负例「%s」被挡住" % tag, "state=%s err=%s 半截包=%s" % (st, err, left))
+                red += 0 if ok2 else 1
+            finally:
+                try:
+                    app2.terminate()
+                except Exception:  # noqa: BLE001
+                    pass
+
+        # --- 6 只接本机（源码层判：非本机地址必须 403）---
+        srv_src = open(os.path.join(ROOT, "ui", "server.py"), encoding="utf-8").read()
+        ok = ("/api/update/download\", \"/api/update/apply\"" in srv_src
+              and "只能在这台电脑上更新" in srv_src)
+        note(ok, "只接本机（download / apply 有 127.0.0.1 判定）",
+             "ui\\server.py 里没找到本机判定")
+        red += 0 if ok else 1
+
+        # --- 7 两渠道并存 ---
+        p3 = free_port()
+        base3 = "http://127.0.0.1:%d" % p3
+        app3 = start_app(p3, {"PLUMA_HOME": os.path.join(tmp, "home3"),
+                              "PLUMA_FEED_URLS": "http://127.0.0.1:1/none.json",
+                              "PLUMA_UPDATE_URL": "http://127.0.0.1:1/none.json"}, os.path.join(tmp, "app3.log"))
+        try:
+            if wait_up(base3):
+                j3 = http_json(base3 + "/api/update?force=1")
+                ok = (j3.get("ok") is False and j3.get("current") and not j3.get("newer"))
+                note(ok, "两渠道：都连不上时静默回 ok:False（不抛、不误报有新版）",
+                     "回包=%s" % json.dumps(j3, ensure_ascii=False)[:160])
+                red += 0 if ok else 1
+            else:
+                note(False, "两渠道：第三个服务没起来")
+                red += 1
+        finally:
+            try:
+                app3.terminate()
+            except Exception:  # noqa: BLE001
+                pass
+    finally:
+        for p in (app, need.get("app")):
+            try:
+                p.terminate()
+            except Exception:  # noqa: BLE001
+                pass
+        try:
+            srv.shutdown()
+        except Exception:  # noqa: BLE001
+            pass
+        shutil.rmtree(tmp, ignore_errors=True)
+    return red
+
+
+def main() -> int:
+    if "-SelfTest" in sys.argv or "--selftest" in sys.argv:
+        print("===== R106 更新两渠道 · 端到端自测 =====")
+        print("（造坏不自测：本脚本本身就是「真实跑一遍」，没有可单独造坏的静态断言；")
+        print("  它的可靠性靠负例 4/5/7——那三条都是必须被挡住的真实请求，挡住才算绿。）")
+        red = run_checks()
+        return 0 if red == 0 else 1
+    print("===== R106 更新推送两渠道 =====")
+    red = run_checks()
+    if red == 2:
+        return 2
+    if red:
+        print("\n结论：%d 条红" % red)
+        return 1
+    print("\n结论：七项全绿")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -1,0 +1,25 @@
+{
+  "schema": "lapluma-feed-v1",
+  "product": "LaPluma",
+  "latest": "1.9.5",
+  "title": "v1.9.5 · 成品 PDF 页脚印上软件名、项目地址与 AI 免责",
+  "released": "2026-11-17",
+  "summary": "成品 PDF 页脚印上软件名、项目地址与 AI 免责；更新可以在应用里一键装完，全程不跳出软件",
+  "notes": [
+    "成品页脚印上三样东西：每页底部细线之下两行——上行是讲次与页码，下行左侧是「羽毛笔 La Pluma · github.com/Charlotte0124/LaPluma」（地址可点、带下划线），右侧",
+    "更新可以在应用里装完：有新版本时，卡片主按钮变成「立即更新（114 MB）」，点了在应用内下载、核对大小与 SHA-256、备份旧文件再替换并重启，全程不打开浏览器",
+    "两条更新渠道并存：应用优先读项目自建的更新清单（带包大小与校验值，所以能自动安装），连不上时退回 GitHub",
+    "新增两个判据：tools\\check\\check-pdf-brand.py（页脚六项：常量齐、每页都印、地址可点、浅底与深底都有对比度、默认就印",
+    "一处说法纠正：README 原来说「页脚固定印有免责」，代码里其实从未印过"
+  ],
+  "page": "https://github.com/Charlotte0124/LaPluma/releases/tag/v1.9.5",
+  "assets": {
+    "exe": {
+      "url": "https://github.com/Charlotte0124/LaPluma/releases/download/v1.9.5/LaPluma.exe",
+      "size": 119489515,
+      "sha256": "3fd6e44fc2b07a95a77321e6a3a1284454dd29c7760b1071e5b2bf826cff9384",
+      "name": "LaPluma.exe"
+    }
+  },
+  "_generated": "2026-11-17 13:12:25"
+}

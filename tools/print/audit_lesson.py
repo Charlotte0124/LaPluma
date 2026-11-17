@@ -364,7 +364,10 @@ def audit_one(path: str, light: bool = False) -> dict:
                 broken_imgs += 1
         clip = pymupdf.Rect(0, p.rect.height - 40, p.rect.width, p.rect.height)
         lines = [l.strip() for l in p.get_text("text", clip=clip).splitlines() if l.strip()]
-        if lines and FOOTER_RE.search(lines[-1]):
+        # 2026-11-17：页脚从一行变成两行（上行讲次 + N/M，下行品牌名 + 地址 + 免责），
+        #   页码不再一定是从底区抽出来的最后一行。这里改成「底部 40pt 条里有一行收在 N / M」。
+        #   仍然能失败：不带页脚的 PDF 拿这份判据跑过，报 0/10（见 tools\check\check-pdf-brand.py）。
+        if any(FOOTER_RE.search(l) for l in lines):
             footer_hit += 1
     full = "\n".join(texts)
 

@@ -78,8 +78,44 @@ HOST, PORT = "127.0.0.1", 8765
 #   每次打开/刷新阅读器都全量重传（本机无感，平板走 WiFi 明显）。
 #   index.html 必须仍走 no-store（改完界面要能立刻看到新版）。
 _STATIC_ETAG = {}
-VERSION = "1.9.4"
+VERSION = "1.9.5"
 APP_NAME = "羽毛笔 La Pluma"
+
+
+def _load_brand():
+    """品牌三要素（软件名 / 项目地址 / 免责）的唯一出处：tools\\print\\_brand.py。
+
+    与 PDF 页脚用同一份（PRTS R105），所以界面底部与成品页脚不会有一天对不上。
+    按文件路径加载：模块导入时 paths.bootstrap() 还没跑，不靠 sys.path。
+    """
+    import importlib.util
+    cands = [os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "tools", "print",
+                          "_brand.py")]
+    try:
+        cands.insert(0, paths.res("tools", "print", "_brand.py"))
+    except Exception:  # noqa: BLE001
+        pass
+    for c in cands:
+        if os.path.isfile(c):
+            try:
+                spec = importlib.util.spec_from_file_location("_pluma_brand", c)
+                m = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(m)
+                return m
+            except Exception:  # noqa: BLE001
+                continue
+
+    class _Fallback:
+        PRODUCT_NAME = "羽毛笔 La Pluma"
+        PROJECT_URL = "https://github.com/Charlotte0124/LaPluma"
+        PROJECT_URL_TEXT = "github.com/Charlotte0124/LaPluma"
+        DISCLAIMER = "本内容由 AI 生成，仅供参考；重要信息请自行核实"
+        DISCLAIMER_SHORT = "AI 生成，仅供参考"
+        SEP = "·"
+    return _Fallback
+
+
+BRAND = _load_brand()
 BOOK_NAME = DEFAULT_COURSE + "_九讲合订本_讲义.pdf"
 
 # ---------- 主机上线（局域网 + 8 位访问码）----------
@@ -1042,8 +1078,9 @@ def build_note_pdf(target_rel: str, title: str, blocks: list) -> dict:
             put(body, size=8.5, gap=9, color=(0.48, 0.47, 0.44))
         else:
             put(body, size=9.5, gap=9, color=(0.25, 0.24, 0.22))
-    # 页脚：与正本一致的口径
-    foot = "本内容由 AI 生成，请自行核实重要信息"
+    # 页脚：与正本一致的口径（文案与地址只从 tools\print\_brand.py 取，见 PRTS R105）
+    foot = "%s %s %s ｜ %s" % (BRAND.PRODUCT_NAME, BRAND.SEP, BRAND.PROJECT_URL_TEXT,
+                                 BRAND.DISCLAIMER)
     page.insert_text((margin, h - 26), foot, fontsize=7.5, fontfile=font, fontname="cjk",
                      color=(0.62, 0.61, 0.58))
     # 2026-11-17：笔记页用 fontfile 嵌字，PyMuPDF 会把整个微软雅黑（msyh.ttc）塞进 PDF，
@@ -1301,7 +1338,12 @@ class Handler(BaseHTTPRequestHandler):
                 return self._file(safe_join(*rel.split("/")), inline=not dl)
             if u.path == "/api/update":
                 # 2026-11-17 用户：想知道有没有新版、修了什么（给用户看，不写技术细节）
-                return self._json(check_update(bool(q.get("force", [""])[0])))
+                ch = str(q.get("channel", ["auto"])[0] or "auto").lower()
+                return self._json(check_update(bool(q.get("force", [""])[0]),
+                                               ch if ch in ("auto", "feed", "github") else "auto"))
+            if u.path == "/api/update/progress":
+                # 下载进度（前端轮询）：只回状态，不做事
+                return self._json(dict(ok=True, **UPD))
             if u.path == "/doc":
                 # 向导里的「怎么拿到密钥」「支持哪些格式」直接打开本机文档（新标签可读）
                 p = _doc_path(q.get("p", [""])[0])
@@ -1325,6 +1367,16 @@ class Handler(BaseHTTPRequestHandler):
         except Exception:  # noqa: BLE001
             body = {}
         try:
+            if u.path in ("/api/update/download", "/api/update/apply"):
+                # 下载装置与自替换只接本机：局域网里的设备不能替这台电脑换程序
+                if self.client_address[0] not in ("127.0.0.1", "::1"):
+                    return self._json({"ok": False, "error": "只能在这台电脑上更新"}, 403)
+                asset = str(body.get("asset") or "exe")
+                if asset not in ("exe", "res"):
+                    return self._json({"ok": False, "error": "只会下 exe 或 res"}, 400)
+                if u.path.endswith("/download"):
+                    return self._json(start_download(asset))
+                return self._json(apply_update(asset))
             if u.path == "/api/lan":
                 # 2026-11-17：界面上的「一键上线 / 关闭上线」走这里。
                 # 只接本机：上线开关本身就是个对外暴露的动作，不能让局域网里的人帮你开。
@@ -1881,47 +1933,311 @@ def _ver_num(s: str) -> tuple:
     return tuple(int(x) for x in parts) + (0,) * (3 - len(parts))
 
 
-def check_update(force: bool = False) -> dict:
-    """问 GitHub 有没有新版。断网/超时/限流一律回 ok:False，界面就静默（不打扰用户）。
+# ---------- 更新：两条渠道（2026-11-17 用户定）----------
+#   feed    自建静态清单 feed\latest.json（随仓库发布）：带 exe / 资源包的大小与 sha256，
+#           于是可以「应用内下载 + 自动替换」，全程不打开浏览器。
+#   github  Release API：拿标题、正文、页面地址，给「去看看」用；feed 不通时兜底。
+# 用户原话：「看看有没有在线更新的方法 而不用跳转到 github（…直接一步跳转通过 CMD 下载）」
+#   「以后更新是要分资源包和 exe 本体了」——所以清单里 assets 分 exe / res 两类。
+FEED_SCHEMA = "lapluma-feed-v1"
+FEED_URLS = [u.strip() for u in (
+    os.environ.get("PLUMA_FEED_URLS") or os.environ.get("PLUMA_FEED_URL") or
+    "https://raw.githubusercontent.com/Charlotte0124/LaPluma/main/feed/latest.json,"
+    "https://cdn.jsdelivr.net/gh/Charlotte0124/LaPluma@main/feed/latest.json"
+).split(",") if u.strip()]
+UPDATE_DIR = os.path.join(USER_DIR, "update")
+MAX_ASSET = 300 * 1024 * 1024        # 300 MB 上限：再大就不是更新包了
+UPD = {"busy": False, "asset": "", "ver": "", "got": 0, "total": 0, "pct": 0,
+       "state": "idle", "error": "", "path": "", "sha256": "", "at": ""}
 
-    给用户看的是「修了什么」：release 正文里以 - / * / • 开头的行，最多 8 条。
+
+def _parse_notes(text: str) -> tuple:
+    """release 正文 → (一句摘要, 条目列表)。只看 - / * / • 开头的行，取第一句。"""
+    summary, notes = "", []
+    for ln in str(text or "").splitlines():
+        t = ln.strip()
+        if not t:
+            continue
+        m = re.match(r"^<!--\s*摘要[:：]\s*(.*?)\s*-->$", t)
+        if m:
+            summary = m.group(1)
+            continue
+        if t.startswith(("-", "*", "•")):
+            s = re.sub(r"\*\*|`", "", t.lstrip("-*• ").strip())
+            s = re.split(r"[。；;]", s)[0][:100]      # 用户看的是「改了什么」，不是实现
+            if s:
+                notes.append(s)
+    return summary, notes
+
+
+def _norm_assets(raw) -> dict:
+    """清单里的 assets → {exe: {url,size,sha256,name}, res: {...}}；没给的就不出现。"""
+    out = {}
+    if not isinstance(raw, dict):
+        return out
+    for key in ("exe", "res"):
+        a = raw.get(key)
+        if not isinstance(a, dict) or not a.get("url"):
+            continue
+        url = str(a["url"])
+        out[key] = {"url": url, "size": int(a.get("size") or 0),
+                    "sha256": str(a.get("sha256") or "").lower(),
+                    "name": str(a.get("name") or
+                                os.path.basename(urllib.parse.urlparse(url).path) or key)}
+    return out
+
+
+def _fetch_feed() -> dict:
+    """读自建清单（多源依次试：raw → jsDelivr）——有一个通就够。"""
+    last = None
+    for url in FEED_URLS:
+        try:
+            req = urllib.request.Request(url, headers={
+                "User-Agent": "LaPluma/%s" % VERSION, "Cache-Control": "no-cache"})
+            with urllib.request.urlopen(req, timeout=5) as r:
+                body = json.loads(r.read().decode("utf-8-sig"))
+            if str(body.get("schema") or "") != FEED_SCHEMA:
+                raise ValueError("清单格式不对（schema=%r）" % body.get("schema"))
+            latest = str(body.get("latest") or "").lstrip("vV")
+            if not latest:
+                raise ValueError("清单缺 latest")
+            assets = _norm_assets(body.get("assets"))
+            return {"ok": True, "channel": "feed", "current": VERSION, "latest": latest,
+                    "newer": _ver_num(latest) > _ver_num(VERSION),
+                    "title": str(body.get("title") or ("v" + latest)),
+                    "summary": str(body.get("summary") or ""),
+                    "notes": [str(x) for x in (body.get("notes") or []) if str(x).strip()][:6],
+                    "url": str(body.get("page") or ""), "assets": assets,
+                    "checked": time.strftime("%Y-%m-%d %H:%M"), "source": url}
+        except Exception as e:  # noqa: BLE001
+            last = e
+    raise RuntimeError("清单都不通（%s）" % (last.__class__.__name__ if last else "没配源"))
+
+
+def _fetch_github() -> dict:
+    """Release API：标题 / 正文 / 页面地址；顺手把 LaPluma.exe 资产也认出来。"""
+    req = urllib.request.Request(UPDATE_API, headers={
+        "User-Agent": "LaPluma/%s" % VERSION, "Accept": "application/vnd.github+json"})
+    with urllib.request.urlopen(req, timeout=4) as r:
+        body = json.loads(r.read().decode("utf-8-sig"))
+    latest = str(body.get("tag_name") or "").lstrip("vV")
+    summary, notes = _parse_notes(body.get("body") or "")
+    assets = {}
+    for a in body.get("assets") or []:
+        nm = str(a.get("name") or "")
+        if nm.lower() == "lapluma.exe" and a.get("browser_download_url"):
+            assets["exe"] = {"url": str(a["browser_download_url"]),
+                             "size": int(a.get("size") or 0), "sha256": "", "name": nm}
+    return {"ok": True, "channel": "github", "current": VERSION, "latest": latest,
+            "newer": _ver_num(latest) > _ver_num(VERSION),
+            "title": str(body.get("name") or ("v" + latest)),
+            "summary": summary, "notes": notes[:6],
+            "url": str(body.get("html_url") or ""), "assets": assets,
+            "checked": time.strftime("%Y-%m-%d %H:%M"), "source": UPDATE_API}
+
+
+def check_update(force: bool = False, channel: str = "auto") -> dict:
+    """看有没有新版。先 feed（能拿到可下载的包），不通再问 GitHub（只能给页面）。
+
+    断网 / 超时 / 限流一律回 ok:False，界面就静默（不打扰用户）。失败不写缓存。
     """
     now = time.time()
     cached = _read_json(UPDATE_CACHE, {})
     data = cached.get("data") if isinstance(cached, dict) else None
-    if not force and data and now - float(cached.get("ts") or 0) < UPDATE_TTL:
+    if (not force and isinstance(data, dict) and data.get("ok")
+            and now - float(cached.get("ts") or 0) < UPDATE_TTL
+            and channel in ("auto", data.get("channel"))):
         return dict(data, cached=True)
+    errs = []
+    if channel in ("auto", "feed"):
+        try:
+            data = _fetch_feed()
+            _write_json(UPDATE_CACHE, {"ts": now, "data": data})
+            return data
+        except Exception as e:  # noqa: BLE001
+            errs.append("清单：%s" % e)
+    if channel in ("auto", "github"):
+        try:
+            data = _fetch_github()
+            _write_json(UPDATE_CACHE, {"ts": now, "data": data})
+            return data
+        except Exception as e:  # noqa: BLE001
+            errs.append("GitHub：%s" % e.__class__.__name__)
+    return {"ok": False, "current": VERSION, "channel": channel,
+            "error": "没连上更新源（%s），不影响使用" % "；".join(errs)}
+
+
+# ---------- 应用内下载与自替换（feed 渠道）----------
+def _safe_url(url: str) -> bool:
+    """只许 https；本机 http 放行（端到端测试用）。别人改了清单也拿不到 file:// 或内网地址。"""
+    p = urllib.parse.urlparse(str(url or ""))
+    if p.scheme == "https" and p.hostname:
+        return True
+    return p.scheme == "http" and p.hostname in ("127.0.0.1", "localhost", "::1")
+
+
+def _download_worker(url: str, dst: str, size_hint: int, sha: str, asset: str, ver: str) -> None:
+    tmp = dst + ".part"
+    got = 0
     try:
-        req = urllib.request.Request(UPDATE_API, headers={
-            "User-Agent": "LaPluma/%s" % VERSION, "Accept": "application/vnd.github+json"})
-        with urllib.request.urlopen(req, timeout=4) as r:
-            body = json.loads(r.read().decode("utf-8-sig"))
-        latest = str(body.get("tag_name") or "").lstrip("vV")
-        summary, notes = "", []
-        for ln in str(body.get("body") or "").splitlines():
-            t = ln.strip()
-            if not t:
-                continue
-            m = re.match(r"^<!--\s*摘要[:：]\s*(.*?)\s*-->$", t)
-            if m:
-                summary = m.group(1)
-                continue
-            if t.startswith(("-", "*", "•")):
-                s = re.sub(r"\*\*|`", "", t.lstrip("-*• ").strip())
-                s = re.split(r"[。；;]", s)[0][:100]      # 只留第一句：用户看的是「改了什么」，不是实现
-                if s:
-                    notes.append(s)
-        data = {"ok": True, "current": VERSION, "latest": latest,
-                "newer": _ver_num(latest) > _ver_num(VERSION),
-                "title": str(body.get("name") or ("v" + latest)),
-                "summary": summary, "notes": notes[:6], "url": str(body.get("html_url") or ""),
-                "checked": time.strftime("%Y-%m-%d %H:%M")}
-        _write_json(UPDATE_CACHE, {"ts": now, "data": data})
-        return data
+        req = urllib.request.Request(url, headers={"User-Agent": "LaPluma/%s" % VERSION,
+                                                   "Accept": "*/*"})
+        with urllib.request.urlopen(req, timeout=15) as r, open(tmp, "wb") as f:
+            total = int(r.headers.get("Content-Length") or 0) or size_hint
+            h = hashlib.sha256()
+            while True:
+                chunk = r.read(262144)
+                if not chunk:
+                    break
+                got += len(chunk)
+                if got > MAX_ASSET:
+                    raise RuntimeError("包超过 300 MB 上限，中止")
+                f.write(chunk)
+                h.update(chunk)
+                UPD.update(got=got, total=total, pct=int(got * 100 / total) if total else 0)
+        if size_hint and got != size_hint:
+            raise RuntimeError("大小不对：收到 %d，清单写 %d" % (got, size_hint))
+        digest = h.hexdigest()
+        if sha and digest != sha:
+            raise RuntimeError("校验值不对（sha256 %s…）" % digest[:12])
+        os.replace(tmp, dst)
+        UPD.update(state="done", path=dst, sha256=digest, pct=100, got=got,
+                   total=size_hint or got, busy=False)
     except Exception as e:  # noqa: BLE001
-        # 失败不写缓存：下次启动再试（但要 4 秒内就放手，不能拖慢启动）
-        return {"ok": False, "current": VERSION,
-                "error": "没连上 GitHub（%s），不影响使用" % e.__class__.__name__}
+        try:
+            if os.path.exists(tmp):
+                os.remove(tmp)
+        except OSError:
+            pass
+        UPD.update(state="error", error=str(e), busy=False)
+
+
+def start_download(asset: str = "exe") -> dict:
+    """开一个后台线程下包；进度靠 /api/update/progress 轮询（断点续传不做，重下更省事）。"""
+    if UPD.get("busy"):
+        return {"ok": False, "error": "上一份还在下，等它完成"}
+    data = check_update()
+    if not data.get("ok"):
+        return {"ok": False, "error": data.get("error") or "拿不到更新信息"}
+    a = (data.get("assets") or {}).get(asset)
+    if not a:
+        return {"ok": False, "error": "这一版没有可下载的 %s（去 GitHub 看）" % asset}
+    if not _safe_url(a["url"]):
+        return {"ok": False, "error": "下载地址不是 https，已拒绝"}
+    ver = data.get("latest") or "0"
+    d = os.path.join(UPDATE_DIR, "v" + _ver_num_str(ver))
+    os.makedirs(d, exist_ok=True)
+    dst = os.path.join(d, a["name"])
+    UPD.update(busy=True, asset=asset, ver=ver, got=0, total=int(a.get("size") or 0), pct=0,
+               state="downloading", error="", path="", sha256="",
+               at=time.strftime("%H:%M:%S"))
+    threading.Thread(target=_download_worker,
+                     args=(a["url"], dst, int(a.get("size") or 0), a.get("sha256") or "",
+                           asset, ver), daemon=True).start()
+    return {"ok": True, "started": True, "ver": ver, "asset": asset,
+            "size": int(a.get("size") or 0)}
+
+
+def _ver_num_str(ver: str) -> str:
+    return re.sub(r"[^0-9A-Za-z.\-_]", "", str(ver or "0")) or "0"
+
+
+def app_exe() -> str:
+    """要被换掉的那个文件：打包版是自己；源码版是 dist\\LaPluma.exe。
+
+    PLUMA_APPLY_TARGET 只给判据和端到端测试用（指到临时副本，不许动真实 dist）。
+    """
+    if os.environ.get("PLUMA_APPLY_TARGET"):
+        return os.path.abspath(os.environ["PLUMA_APPLY_TARGET"])
+    if getattr(sys, "frozen", False):
+        return os.path.abspath(sys.executable)
+    return os.path.abspath(os.path.join(paths.DATA_ROOT, "dist", "LaPluma.exe"))
+
+
+def write_apply_bat(new_path: str, target: str, res_zip: str = "",
+                    relaunch: bool = True, pid: int | None = None) -> str:
+    """写 apply.bat：等本进程退出 → 备份 .bak → 覆盖 →（解资源包）→ 重启 → 自删。
+
+    为什么要绕一道 bat：Windows 不允许覆盖正在运行的 exe，只能让本进程先退、
+    由外部脚本接手。bat 里不写中文（cmd 的码页与文件编码会在半路换），日志写 update.log。
+    pid 默认为本进程；判据里传一个不存在的 PID 才能单独验证替换动作（否则自己等自己）。
+    等不到就 120 秒后放手，不能永远挂着（判据里踩过：bat 自己等自己 → 卡死）。
+    """
+    os.makedirs(UPDATE_DIR, exist_ok=True)
+    bat = os.path.join(UPDATE_DIR, "apply.bat")
+    log = os.path.join(UPDATE_DIR, "update.log")
+    appdir = os.path.dirname(os.path.abspath(target))
+    lines = [
+        "@echo off",
+        "setlocal",
+        'set "PID=%d"' % (os.getpid() if pid is None else int(pid)),
+        'set "NEW=%s"' % new_path,
+        'set "TGT=%s"' % target,
+        'set "RES=%s"' % res_zip,
+        'set "APPDIR=%s"' % appdir,
+        'set "LOG=%s"' % log,
+        'echo [apply] %date% %time% start >> "%LOG%"',
+        'if not exist "%NEW%" (echo [apply] new file missing >> "%LOG%" & exit /b 2)',
+        "set /a n=0",
+        ":wait",
+        'if "%PID%"=="0" goto ready',
+        'tasklist /FI "PID eq %PID%" /NH 2>nul | find "%PID%" >nul',
+        "if errorlevel 1 goto ready",
+        "set /a n+=1",
+        'if %n% gtr 120 (echo [apply] wait timeout >> "%LOG%" & goto ready)',
+        "ping -n 2 127.0.0.1 >nul",
+        "goto wait",
+        ":ready",
+        'if exist "%TGT%" copy /y "%TGT%" "%TGT%.bak" >nul',
+        'move /y "%NEW%" "%TGT%" >nul',
+        'if errorlevel 1 (echo [apply] replace failed >> "%LOG%" & exit /b 3)',
+        'echo [apply] %date% %time% replaced ok >> "%LOG%"',
+        'if not "%RES%"=="" if exist "%RES%" powershell -NoProfile -ExecutionPolicy Bypass '
+        '-Command "Expand-Archive -LiteralPath $env:RES -DestinationPath $env:APPDIR -Force" '
+        '>> "%LOG%" 2>&1',
+    ]
+    if relaunch:
+        lines.append('start "" "%TGT%"')
+    lines += ["ping -n 2 127.0.0.1 >nul", '(goto) 2>nul & del "%~f0"']
+    with open(bat, "w", encoding="utf-8", newline="") as f:
+        f.write("\r\n".join(lines) + "\r\n")
+    return bat
+
+
+def _quit_self() -> None:
+    """先关窗口（pywebview 要主线程收尾），再硬退：bat 里正等这个 PID 消失。"""
+    try:
+        import webview
+        for w in list(webview.windows):
+            try:
+                w.destroy()
+            except Exception:  # noqa: BLE001
+                pass
+    except Exception:  # noqa: BLE001
+        pass
+    time.sleep(0.6)
+    os._exit(0)
+
+
+def apply_update(asset: str = "exe") -> dict:
+    """把下好的包换上并重启。只接本机请求（局域网里的人不能替你重启程序）。"""
+    if UPD.get("state") != "done" or not os.path.isfile(str(UPD.get("path") or "")):
+        return {"ok": False, "error": "还没下好（当前状态：%s）" % UPD.get("state")}
+    target = app_exe()
+    if not os.path.isfile(target):
+        return {"ok": False, "error": "找不到要替换的程序：%s" % target}
+    res = os.environ.get("PLUMA_APPLY_RES", "")
+    bat = write_apply_bat(UPD["path"], target, res,
+                         relaunch=os.environ.get("PLUMA_NO_RELAUNCH") != "1")
+    # 不能用 DETACHED_PROCESS：doteached 进程没有控制台，cmd 里的 tasklist | find 会挂死
+    # （实测：日志只写到 start 就不动，等满两分钟也不换文件）。CREATE_NO_WINDOW 有控制台但隐藏。
+    subprocess.Popen(["cmd", "/c", bat], cwd=UPDATE_DIR, close_fds=True,
+                     stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                     stderr=subprocess.DEVNULL, creationflags=0x08000000)
+    threading.Timer(1.2, _quit_self).start()
+    return {"ok": True, "restart": True, "target": target, "bat": bat,
+            "from": UPD["path"], "ver": UPD.get("ver")}
+
 
 
 class _WinApi:
