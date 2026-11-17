@@ -768,7 +768,12 @@ def save_notes(code: str, notes: list, doc: str = "") -> int:
 
 # ---------- 主机上线 ----------
 def lan_ip() -> str:
-    """拿本机在局域网里的地址（不发包：连一个不可达地址只为读路由表）。"""
+    """拿本机在局域网里的地址（不发包：连一个不可达地址只为读路由表）。
+
+    2026-11-17：探测用的不可达地址从内网网段改成 RFC 5737 的 TEST-NET-1（192.0.2.1）——
+    两者都不可路由，语义一模一样；区别是内网地址会被公开仓的敏感扫描当成泄露
+    （public-scan / R98 红线），换掉之后历史与当前文件都不再带内网串。
+    """
     import socket
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
