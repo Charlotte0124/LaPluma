@@ -1,5 +1,9 @@
 <div align="center">
 
+# 羽毛笔 La Pluma
+
+**把备课数据渲染成可核对、可复现的讲义 PDF**（Windows 单文件 exe，无需 Python）
+
 <img src="docs/资产/产品介绍图.png" alt="羽毛笔 La Pluma · 把备课数据渲染成可核对的讲义 PDF" width="100%">
 
 <br><br>
@@ -24,6 +28,7 @@
 <div align="center">
 
 ![license](https://img.shields.io/badge/license-MIT-171714?style=flat-square)
+![content](https://img.shields.io/badge/示例内容-CC_BY--NC_4.0-171714?style=flat-square)
 ![python](https://img.shields.io/badge/python-3.12-171714?style=flat-square)
 ![version](https://img.shields.io/badge/version-1.9.3-171714?style=flat-square)
 ![gates](https://img.shields.io/badge/三道门-绿才出门-C8202C?style=flat-square)
@@ -172,7 +177,20 @@ python engine\_make.py L01
 - **生成**（分页二）：选择课程与讲次（可多选）→ 确认免责声明 → 开始；任务进入队列（可逐项取消），成功后自动移除，失败标红
 - **上线**（分页四）：一键上线 → 局域网地址 + 8 位访问码；数据全部留在本机
 - **设置**：模型版本（4.1 两档）、API 密钥、保存目录、账户余额、累计 token 与估算花费
+- **许可**：代码 MIT · 示例内容与截图 CC BY-NC 4.0（不可商用）· 文档正文 CC BY 4.0 · 名称与图标保留权利，边界见 [`NOTICE.md`](NOTICE.md)
 - **界面改动流程**：尚未实现的稿件在 [`docs/预览`](docs/预览/README.md)；修改 `ui\` 后需运行 `python tools\check\check-ui-preview.py`
+
+## 功能
+
+| 要做什么 | 点哪里 | 出来什么 |
+|:--|:--|:--|
+| 出一讲或多讲的讲义 PDF | 「生成」页勾讲次 → 开始生成 | 单本 PDF；三道门有红项则不产出 |
+| 把自己的课件放进软件 | 「生成」页「＋ 导入课件」，或将 PDF 拖入窗口 | 存到 `00_原件\`，并自动建一讲占位数据 |
+| 看这一门有哪些成品 | 课程页点卡片 | 右侧抽屉分「原件 / 成品」两段，点开即读 |
+| 一边读一边记、把笔记并进 PDF | 阅读页右侧栏 | 笔记存本机；导出为附页副本，不改动原件 |
+| 问这一门的内容 | 抽屉底部「提问本课程」 | 回答带 §节号与课件页码，命中片段可展开核对 |
+| 导到平板 / 手机看 | 「上线」页「一键上线」 | 局域网地址 + 8 位访问码；数据不离本机 |
+| 删掉不要的讲次 / 课件 / 整门课 | 讲次区「删除」· 卡片「删除」· 抽屉行「删除」 | 移入 `_trash` 可取回；队列项也能逐项取消 |
 
 ## 一条命令
 
@@ -272,6 +290,16 @@ courses.json       课程元数据（标题 / 说明 / 读者口径）
 
 ## 许可与免责
 
-本项目采用 **MIT** 许可，见 [LICENSE](LICENSE)：可自由使用、修改、二次分发与商用，保留版权声明与许可文本即可；作者不对因使用产生的损失负责。
+分三层，按资产类型定，不是一个许可盖全部（详细边界见 [NOTICE.md](NOTICE.md)）：
+
+| 范围 | 许可 | 可否商用 |
+|:--|:--|:--|
+| 代码（`ui/` `engine/` `tools/` `api/` `paths.py` `courses.json`） | [MIT](LICENSE) | 可以 |
+| 示例内容与截图（`DEMO/`、`docs/资产/`、`docs/预览/` 的图） | [CC BY-NC 4.0](LICENSE-CONTENT.md) | **不可以** |
+| 文档正文（`docs/` 下的 Markdown） | [CC BY 4.0](LICENSE-DOCS.md) | 可以（署名即可） |
+
+名称「羽毛笔 / La Pluma」、图标与产品标识**保留所有权利**；MIT 只授权代码，不授权名称与标识。
+
+作者不对因使用产生的损失负责。
 
 **本内容由 AI 生成，请自行核实重要信息。** 页脚标识不可关闭。

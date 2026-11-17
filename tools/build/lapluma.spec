@@ -23,6 +23,12 @@ datas = [
     (os.path.join(ROOT, "assets"), "assets"),
     (os.path.join(ROOT, "courses.json"), "."),
     (os.path.join(ROOT, "paths.py"), "."),
+    # 2026-11-17：许可分层落地——分发件必须带版权与许可声明（MIT 的要求）。
+    # 四个文件打到 _MEIPASS 根目录，界面的「设置」页底部也能读出路径供用户查看。
+    (os.path.join(ROOT, "LICENSE"), "."),
+    (os.path.join(ROOT, "NOTICE.md"), "."),
+    (os.path.join(ROOT, "LICENSE-CONTENT.md"), "."),
+    (os.path.join(ROOT, "LICENSE-DOCS.md"), "."),
 ]
 # pywebview 自带 js/css，不带就会白窗口
 for src, dst in collect_data_files("webview"):
