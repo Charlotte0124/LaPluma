@@ -11,7 +11,7 @@
                     退出后替换并重启，全程不打开浏览器。
     渠道 B（github）Release API → 只给页面与改了什么，点「去看看」走浏览器。
 
-查十项（全部在临时目录里造，不动真实 dist\\ 与 %USERPROFILE%\\.pluma）：
+查十一项（全部在临时目录里造，不动真实 dist\\ 与 %USERPROFILE%\\.pluma）：
   1 清单解析：schema / latest / notes / assets(exe) 都读得出来，且认得出「有新版」
   2 下载校验：真下载一个假包，字节数与 sha256 都对得上，落在 update\\v<版本>\\ 下
   3 资源包与本体：先下本体再下资源包，换上去的仍是本体且 zip 真解压
@@ -359,6 +359,31 @@ def run_checks(raise_on_fail: bool = False) -> int:
              "ui\\server.py 里没找到本机判定")
         red += 0 if ok else 1
 
+        # --- 多源取高版本：CDN 可能缓存旧清单，实测 jsDelivr 给 1.9.5 而 raw 已 1.9.7 ---
+        old_feed = dict(feed, latest="1.9.0", title="v1.9.0 · 旧缓存", assets={})
+        open(os.path.join(pub, "feed_old.json"), "w", encoding="utf-8").write(
+            json.dumps(old_feed, ensure_ascii=False))
+        port5 = free_port()
+        base5 = "http://127.0.0.1:%d" % port5
+        app5 = start_app(port5, {"PLUMA_HOME": os.path.join(tmp, "home5"),
+                                 "PLUMA_FEED_URLS": pub_base + "/feed_old.json," + pub_base + "/feed.json"},
+                         os.path.join(tmp, "app5.log"))
+        try:
+            if wait_up(base5):
+                u5 = http_json(base5 + "/api/update?force=1")
+                ok5 = str(u5.get("latest")) == "9.9.9"
+                note(ok5, "多源取高版本（旧缓存源写在前面也不会把用户降到旧版）",
+                     "latest=%s" % u5.get("latest"))
+                red += 0 if ok5 else 1
+            else:
+                note(False, "多源取高版本：第五个服务没起来")
+                red += 1
+        finally:
+            try:
+                app5.terminate()
+            except Exception:  # noqa: BLE001
+                pass
+
         # --- 8 中文路径：apply.bat 必须先 chcp 65001，否则中文目录被 GBK 读成乱码
         #   （上面 target 已放在「应用目录」下，能换上就算过一半；这里再从源码确认有 chcp，
         #     否则英文路径下能过、中文路径下静默失败）
@@ -416,7 +441,7 @@ def main() -> int:
     if red:
         print("\n结论：%d 条红" % red)
         return 1
-    print("\n结论：十项全绿")
+    print("\n结论：十一项全绿")
     return 0
 
 

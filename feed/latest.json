@@ -1,28 +1,28 @@
 {
   "schema": "lapluma-feed-v1",
   "product": "LaPluma",
-  "latest": "1.9.7",
-  "title": "v1.9.7 · 修「先下本体再下资源包」时把资源包当成程序换上的严重 b",
+  "latest": "1.9.8",
+  "title": "v1.9.8 · 修「CDN 缓存旧清单把用户降回旧版」的问题",
   "released": "2026-11-17",
-  "summary": "修「先下本体再下资源包」时把资源包当成程序换上的严重 bug；更新的每一步都能复验",
+  "summary": "修「CDN 缓存旧清单把用户降回旧版」的问题；更新源多个时一律取版本号最高的",
   "notes": [
-    "修一个真机才能揭出来的 bug：v1.9.6 里先下本体、再下资源包，两次下载共用同一个「刚下好的文件」记录，资源包把本体那条覆盖了——于是点完更新，被换上去的是资源包（zip）而不是程序，程序会开不",
-    "判据补上了这个场景：check-update.py 现在按真机顺序（下本体 → 下资源包 → 安装）跑，断言换上去的字节数等于本体、且资源包里的文件真被解压到程序目录"
+    "修一个会把人降级的问题：自建清单有两个源（raw 与 jsDelivr），以前「谁先回用谁」",
+    "判据加一项（十项 → 十一项）：故意把一个旧版本清单放在源列表前面，断言返回的仍是最高的那个"
   ],
-  "page": "https://github.com/Charlotte0124/LaPluma/releases/tag/v1.9.7",
+  "page": "https://github.com/Charlotte0124/LaPluma/releases/tag/v1.9.8",
   "assets": {
     "exe": {
-      "url": "https://github.com/Charlotte0124/LaPluma/releases/download/v1.9.7/LaPluma.exe",
-      "size": 119625349,
-      "sha256": "54875233dd297aabfdc11b73a982afcb693b7e08d6414665e41b136261543781",
+      "url": "https://github.com/Charlotte0124/LaPluma/releases/download/v1.9.8/LaPluma.exe",
+      "size": 119629730,
+      "sha256": "647055ba2517eedcaaa5fa3db67866720dad56364455a58ba75084b66fc46184",
       "name": "LaPluma.exe"
     },
     "res": {
-      "url": "https://github.com/Charlotte0124/LaPluma/releases/download/v1.9.7/LaPluma-res.zip",
+      "url": "https://github.com/Charlotte0124/LaPluma/releases/download/v1.9.8/LaPluma-res.zip",
       "size": 6025500,
       "sha256": "7afc70fb3db7f9ee78896c421e19c7f2a2b5dc57875dde1bbefa5f6e5e9ef93f",
       "name": "LaPluma-res.zip"
     }
   },
-  "_generated": "2026-11-17 13:40:50"
+  "_generated": "2026-11-17 13:55:51"
 }

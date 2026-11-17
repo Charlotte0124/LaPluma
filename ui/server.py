@@ -78,7 +78,7 @@ HOST, PORT = "127.0.0.1", 8765
 #   每次打开/刷新阅读器都全量重传（本机无感，平板走 WiFi 明显）。
 #   index.html 必须仍走 no-store（改完界面要能立刻看到新版）。
 _STATIC_ETAG = {}
-VERSION = "1.9.7"
+VERSION = "1.9.8"
 APP_NAME = "羽毛笔 La Pluma"
 
 
@@ -1993,8 +1993,12 @@ def _norm_assets(raw) -> dict:
 
 
 def _fetch_feed() -> dict:
-    """读自建清单（多源依次试：raw → jsDelivr）——有一个通就够。"""
-    last = None
+    """读自建清单（多源依次试），**取版本号最高的那个**。
+
+    为什么不是「第一个成功就返回」：CDN 会缓存旧清单（实测 jsDelivr 当时还给 1.9.5，
+    而 raw 已是 1.9.7）——谁先到用谁，就可能把用户降到旧版。现在两个源都读，取高者。
+    """
+    best, errs = None, []
     for url in FEED_URLS:
         try:
             req = urllib.request.Request(url, headers={
@@ -2007,16 +2011,24 @@ def _fetch_feed() -> dict:
             if not latest:
                 raise ValueError("清单缺 latest")
             assets = _norm_assets(body.get("assets"))
-            return {"ok": True, "channel": "feed", "current": VERSION, "latest": latest,
+            cand = {"ok": True, "channel": "feed", "current": VERSION, "latest": latest,
                     "newer": _ver_num(latest) > _ver_num(VERSION),
                     "title": str(body.get("title") or ("v" + latest)),
                     "summary": str(body.get("summary") or ""),
                     "notes": [str(x) for x in (body.get("notes") or []) if str(x).strip()][:6],
                     "url": str(body.get("page") or ""), "assets": assets,
                     "checked": time.strftime("%Y-%m-%d %H:%M"), "source": url}
+            if best is None or _ver_num(latest) > _ver_num(best["latest"]):
+                if best is not None:
+                    cand["stale_sources"] = [best["source"]]
+                best = cand
+            elif best is not None:
+                best.setdefault("stale_sources", []).append(url)
         except Exception as e:  # noqa: BLE001
-            last = e
-    raise RuntimeError("清单都不通（%s）" % (last.__class__.__name__ if last else "没配源"))
+            errs.append("%s（%s）" % (e.__class__.__name__, url.split("/")[2] if "://" in url else url))
+    if best is None:
+        raise RuntimeError("清单都不通（%s）" % ("; ".join(errs) or "没配源"))
+    return best
 
 
 def _fetch_github() -> dict:
