@@ -1292,7 +1292,15 @@ def run_window(url: str) -> int:
     import webview
     webview.create_window("%s v%s" % (APP_NAME, VERSION), url,
                           width=1280, height=880, min_size=(980, 640))
-    webview.start()
+    # 2026-11-17 用户：「为什么我本地的软件的图标还是一样的」——
+    #   pywebview 的 winforms 后端只有在 start(icon=...) 传了图标时才用自定义图标，
+    #   不传就取 sys.executable 的图标 → 从源码跑时窗口与任务栏一直是 python.exe 的蓝黄头像。
+    #   这里显式指定 assets\lapluma.ico（源码时在仓根，exe 时在 _MEIPASS）。
+    ico = paths.res("assets", "lapluma.ico")
+    if os.path.isfile(ico):
+        webview.start(icon=ico)
+    else:
+        webview.start()
     return 0
 
 

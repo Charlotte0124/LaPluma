@@ -11,6 +11,7 @@
 - **默认值不再露本机路径**：输入框只显示相对路径，下面一行写「当前指向：out（相对软件目录）」；选了绝对路径才显示绝对路径
 - **按钮不再歪**：第一版用 flex + stretch，按钮被自己 52px 的高撑到比输入框（40px）高，而且被 `.dlg input` 的 `margin-bottom:12px` 挤低 6px。改成 grid 两列 + 两边显式 40px，实测 top 差 0.08px、高度差 0.1px
 - **填绝对路径真的生效了（修 bug）**：旧逻辑把 `F:\某处` 的首段当相对目录去找，永远判「不存在」→ 静默退回默认目录，于是「选了也白选」。现在绝对路径只看它自己存不存在。实测：写到 `%TEMP%\pl-abs-out`，生成 2.3 s，目标目录出现 1,304,263 字节 PDF；默认 `out` 也实测过（2.2 s → `out\D01_…pdf` 1,304,263 字节）
+- **窗口与任务栏的图标也换了（真因）**：pywebview 的 winforms 后端只在 `start(icon=...)` 传了图标时用它，不传就取 `sys.executable` 的图标——所以**从源码运行时，窗口和任务栏一直是 python.exe 的蓝黄头像**（用户：「为什么我本地的软件的图标还是一样的」）。现在显式传 `assets\lapluma.ico`。实测：改前窗口图标 = Python logo 40×40，改后 = 深墨圆角白羽 32×32
 - **标签页图标**：`/favicon.ico` 以前回 204（空），现在给 `assets\lapluma.ico`；`index.html` / `access.html` 的 `<link rel="icon" href="data:,">` 换成真图标。`assets` 已加进打包 datas，exe 里也能用
 - **向导会自检依赖**：`/api/bootstrap` 新增 `deps`（Python 版本 / pymupdf / 是否 exe）。源码版缺 `pymupdf` 时向导顶部出红条，指向 `docs\使用\07-装依赖-用CMD.md`；exe 里不提示
 - **一键启动三件事**：查 Python（要 3.12，低于 3.10 拦下）→ 缺 `pymupdf` 自动装 → 起界面；装不上时直接打印三步 CMD 命令。新增 `一键启动.bat`（双击 `.ps1` 默认会被记事本打开，这是「双击打不开」的一个真因）；重定向日志时强制 UTF-8，中文不再乱码
