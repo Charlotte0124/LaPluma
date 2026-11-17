@@ -1,28 +1,28 @@
 {
   "schema": "lapluma-feed-v1",
   "product": "LaPluma",
-  "latest": "1.9.8",
-  "title": "v1.9.8 · 修「CDN 缓存旧清单把用户降回旧版」的问题",
+  "latest": "1.9.9",
+  "title": "v1.9.9 · 更新源从 2 个变 4 个并并行读取，发版后能立刻拿到新",
   "released": "2026-11-17",
-  "summary": "修「CDN 缓存旧清单把用户降回旧版」的问题；更新源多个时一律取版本号最高的",
+  "summary": "更新源从 2 个变 4 个并并行读取，发版后能立刻拿到新版，不会因为某个 CDN 缓存被降级",
   "notes": [
-    "修一个会把人降级的问题：自建清单有两个源（raw 与 jsDelivr），以前「谁先回用谁」",
-    "判据加一项（十项 → 十一项）：故意把一个旧版本清单放在源列表前面，断言返回的仍是最高的那个"
+    "更新源加到四个、并行读：raw 与 jsDelivr 之外再加 githack 与 statically",
+    "代价说清楚：每次检查更新最多 4 个 HTTP 请求（并发），比原来多，但单次就零点几秒"
   ],
-  "page": "https://github.com/Charlotte0124/LaPluma/releases/tag/v1.9.8",
+  "page": "https://github.com/Charlotte0124/LaPluma/releases/tag/v1.9.9",
   "assets": {
     "exe": {
-      "url": "https://github.com/Charlotte0124/LaPluma/releases/download/v1.9.8/LaPluma.exe",
-      "size": 119629730,
-      "sha256": "647055ba2517eedcaaa5fa3db67866720dad56364455a58ba75084b66fc46184",
+      "url": "https://github.com/Charlotte0124/LaPluma/releases/download/v1.9.9/LaPluma.exe",
+      "size": 119631354,
+      "sha256": "878b324f95b8a3dfc2904b5950d037c5ba18dd6eff1ece65dfdf0505457f5c5a",
       "name": "LaPluma.exe"
     },
     "res": {
-      "url": "https://github.com/Charlotte0124/LaPluma/releases/download/v1.9.8/LaPluma-res.zip",
+      "url": "https://github.com/Charlotte0124/LaPluma/releases/download/v1.9.9/LaPluma-res.zip",
       "size": 6025500,
       "sha256": "7afc70fb3db7f9ee78896c421e19c7f2a2b5dc57875dde1bbefa5f6e5e9ef93f",
       "name": "LaPluma-res.zip"
     }
   },
-  "_generated": "2026-11-17 13:55:51"
+  "_generated": "2026-11-17 13:59:38"
 }

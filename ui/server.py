@@ -78,7 +78,7 @@ HOST, PORT = "127.0.0.1", 8765
 #   每次打开/刷新阅读器都全量重传（本机无感，平板走 WiFi 明显）。
 #   index.html 必须仍走 no-store（改完界面要能立刻看到新版）。
 _STATIC_ETAG = {}
-VERSION = "1.9.8"
+VERSION = "1.9.9"
 APP_NAME = "羽毛笔 La Pluma"
 
 
@@ -1941,9 +1941,13 @@ def _ver_num(s: str) -> tuple:
 # 用户原话：「看看有没有在线更新的方法 而不用跳转到 github（…直接一步跳转通过 CMD 下载）」
 #   「以后更新是要分资源包和 exe 本体了」——所以清单里 assets 分 exe / res 两类。
 FEED_SCHEMA = "lapluma-feed-v1"
+# 2026-11-17：四个源。实测 raw 发版后能拿旧值十几分钟（CDN 缓存），而 githack / statically
+#   立刻就是新的——多源取高版本正好治这个。顺序只影响延迟，不影响正确性。
 FEED_URLS = [u.strip() for u in (
     os.environ.get("PLUMA_FEED_URLS") or os.environ.get("PLUMA_FEED_URL") or
     "https://raw.githubusercontent.com/Charlotte0124/LaPluma/main/feed/latest.json,"
+    "https://raw.githack.com/Charlotte0124/LaPluma/main/feed/latest.json,"
+    "https://cdn.statically.io/gh/Charlotte0124/LaPluma/main/feed/latest.json,"
     "https://cdn.jsdelivr.net/gh/Charlotte0124/LaPluma@main/feed/latest.json"
 ).split(",") if u.strip()]
 UPDATE_DIR = os.path.join(USER_DIR, "update")
@@ -1992,40 +1996,54 @@ def _norm_assets(raw) -> dict:
     return out
 
 
-def _fetch_feed() -> dict:
-    """读自建清单（多源依次试），**取版本号最高的那个**。
+def _try_feed(url: str) -> dict:
+    """读单个源；成功返回候选字典，失败抛异常（调用方收集）。"""
+    req = urllib.request.Request(url, headers={
+        "User-Agent": "LaPluma/%s" % VERSION, "Cache-Control": "no-cache"})
+    with urllib.request.urlopen(req, timeout=6) as r:
+        body = json.loads(r.read().decode("utf-8-sig"))
+    if str(body.get("schema") or "") != FEED_SCHEMA:
+        raise ValueError("清单格式不对（schema=%r）" % body.get("schema"))
+    latest = str(body.get("latest") or "").lstrip("vV")
+    if not latest:
+        raise ValueError("清单缺 latest")
+    return {"ok": True, "channel": "feed", "current": VERSION, "latest": latest,
+            "newer": _ver_num(latest) > _ver_num(VERSION),
+            "title": str(body.get("title") or ("v" + latest)),
+            "summary": str(body.get("summary") or ""),
+            "notes": [str(x) for x in (body.get("notes") or []) if str(x).strip()][:6],
+            "url": str(body.get("page") or ""), "assets": _norm_assets(body.get("assets")),
+            "checked": time.strftime("%Y-%m-%d %H:%M"), "source": url}
 
-    为什么不是「第一个成功就返回」：CDN 会缓存旧清单（实测 jsDelivr 当时还给 1.9.5，
-    而 raw 已是 1.9.7）——谁先到用谁，就可能把用户降到旧版。现在两个源都读，取高者。
+
+def _fetch_feed() -> dict:
+    """读自建清单（多源**并发**读），取版本号最高的那个。
+
+    为什么不是「第一个成功就返回」：CDN 会缓存旧清单（2026-11-17 实测：raw 还给 1.9.7、
+    jsDelivr 还给 1.9.5，而 githack / statically 已经是 1.9.8）——谁先到用谁，就可能把用户降级。
+    为什么并发：四个源串行最坏 24 秒；并发也就一次往返（实测 ~0.6 s）。
     """
+    from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError as FTimeout
+
     best, errs = None, []
-    for url in FEED_URLS:
+    with ThreadPoolExecutor(max_workers=min(4, max(1, len(FEED_URLS)))) as ex:
+        futs = {ex.submit(_try_feed, u): u for u in FEED_URLS}
         try:
-            req = urllib.request.Request(url, headers={
-                "User-Agent": "LaPluma/%s" % VERSION, "Cache-Control": "no-cache"})
-            with urllib.request.urlopen(req, timeout=5) as r:
-                body = json.loads(r.read().decode("utf-8-sig"))
-            if str(body.get("schema") or "") != FEED_SCHEMA:
-                raise ValueError("清单格式不对（schema=%r）" % body.get("schema"))
-            latest = str(body.get("latest") or "").lstrip("vV")
-            if not latest:
-                raise ValueError("清单缺 latest")
-            assets = _norm_assets(body.get("assets"))
-            cand = {"ok": True, "channel": "feed", "current": VERSION, "latest": latest,
-                    "newer": _ver_num(latest) > _ver_num(VERSION),
-                    "title": str(body.get("title") or ("v" + latest)),
-                    "summary": str(body.get("summary") or ""),
-                    "notes": [str(x) for x in (body.get("notes") or []) if str(x).strip()][:6],
-                    "url": str(body.get("page") or ""), "assets": assets,
-                    "checked": time.strftime("%Y-%m-%d %H:%M"), "source": url}
-            if best is None or _ver_num(latest) > _ver_num(best["latest"]):
-                if best is not None:
-                    cand["stale_sources"] = [best["source"]]
-                best = cand
-            elif best is not None:
-                best.setdefault("stale_sources", []).append(url)
-        except Exception as e:  # noqa: BLE001
-            errs.append("%s（%s）" % (e.__class__.__name__, url.split("/")[2] if "://" in url else url))
+            for fut in as_completed(futs, timeout=10):   # 按完成先后取，总等待封顶 10 s
+                url = futs[fut]
+                try:
+                    cand = fut.result()
+                except Exception as e:  # noqa: BLE001
+                    errs.append("%s（%s）" % (e.__class__.__name__, url.split("/")[2]))
+                    continue
+                if best is None or _ver_num(cand["latest"]) > _ver_num(best["latest"]):
+                    if best is not None:
+                        cand.setdefault("stale_sources", []).append(best["source"])
+                    best = cand
+                else:
+                    best.setdefault("stale_sources", []).append(url)
+        except FTimeout:
+            errs.append("总超时")
     if best is None:
         raise RuntimeError("清单都不通（%s）" % ("; ".join(errs) or "没配源"))
     return best
