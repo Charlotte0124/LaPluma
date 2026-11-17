@@ -214,8 +214,9 @@ def t_update_parse():
                    "body": "<!-- 摘要：测试摘要一行 -->\n- **修** 了某处；细节很长\n* 加了某功能。\n",
                    "html_url": "https://example.invalid/r"}, f, ensure_ascii=False)
     srv.UPDATE_API = "file:///" + feed.replace("\\", "/")
+    srv.FEED_URLS = []          # 2026-11-17：现在先试 feed 源，这条只测 GitHub 渠道的解析
     srv.UPDATE_CACHE = os.path.join(TMP, "upd.json")
-    got = srv.check_update(force=True)
+    got = srv.check_update(force=True, channel="github")
     ok = (got.get("ok") and got.get("newer") is True and got.get("latest") == "9.9.9"
           and got.get("summary") == "测试摘要一行" and len(got.get("notes") or []) >= 2)
     return (bool(ok), "latest=%s newer=%s summary=%r notes=%d"
@@ -227,6 +228,7 @@ def t_update_offline():
     import importlib
     srv = importlib.import_module("server")
     srv.UPDATE_API = "http://127.0.0.1:1/none"     # 必然连不上
+    srv.FEED_URLS = ["http://127.0.0.1:1/none.json"]   # 两条渠道都不通，才能验「不打扰用户」
     srv.UPDATE_CACHE = os.path.join(TMP, "upd2.json")
     t0 = time.time()
     got = srv.check_update(force=True)
