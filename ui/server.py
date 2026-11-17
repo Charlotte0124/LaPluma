@@ -537,6 +537,166 @@ def pick_files(initial: str = "") -> list:
         raise RuntimeError("弹不出文件选择框：%s" % e) from e
 
 
+def _stub_lesson_no(orig_name: str, taken: set) -> str:
+    """从原件文件名取讲号：`Tutorial 02 - xxx.pdf` → `T02`；取不到数字就 T01。"""
+    m = re.search(r"(\d{1,2})", orig_name)
+    n = int(m.group(1)) if m else 0
+    base = ("T%02d" % n) if n else "T01"
+    no, i = base, 2
+    while no in taken:
+        no = "%s-%d" % (base, i)
+        i += 1
+    return no
+
+
+def _pylit(v, ind: int = 0) -> str:
+    """把 dict / list 写成 Python 字面量。
+
+    为什么要自己写而不用 json.dumps：引擎里有 `'…%s…%s…%s…%s…' % row` 这种写法，
+    `%` 只对 **tuple** 展开——JSON 写出来是 list，会被当成单个值，报 not enough arguments。
+    所以「全标量的一行」统一写成 tuple。
+    """
+    pad = " " * ind
+    if isinstance(v, dict):
+        if not v:
+            return "{}"
+        items = []
+        for k, x in v.items():
+            items.append('%s    %s: %s' % (pad, json.dumps(str(k), ensure_ascii=False), _pylit(x, ind + 4)))
+        return "{\n" + ",\n".join(items) + "\n" + pad + "}"
+    if isinstance(v, (list, tuple)):
+        if not v:
+            return "()" if isinstance(v, tuple) else "[]"
+        if all(not isinstance(x, (dict, list, tuple)) for x in v):
+            body = ", ".join(_pylit(x, 0) for x in v)
+            return "(" + body + ("," if len(v) == 1 else "") + ")"
+        inner = ",\n".join(pad + "    " + _pylit(x, ind + 4) for x in v)
+        return "[\n" + inner + ",\n" + pad + "]"
+    if isinstance(v, str):
+        return json.dumps(v, ensure_ascii=False)
+    return json.dumps(v)
+
+
+def make_stub_lesson(course: str, orig_name: str) -> dict:
+    """导入原件后顺手建一讲**骨架**，让它立即出现在「要生成的讲次」里。
+
+    2026-11-17 用户：「是导入课件 和 拖动之后 要生成的批次 都没有自动更新」——
+    讲次原本只来自手写的 _lessons/<讲号>.py，所以导进来的 PDF 永远看不到。现在导入时补一份骨架：
+    结构齐全、能过三道门、能出 PDF，但正文只有提示，要真内容得自己（或让模型）补。
+
+    重复导入同一份原件不会再造一讲（按文件里的 stub-from 标记认）。
+    """
+    course = _safe_code(course)
+    les_dir = os.path.join(ROOT, course, "_lessons")
+    os.makedirs(les_dir, exist_ok=True)
+    tag = "stub-from: %s/%s" % (ORIG_DIR, orig_name)
+    taken = set()
+    for fn in os.listdir(les_dir):
+        if not fn.endswith(".py"):
+            continue
+        taken.add(fn[:-3])
+        try:
+            with open(os.path.join(les_dir, fn), "r", encoding="utf-8") as f:
+                if tag in f.read():
+                    return {"no": fn[:-3], "made": False, "reason": "already"}
+        except Exception:  # noqa: BLE001
+            pass
+    no = _stub_lesson_no(orig_name, taken)
+    title = os.path.splitext(orig_name)[0]
+    out_pdf = "%s_%s_讲义.pdf" % (no, title)
+    data = {
+        "code": course, "no": no, "zh": title, "en": "",
+        "out": out_pdf,
+        "sub": "原件导入占位 · 正文待补",
+        "meta": [["源课件", "%s/%s" % (ORIG_DIR, orig_name)], ["状态", "占位：正文未补"]],
+        "sections": [{
+            "no": "0", "zh": "本讲导读", "en": "Read Me First",
+            "lec": "这一讲是从原件自动建的占位：结构齐全、能过三道门、能出 PDF；正文内容还没补。",
+            "body": [
+                ["p", "<b>这一讲是什么。</b>原件 <code>%s</code> 已导入本课，这个文件是它的讲义骨架。" % orig_name],
+                ["p", "<b>怎么补。</b>改本文件的 <code>sections</code>，把课件内容整理成节；改完重跑 <code>python engine\\_make.py %s</code>。" % no],
+                ["p", "<b>引用怎么写。</b>每条引文都要标原件页码，形如 <code>课件 p.1</code>（本句就是格式示例，版式门会查）。"],
+                ["code", "text",
+                 "原件：%s\\%s\\%s\n数据：%s\\_lessons\\%s.py\n生成：python engine\\_make.py %s" % (course, ORIG_DIR, orig_name, course, no, no),
+                 "一条命令就能出 PDF"],
+            ],
+        }],
+        "tail": [],
+        "summary": {
+            "no": "1", "zh": "本讲小结", "en": "Takeaways",
+            "lec": "占位讲次：先把流水线跑通，再往里填内容。",
+            "head": ["要做什么", "在哪做", "怎么验"],
+            "head_widths": ["30%", "42%", "28%"],
+            "rows": [
+                ["读完原件", "把 PDF 里的一节读一遍", "能复述这一节讲什么"],
+                ["写成节", "改本文件的 sections", "节数 ≥ 1，每节有 code 或 eg"],
+                ["重跑", "python engine\\_make.py %s" % no, "输出里是 OK 不是 FAIL"],
+            ],
+            "tail": "这一讲目前是骨架：结构齐、能过门、能出 PDF，但正文是提示语。",
+        },
+        "glossary": {
+            "no": "2", "zh": "术语表", "en": "Glossary",
+            "lec": "占位讲次的术语表：先把流水线自己的词列全（回看 §0），补内容时把课件里的词加进来。",
+            "rows": [
+                ["占位讲次", "stub lesson", "本讲 §0", "导入原件时自动建的骨架，正文待补"],
+                ["原件", "original", "本讲 §0", "导入到 00_原件 的源课件 PDF"],
+                ["讲义数据", "lesson data", "本讲 §0", "_lessons\\<讲号>.py 里的 LESSON"],
+                ["讲号", "lesson code", "本讲 §0", "如 T05；由原件文件名里的数字推出来"],
+                ["课程代码", "course code", "本讲 §0", "仓根下的目录名，如 CS340"],
+                ["节", "section", "本讲 §0", "sections 里的一项，一页一节"],
+                ["块", "block", "本讲 §0", "body 里的一条（p / code / eg / table / svg / q）"],
+                ["内容门", "content gate", "本讲 §1", "逐节查代码 / 例题 / 术语 / 定位标注"],
+                ["版式门", "layout gate", "本讲 §1", "逐页查首行是不是标题 / 表格 / 图"],
+                ["定位标注", "citation anchor", "本讲 §1", "页码 / §号 / 时间戳 / 行号，用来回查"],
+                ["术语附英", "term with English", "本讲 §2", "术语首次出现时带括号英文"],
+                ["自测", "self-check", "本讲 §4", "3–8 题，答案带「回看 §x」"],
+                ["附录", "appendix", "本讲 §3", "符号表与常见误解"],
+                ["渲染", "render", "本讲 §1", "数据 → HTML 的过程"],
+                ["讲义源", "source html", "本讲 §1", "渲染出来、交给无头浏览器打 PDF 的那个 HTML"],
+                ["无头浏览器", "headless browser", "本讲 §1", "不弹窗口的 Chrome/Edge"],
+                ["成品", "artifact", "本讲 §1", "跑完之后生成的 HTML / PDF"],
+                ["重跑", "rebuild", "本讲 §1", "同一份数据再跑一次"],
+                ["导入", "import", "本讲 §0", "把课件 PDF 放进 00_原件 并建下这一讲"],
+                ["骨架", "skeleton", "本讲 §0", "结构齐全、内容未补的数据文件"],
+                ["三道门", "three gates", "本讲 §1", "源 / 内容 / 版式，任一红即停"],
+            ],
+        },
+        "appendix": {
+            "no": "3", "zh": "附录", "en": "Appendix",
+            "lec": "本讲要补的常见误解放这里（回看 §0 的数据文件）。",
+            "symbols": [],
+            "myths_title": "常见误解",
+            "myths": [
+                "以为导入原件就等于写好了讲义：原件只是资料，讲义要自己（或让模型）把内容整理成节（本讲 §0）。",
+                "以为改 HTML 能成事：下次重跑就被盖掉，改的是 _lessons 里的数据（本讲 §1）。",
+            ],
+        },
+        "quiz": {
+            "no": "4", "zh": "自测", "en": "Self-check",
+            "lec": "三题都是「这一讲的东西在哪、怎么补」（回看 §0 与 §1）。",
+            "items": [
+                ["这一讲的正文在哪个文件里？",
+                 "答：<课程>\\_lessons\\%s.py 的 sections；原件在同课 00_原件。回看 §0。" % no],
+                ["补完内容后怎么出 PDF？",
+                 "答：python engine\\_make.py %s；红项不出货。回看 §1。" % no],
+                ["导入后为什么讲次列表里多了这一讲？",
+                 "答：导入原件时会同时建一份骨架数据，它只是占位，不写内容就只是这一页。回看 §0。"],
+            ],
+        },
+    }
+    head = (
+        "# -*- coding: utf-8 -*-\n"
+        '"""%s · %s（导入原件时自动建的骨架）\n\n'
+        "%s\n"
+        "正文只有提示；补内容就改下面 sections，然后 python engine\\_make.py %s\n"
+        '"""\n\n' % (no, title, tag, no)
+    )
+    path = os.path.join(les_dir, no + ".py")
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(head + "LESSON = " + _pylit(data, 0) + "\n")
+    return {"no": no, "made": True, "file": path, "title": title}
+
+
 def nat_key(name: str):
     """自然序（D2 在 D10 前）——与前端 sortFiles 同一口径，否则导出顺序会不一致。"""
     m = re.match(r"^([A-Za-z]*)(\d+)", name or "")
@@ -1198,8 +1358,17 @@ class Handler(BaseHTTPRequestHandler):
                             added.append(os.path.basename(dst))
                         except Exception as e:  # noqa: BLE001
                             skipped.append(name + "：%s" % e)
+                # 2026-11-17：导入同时建一讲骨架——用户要的是「导进来就能在要生成的批次里看到」
+                stubs = []
+                for nm in added:
+                    try:
+                        st = make_stub_lesson(code, nm)
+                        if st and st.get("made"):
+                            stubs.append(st["no"])
+                    except Exception as e:  # noqa: BLE001
+                        skipped.append("建讲次失败（%s）：%s" % (nm, e))
                 return self._json({"ok": bool(added), "course": code, "dir": d,
-                                   "added": added, "skipped": skipped,
+                                   "added": added, "skipped": skipped, "stubs": stubs,
                                    "files": list_originals(code)})
             if u.path == "/api/pick-dir":
                 # 选保存目录（原生文件夹对话框）。只接本机：平板端弹不出这台电脑的对话框，

@@ -1111,6 +1111,7 @@ async function afterImport(j, code){
   updateImpHint();
   if(jump) showPage('generate');
   let msg = '已导入 ' + (j.added||[]).length + ' 份 → ' + (j.dir||'');
+  if((j.stubs||[]).length) msg += '，并新增讲次 ' + j.stubs.join('、');
   if(!jump) msg += '（现在在' + whereAmI() + '，没有跳页）';
   toast(msg);
   if((j.skipped||[]).length) setTimeout(()=>toast('跳过：' + j.skipped.join('；')), 1600);
@@ -1192,7 +1193,7 @@ function syncLessons(){
   if(ogEl){
     if(ogN){
       ogEl.style.display = '';
-      ogEl.textContent = '另有 ' + ogN + ' 份原件（你导入的 PDF）。原件是资料，不会自动变成讲次——要出讲义，仍需 _lessons 里有这一讲的数据。';
+      ogEl.textContent = '另有 ' + ogN + ' 份原件（你导入的 PDF）。每导入一份会自动建一个占位讲次（正文待补）——改 <课程>\\_lessons\\<讲号>.py 里的 sections，重跑就能出 PDF。';
     } else { ogEl.style.display = 'none'; }
   }
   $('#lessonPick').querySelectorAll('[data-lsn]').forEach(b=>b.onclick=()=>{
