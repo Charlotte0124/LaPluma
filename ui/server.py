@@ -560,6 +560,19 @@ def discover_courses():
     return out
 
 
+def pdf_text_chars(pdf_path: str) -> int:
+    """PDF 文字层的字符数（去空白）。0 = 扫描件/图片，自动写正文不可用。
+
+    2026-11-19：导入预检与检查器共用这一条；不要再各写一份判断。
+    """
+    try:
+        import pymupdf
+        with pymupdf.open(pdf_path) as doc:
+            return sum(len((pg.get_text("text") or "").strip()) for pg in doc)
+    except Exception:  # noqa: BLE001
+        return -1
+
+
 def _pages(pdf_path: str) -> int:
     try:
         import pymupdf
@@ -1643,18 +1656,15 @@ class Handler(BaseHTTPRequestHandler):
                     except Exception as e:  # noqa: BLE001
                         skipped.append("建讲次失败（%s）：%s" % (nm, e))
                 # 2026-11-19：扫描件没有文字层，模型写不了正文——导入当场就说明，别等生成才失败
-                try:
-                    import pymupdf
-                    for nm in added:
-                        pdf = os.path.join(d, os.path.splitext(nm)[0] + ".pdf")
-                        if not os.path.isfile(pdf):
-                            continue
-                        with pymupdf.open(pdf) as doc:
-                            chars = sum(len((pg.get_text("text") or "").strip()) for pg in doc)
-                        if chars < 50:
-                            warnings.append("%s 没有文字层（扫描件/图片），自动写正文不可用；需要先 OCR 或手工补正文。" % nm)
-                except Exception as e:  # noqa: BLE001
-                    warnings.append("没查文字层：%r" % (e,))
+                for nm in added:
+                    pdf = os.path.join(d, os.path.splitext(nm)[0] + ".pdf")
+                    if not os.path.isfile(pdf):
+                        continue
+                    chars = pdf_text_chars(pdf)
+                    if 0 <= chars < 50:
+                        warnings.append("%s 没有文字层（扫描件/图片），自动写正文不可用；需要先 OCR 或手工补正文。" % nm)
+                    elif chars < 0:
+                        warnings.append("%s 文字层没查成（读不了 PDF）" % nm)
                 return self._json({"ok": bool(added), "course": code, "dir": d,
                                    "added": added, "converted": converted, "skipped": skipped,
                                    "stubs": stubs, "warnings": warnings,

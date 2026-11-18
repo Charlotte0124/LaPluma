@@ -54,4 +54,4 @@
 3. **渲染 / 内容门双闸**：`engine\_make.py` 见 `stub` 直接 `[停]`；内容门见「原件导入占位 / 正文待补」判红。
 4. **扫描件**（无文字层）导入时当场提示「自动写正文不可用」，不许等到生成才失败。
 
-**怎么验证它被执行**：`python tools\check\check-stub-guard.py` 必须 **2/2**；提交前由 `.githooks/pre-commit` 自动跑（连同 `check-ui-preview.py`），红了提交就被拦下。新克隆 `core.hooksPath` 不会跟着过来，先跑一次 `powershell -File tools\check\install-hooks.ps1`。
+**怎么验证它被执行**：`python tools\check\check-stub-guard.py` 必须 **4/4**；提交前由 `.githooks/pre-commit` 自动跑（连同 `check-ui-preview.py`），红了提交就被拦下。新克隆 `core.hooksPath` 不会跟着过来，先跑一次 `powershell -File tools\check\install-hooks.ps1`。
