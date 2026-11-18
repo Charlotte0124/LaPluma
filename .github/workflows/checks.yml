@@ -1,0 +1,25 @@
+name: checks
+
+# 2026-11-19：把「占位防护」与「界面预览」放到 push / PR 上。
+# 本地钩子只管本机提交；这一份管从别的机器、网页或 CI 进来的提交。
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  guard:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0        # check-ui-preview 要读最近提交
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: 安装 pymupdf（扫描件识别用）
+        run: python -m pip install --disable-pip-version-check pymupdf
+      - name: 占位防护 4/4
+        run: python -X utf8 tools/check/check-stub-guard.py
+      - name: 界面预览 0 红 0 黄
+        run: python -X utf8 tools/check/check-ui-preview.py
