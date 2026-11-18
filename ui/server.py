@@ -1785,6 +1785,9 @@ class Handler(BaseHTTPRequestHandler):
                 lang = "en" if str(body.get("lang") or "zh").lower().startswith("en") else "zh"
                 t0 = time.time()
                 if form == "book":
+                    if lang == "en":
+                        return self._json({"ok": False,
+                                           "error": "合订本暂只出全中；要英文版请用「单本」逐讲生成"}, 400)
                     # 合订本：默认全部讲，按讲号顺序（B 口径：去掉各讲封面与目录）
                     log, rc = _inproc("_book", [], course, "main")
                     copied = ""
