@@ -39,6 +39,12 @@
 - 写入类操作先落地再回查（有大小、有条数），不许只报「已写入」。
 
 
+## 四、署名
+
+- 作者只用 `Ryo <210612614+Charlotte0124@users.noreply.github.com>`。
+- 禁 `Co-authored-by`，禁任何 bot / AI / 工具署名。
+- 一个提交做一件事；上传前扫一遍密钥、本机路径、真实人名。
+
 ## 五、导入占位不许当成品（2026-11-19）
 
 用户实测：99 页课件导进来，点生成出 7 页「原件导入占位 · 正文待补」。根因不是排版，是**导入只建骨架、生成只渲染骨架**。以后按这四条做：
@@ -49,9 +55,3 @@
 4. **扫描件**（无文字层）导入时当场提示「自动写正文不可用」，不许等到生成才失败。
 
 **怎么验证它被执行**：`python tools\check\check-stub-guard.py` 必须 **2/2**；提交前由 `.githooks/pre-commit` 自动跑（连同 `check-ui-preview.py`），红了提交就被拦下。新克隆 `core.hooksPath` 不会跟着过来，先跑一次 `powershell -File tools\check\install-hooks.ps1`。
-
-## 四、署名
-
-- 作者只用 `Ryo <210612614+Charlotte0124@users.noreply.github.com>`。
-- 禁 `Co-authored-by`，禁任何 bot / AI / 工具署名。
-- 一个提交做一件事；上传前扫一遍密钥、本机路径、真实人名。
