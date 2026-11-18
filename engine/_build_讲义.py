@@ -258,16 +258,40 @@ def render_block(b):
     raise ValueError('unknown block: %r' % (kind,))
 
 
+# ── 语言档（2026-11-18）────────────────────────────────────────────────────────
+# 「全中」= 正文中文 + 术语每节首次附英文（原有口径）；「全英」= 正文英文 + 专有名称中文。
+# 固定件（目录 / 术语表 / 附录 / 自测 / 讲法）也按这一档切换，否则英文正文里会夹中文标题。
+LABELS = {
+    "zh": {"lec": "讲法。", "toc": "目录", "toc_sub": "CONTENTS",
+           "gloss": ["中文", "English", "页码", "备注"],
+           "sym": ["符号 / 缩写", "读法·含义", "出处"],
+           "myths": "常见误解"},
+    "en": {"lec": "How to use. ", "toc": "Contents", "toc_sub": "",
+           "gloss": ["English", "中文", "Page", "Note"],
+           "sym": ["Symbol / Abbreviation", "Meaning", "Source"],
+           "myths": "Common misconceptions"},
+}
+
+
+def _lang_of(lesson: dict) -> str:
+    return "en" if str(lesson.get("lang") or "zh").lower().startswith("en") else "zh"
+
+
 def build(lesson: dict) -> str:
     L = lesson
     code, no = L['code'], L['no']
+    lang = _lang_of(L)
+    lab = LABELS[lang]
     use_course(code)
     out = []
-    out.append('<!DOCTYPE html>\n<html lang="zh-CN" data-theme="dark" data-reader="大学">')
+    out.append('<!DOCTYPE html>\n<html lang="%s" data-theme="dark" data-reader="大学" data-lang="%s">'
+               % ("en" if lang == "en" else "zh-CN", lang))
     out.append('<head>\n<meta charset="utf-8">\n<meta name="out" content="%s">' % L['out'])
     out.append('<title>%s %s · 讲义</title>\n<style>%s</style>\n</head>\n<body>' % (no, L['zh'], CSS))
 
-    # 封面
+    # 封面：全英档主标题用 en，中文原名降到副行（专有名称仍看得见）
+    main_title = L['en'] if lang == "en" and L.get('en') else L['zh']
+    sub_title = L['zh'] if lang == "en" and L.get('en') else L['en']
     meta = '\n'.join('    <div class="row"><b>%s</b><span>%s</span></div>' % (k, v) for k, v in L['meta'])
     out.append(
         '<section class="cover">\n'
@@ -275,72 +299,89 @@ def build(lesson: dict) -> str:
         '  <h1>%s</h1>\n'
         '  <div class="sub">%s<br>\n  %s</div>\n'
         '  <div class="meta">\n%s\n  </div>\n</section>'
-        % (code, no.lstrip('L'), L['zh'], L['en'], L['sub'], meta))
+        % (code, no.lstrip('L'), main_title, sub_title, L['sub'], meta))
 
     # 目录（自动）
+    def head_of(sec):
+        """全中：中文主标题 + 英文副行；全英：英文主标题 + 中文副行。"""
+        if lang == "en" and sec.get('en'):
+            return sec['en'], sec.get('zh', '')
+        return sec['zh'], sec.get('en', '')
+
     items = []
-    for s in L['sections']:
+    for s in list(L['sections']) + list(L['tail']):
+        main, sub = head_of(s)
         items.append('    <div class="item"><span class="no">%s</span><span class="t">%s<small>%s</small></span>'
                      '<span class="pg" data-head="%s">·</span></div>'
-                     % (s['no'], s['zh'], s['en'], s['zh']))
-    for s in L['tail']:
-        items.append('    <div class="item"><span class="no">%s</span><span class="t">%s<small>%s</small></span>'
-                     '<span class="pg" data-head="%s">·</span></div>'
-                     % (s['no'], s['zh'], s['en'], s['zh']))
-    out.append('<section class="tocpage">\n'
-               '  <h2 style="margin-top:0"><span class="no">·</span><span class="zh">目录</span>'
-               '<span class="en">CONTENTS</span></h2>\n  <div class="toc">\n'
-               + '\n'.join(items) + '\n  </div>\n</section>')
+                     % (s['no'], main, sub, main))
+    out.append(('<section class="tocpage">\n'
+                '  <h2 style="margin-top:0"><span class="no">·</span><span class="zh">%s</span>'
+                '<span class="en">%s</span></h2>\n  <div class="toc">\n'
+                + '\n'.join(items) + '\n  </div>\n</section>')
+               % (lab['toc'], lab['toc_sub']))
 
     # 正文章节
     for s in L['sections']:
         body = '\n'.join(render_block(b) for b in s['body'])
-        lec = ('<p class="lec"><b>讲法。</b>%s</p>\n' % s['lec']) if s.get('lec') else ''
+        lec = ('<p class="lec"><b>%s</b>%s</p>\n' % (lab['lec'], s['lec'])) if s.get('lec') else ''
+        main, sub = head_of(s)
         out.append('<section class="sec">\n'
                    '<h2><span class="no">%s</span><span class="zh">%s</span><span class="en">%s</span></h2>\n'
-                   '%s%s\n</section>' % (s['no'], s['zh'], s['en'], lec, body))
+                   '%s%s\n</section>' % (s['no'], main, sub, lec, body))
 
     # 小结
     sm = L['summary']
     th = ''.join('<th style="width:%s">%s</th>' % (sm['head_widths'][i], h)
                  for i, h in enumerate(sm['head']))
     rows = '\n'.join('<tr>' + ''.join('<td>%s</td>' % c for c in r) + '</tr>' for r in sm['rows'])
+    sm_main, sm_sub = head_of(sm)
     out.append('<section class="sec">\n<h2><span class="no">%s</span><span class="zh">%s</span><span class="en">%s</span></h2>\n'
                '%s<table>\n<tr>%s</tr>\n%s\n</table>\n<p>%s</p>\n</section>'
-               % (sm['no'], sm['zh'], sm['en'],
-                  ('<p class="lec"><b>讲法。</b>%s</p>\n' % sm['lec']) if sm.get('lec') else '',
+               % (sm['no'], sm_main, sm_sub,
+                  ('<p class="lec"><b>%s</b>%s</p>\n' % (lab['lec'], sm['lec'])) if sm.get('lec') else '',
                   th, rows, sm['tail']))
 
     # 自测
     q = L['quiz']
     body = []
     for i, (qq, aa) in enumerate(q['items'], 1):
+        if lang == "en":
+            aa = re.sub(r'^\s*答[：:]\s*', 'A: ', str(aa))   # 全英档答案前缀统一成 A:
         body.append('<div class="q"><b>Q%d.</b> %s</div>\n<div class="ans">%s</div>' % (i, qq, aa))
+    q_main, q_sub = head_of(q)
     out.append('<section class="sec">\n<h2><span class="no">%s</span><span class="zh">%s</span><span class="en">%s</span></h2>\n'
-               '<p class="lec"><b>讲法。</b>%s</p>\n\n%s\n</section>'
-               % (q['no'], q['zh'], q['en'], q['lec'], '\n\n'.join(body)))
+               '<p class="lec"><b>%s</b>%s</p>\n\n%s\n</section>'
+               % (q['no'], q_main, q_sub, lab['lec'], q['lec'], '\n\n'.join(body)))
 
-    # 术语表
+    # 术语表（全英档把 English 放第一列）
     g = L['glossary']
-    grows = '\n'.join('  <tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>' % r for r in g['rows'])
+    grows = '\n'.join('  <tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>'
+                       % ((r[1], r[0], r[2], r[3]) if lang == "en" and len(r) >= 4 else tuple(r))
+                       for r in g['rows'])
+    g_main, g_sub = head_of(g)
+    gh = lab['gloss']
     out.append('<section class="sec">\n<h2><span class="no">%s</span><span class="zh">%s</span><span class="en">%s</span></h2>\n'
-               '<p class="lec"><b>讲法。</b>%s</p>\n\n'
+               '<p class="lec"><b>%s</b>%s</p>\n\n'
                '<table class="glossary">\n'
                '  <colgroup><col style="width:20%%"><col style="width:27%%">'
                '<col style="width:15%%"><col style="width:38%%"></colgroup>\n'
-               '  <thead><tr><th>中文</th><th>English</th><th>页码</th><th>备注</th></tr></thead>\n'
+               '  <thead><tr><th>%s</th><th>%s</th><th>%s</th><th>%s</th></tr></thead>\n'
                '  <tbody>\n%s\n  </tbody>\n</table>\n</section>'
-               % (g['no'], g['zh'], g['en'], g['lec'], grows))
+               % (g['no'], g_main, g_sub, lab['lec'], g['lec'],
+                  gh[0], gh[1], gh[2], gh[3], grows))
 
     # 附录
     a = L['appendix']
     srows = '\n'.join('<tr>' + ''.join('<td>%s</td>' % c for c in r) + '</tr>' for r in a['symbols'])
     myths = '\n'.join('<li>%s</li>' % m for m in a['myths'])
+    a_main, a_sub = head_of(a)
+    sy = lab['sym']
     out.append('<section class="sec">\n<h2><span class="no">%s</span><span class="zh">%s</span><span class="en">%s</span></h2>\n'
-               '<p class="lec"><b>讲法。</b>%s</p>\n\n'
-               '<table class="sym">\n<tr><th>符号 / 缩写</th><th>读法·含义</th><th>出处</th></tr>\n%s\n</table>\n\n'
+               '<p class="lec"><b>%s</b>%s</p>\n\n'
+               '<table class="sym">\n<tr><th>%s</th><th>%s</th><th>%s</th></tr>\n%s\n</table>\n\n'
                '<h3>%s</h3>\n<ol>\n%s\n</ol>\n</section>'
-               % (a['no'], a['zh'], a['en'], a['lec'], srows, a['myths_title'], myths))
+               % (a['no'], a_main, a_sub, lab['lec'], a['lec'],
+                  sy[0], sy[1], sy[2], srows, a.get('myths_title') or lab['myths'], myths))
 
     out.append('\n</body>\n</html>\n')
     return number_figures('\n\n'.join(out))
@@ -375,9 +416,16 @@ def number_figures(html: str) -> str:
     return TABCAP_RE.sub(tab, FIGCAP_RE.sub(fig, html))
 
 
-def load(no: str) -> dict:
-    # 逐文件回落：数据根有这一讲就用它（用户改过的），没有就用随程序发布的那份
-    path = paths.data_or_res(COURSE, '_lessons', no + '.py')
+def load(no: str, lang: str = None) -> dict:
+    # 逐文件回落：数据根有这一讲就用它（用户改过的），没有就用随程序发布的那份。
+    # 2026-11-18：语言档 = en 时优先 <no>.en.py（DeepSeek 生成/翻译的英文版），没有才回中文。
+    path = None
+    if lang == "en":
+        p_en = paths.data_or_res(COURSE, '_lessons', no + '.en.py')
+        if os.path.isfile(p_en):
+            path = p_en
+    if not path:
+        path = paths.data_or_res(COURSE, '_lessons', no + '.py')
     spec = importlib.util.spec_from_file_location('lesson_' + no, path)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)

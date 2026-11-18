@@ -51,8 +51,12 @@ def _call(modname: str, argv: list) -> tuple[int, str]:
     return int(rc or 0), buf.getvalue()
 
 
-def make(nos: list, course: str | None = None, emit=print) -> int:
-    """生成若干讲并过三道门。返回 0 = 全绿；非 0 = 有红项（日志在 emit 里）。"""
+def make(nos: list, course: str | None = None, emit=print, lang: str | None = None) -> int:
+    """生成若干讲并过三道门。返回 0 = 全绿；非 0 = 有红项（日志在 emit 里）。
+
+    2026-11-18：lang="en" 时用 <no>.en.py（DeepSeek 英文版），固定件与页脚也切英文；
+    全英档不再跑「术语每节首次附英」（正文本来就是英文）。
+    """
     global COURSE
     if course:
         COURSE = course
@@ -64,7 +68,17 @@ def make(nos: list, course: str | None = None, emit=print) -> int:
     for no in nos:
         emit('=' * 60)
         emit('## %s' % no)
-        lesson = builder.load(no)
+        lesson = builder.load(no, lang)
+        llang = builder._lang_of(lesson)
+        # 2026-11-19：拦住「把骨架当成品」——占位数据不再能直接渲染出 PDF
+        if lesson.get("stub") or "正文待补" in str(lesson.get("sub") or ""):
+            emit("[停] %s 还是导入占位，没有正文；先让 DeepSeek 补正文：" % no)
+            emit("     python engine\\_draft.py %s --course %s --lang %s" % (no, COURSE, llang))
+            emit("     （界面上点「开始生成」会自动先补；补完再渲染）")
+            return 1
+        if lang == "en" and llang != "en":
+            emit('[停] 这一讲还没有英文版（%s.en.py）：先在「输出模式」里选全英并点生成，或先跑 engine\\_draft.py %s --lang en' % (no, no))
+            return 1
         src = os.path.join(out_dir, '06_笔记', '%s_零基础_讲义_源.html' % no)
         html = builder.build(lesson)
         if builder.MISSING:
@@ -76,7 +90,10 @@ def make(nos: list, course: str | None = None, emit=print) -> int:
                      % lesson['code'])
             emit('[停] 缺图不打——先补图或改讲法（把那张图换成自绘结构图）')
             return 1
-        html2, n = attach_first_per_section(html)
+        if llang == "en":
+            html2, n = html, 0          # 全英档：正文已是英文，不再插「（English）」
+        else:
+            html2, n = attach_first_per_section(html)
         html2, ns = split_long(html2)
         os.makedirs(os.path.dirname(src), exist_ok=True)
         open(src, 'w', encoding='utf-8').write(html2)
@@ -90,9 +107,10 @@ def make(nos: list, course: str | None = None, emit=print) -> int:
             return 1
 
         pdf = os.path.join(out_dir, '01_讲义', lesson['out'])
+        foot_title = lesson.get('en') if llang == 'en' else lesson.get('zh')
         rc, out = _call('html2pdf', [src, '-o', pdf, '--theme', 'dark', '--toc',
                                      '--bg', '#0E0E0C',
-                                     '--footer', '%s %s · %s' % (lesson['code'], no, lesson['zh'])])
+                                     '--footer', '%s %s · %s' % (lesson['code'], no, foot_title)])
         emit(out.strip().splitlines()[-1] if out.strip() else '(no output)')
         if rc != 0:
             emit('[停] 打印失败')
@@ -108,10 +126,17 @@ def make(nos: list, course: str | None = None, emit=print) -> int:
 
 
 def main(argv: list) -> int:
+    # 2026-11-18：--lang en 走英文数据（<no>.en.py）与英文固定件
+    lang = None
+    argv = list(argv)
+    if "--lang" in argv:
+        i = argv.index("--lang")
+        lang = argv[i + 1] if i + 1 < len(argv) else "zh"
+        argv = argv[:i] + argv[i + 2:]
     if not argv:
-        print('用法: python engine\\_make.py L02 [L03 ...]')
+        print('用法: python engine\\_make.py L02 [L03 ...] [--lang zh|en]')
         return 2
-    return make(argv)
+    return make(argv, lang=lang)
 
 
 if __name__ == '__main__':

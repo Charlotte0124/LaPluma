@@ -78,7 +78,7 @@ HOST, PORT = "127.0.0.1", 8765
 #   每次打开/刷新阅读器都全量重传（本机无感，平板走 WiFi 明显）。
 #   index.html 必须仍走 no-store（改完界面要能立刻看到新版）。
 _STATIC_ETAG = {}
-VERSION = "1.9.9"
+VERSION = "1.9.10"
 APP_NAME = "羽毛笔 La Pluma"
 
 
@@ -244,7 +244,9 @@ SESS_DIR = os.path.join(os.path.expanduser("~"), ".pluma", "sessions")
 
 
 def _safe_code(code: str) -> str:
-    return re.sub(r"[^A-Za-z0-9_.-]", "_", code or "default")
+    # 2026-11-19：中文课程名不能再被替换成下划线（「药剂学」曾变成「___」，原件目录直接读不到）。
+    # 只挡路径分隔符与控制字符；汉字、字母、数字、点、横线、下划线都保留。
+    return re.sub(r"[^0-9A-Za-z_.\-\u4e00-\u9fff]", "_", code or "default")
 
 
 def load_lesson(course: str, no: str) -> dict:
@@ -265,8 +267,68 @@ def find_lesson(course: str) -> list[str]:
     for root in (paths.DATA_ROOT, paths.RES_ROOT):
         d = os.path.join(root, course, "_lessons")
         if os.path.isdir(d):
-            names.update(x[:-3] for x in os.listdir(d) if x.endswith(".py"))
+            names.update(x[:-3] for x in os.listdir(d)
+                         if x.endswith(".py") and not x.endswith(".en.py"))
     return sorted(names)
+
+
+def lesson_meta(course: str) -> dict:
+    """这一门每讲的显示信息（标题 / 语言 / 是否占位 / 有没有英文版）。
+
+    为什么要：2026-11-18 用户「导入的项目不是原本的名字（导入之后就变成了 T02）」——
+    界面以前只显示讲号。这里把数据文件里的 zh 标题读出来给界面，讲号仍做内部编号。
+    """
+    out = {}
+    for no in find_lesson(course):
+        path = paths.data_or_res(course, "_lessons", no + ".py")
+        text = ""
+        try:
+            with open(path, "r", encoding="utf-8") as fh:
+                text = fh.read(400000)   # 读全：orig 字段可能写在文件末尾
+        except Exception:  # noqa: BLE001
+            pass
+        m_zh = re.search(r'"zh":\s*"([^"]*)"', text)
+        m_en = re.search(r'"en":\s*"([^"]*)"', text)
+        m_orig = re.search(r'"orig":\s*"([^"]*)"', text)
+        m_lang = re.search(r'"lang":\s*"([^"]*)"', text)
+        en_path = paths.data_or_res(course, "_lessons", no + ".en.py")
+        # 2026-11-18：导入的讲显示原件名（02.散剂a），不是讲号 T02；AI 标题放 subtitle
+        out[no] = {"title": ((m_orig.group(1) if m_orig else "") or (m_zh.group(1) if m_zh else no)),
+                   "subtitle": (m_zh.group(1) if m_zh else ""),
+                   "en": (m_en.group(1) if m_en else ""),
+                   "lang": (m_lang.group(1) if m_lang else "zh"),
+                   "stub": ("stub-from:" in text or "原件导入占位" in text),
+                   "has_en": os.path.isfile(en_path)}
+    return out
+
+
+def ensure_body(course: str, no: str, lang: str, emit) -> int:
+    """点「开始生成」前补齐正文：占位讲次用 DeepSeek 写；全英档没有英文版就生成英文版。
+
+    返回 0 = 可以继续生成；非 0 = 停（日志已经写进 emit）。
+    """
+    lang = "en" if str(lang).lower().startswith("en") else "zh"
+    en_path = paths.data_or_res(course, "_lessons", no + ".en.py")
+    zh_path = paths.data_or_res(course, "_lessons", no + ".py")
+    text = ""
+    try:
+        with open(zh_path, "r", encoding="utf-8") as fh:
+            text = fh.read(6000)
+    except Exception:  # noqa: BLE001
+        pass
+    need = (lang == "en" and not os.path.isfile(en_path)) or \
+           (lang == "zh" and ("stub-from:" in text or "原件导入占位" in text))
+    if not need:
+        return 0
+    try:
+        mod = _engine("_draft")
+        info = mod.draft(course, no, lang, emit=emit, model=load_cfg().get("model"))
+        log_usage(info.get("model") or load_cfg().get("model") or "",
+                  info.get("usage") or {})
+        return 0
+    except Exception as e:  # noqa: BLE001
+        emit("[停] 补正文失败：%r" % (e,))
+        return 1
 
 
 def load_ask_module():
@@ -318,12 +380,12 @@ def _engine(modname: str):
     return _ENGINE_MODS[modname]
 
 
-def _inproc(modname: str, args: list, course: str, entry: str):
+def _inproc(modname: str, args: list, course: str, entry: str, **kw):
     """跑 engine 下的入口，收它的日志；返回 (日志, 退出码)。异常也当红项回报。"""
     buf = []
     try:
         mod = _engine(modname)
-        rc = getattr(mod, entry)(list(args), course=course, emit=buf.append)
+        rc = getattr(mod, entry)(list(args), course=course, emit=buf.append, **kw)
     except Exception as e:  # noqa: BLE001
         buf.append("[异常] 生成器抱错：%r" % (e,))
         return "\n".join(buf), 1
@@ -488,11 +550,13 @@ def discover_courses():
                 files.append({"name": fn, "rel": "%s/01_讲义/%s" % (name, fn),
                               "size_kb": round(os.path.getsize(full) / 1024),
                               "pages": _pages(full)})
-        lessons = sorted(x[:-3] for x in os.listdir(les) if x.endswith(".py")) if os.path.isdir(les) else []
+        lessons = sorted(x[:-3] for x in os.listdir(les)
+                         if x.endswith(".py") and not x.endswith(".en.py")) if os.path.isdir(les) else []
         out.append({"code": name, "title": m.get("title", name), "en": m.get("en", ""),
                     "desc": m.get("desc", "（未填说明，可在 courses.json 里补）"),
                     "files": files, "lessons": lessons, "fav": name in favs,
-                    "originals": list_originals(name)})
+                    "originals": list_originals(name),
+                    "lesson_meta": lesson_meta(name)})
     return out
 
 
@@ -725,7 +789,13 @@ def _pylit(v, ind: int = 0) -> str:
         return "[\n" + inner + ",\n" + pad + "]"
     if isinstance(v, str):
         return json.dumps(v, ensure_ascii=False)
-    return json.dumps(v)
+    if v is None:
+        return "None"                      # JSON 的 null 不是合法 Python 字面量
+    if isinstance(v, bool):
+        return "True" if v else "False"
+    if isinstance(v, (int, float)):
+        return json.dumps(v)
+    return repr(v)
 
 
 def make_stub_lesson(course: str, orig_name: str) -> dict:
@@ -757,6 +827,7 @@ def make_stub_lesson(course: str, orig_name: str) -> dict:
     out_pdf = "%s_%s_讲义.pdf" % (no, title)
     data = {
         "code": course, "no": no, "zh": title, "en": "",
+        "orig": title, "lang": "zh", "stub": True,
         "out": out_pdf,
         "sub": "原件导入占位 · 正文待补",
         "meta": [["源课件", "%s/%s" % (ORIG_DIR, orig_name)], ["状态", "占位：正文未补"]],
@@ -1563,7 +1634,7 @@ class Handler(BaseHTTPRequestHandler):
                         _log_error("import/转换 %s" % nm, e)
                         skipped.append("%s：转成分页 PDF 失败（%s）；原件已存下" % (nm, e))
                 # 2026-11-17：导入同时建一讲骨架——用户要的是「导进来就能在要生成的批次里看到」
-                stubs = []
+                stubs, warnings = [], []
                 for nm in added:
                     try:
                         st = make_stub_lesson(code, nm)
@@ -1571,9 +1642,23 @@ class Handler(BaseHTTPRequestHandler):
                             stubs.append(st["no"])
                     except Exception as e:  # noqa: BLE001
                         skipped.append("建讲次失败（%s）：%s" % (nm, e))
+                # 2026-11-19：扫描件没有文字层，模型写不了正文——导入当场就说明，别等生成才失败
+                try:
+                    import pymupdf
+                    for nm in added:
+                        pdf = os.path.join(d, os.path.splitext(nm)[0] + ".pdf")
+                        if not os.path.isfile(pdf):
+                            continue
+                        with pymupdf.open(pdf) as doc:
+                            chars = sum(len((pg.get_text("text") or "").strip()) for pg in doc)
+                        if chars < 50:
+                            warnings.append("%s 没有文字层（扫描件/图片），自动写正文不可用；需要先 OCR 或手工补正文。" % nm)
+                except Exception as e:  # noqa: BLE001
+                    warnings.append("没查文字层：%r" % (e,))
                 return self._json({"ok": bool(added), "course": code, "dir": d,
                                    "added": added, "converted": converted, "skipped": skipped,
-                                   "stubs": stubs, "files": list_originals(code)})
+                                   "stubs": stubs, "warnings": warnings,
+                                   "files": list_originals(code)})
             if u.path == "/api/pick-dir":
                 # 选保存目录（原生文件夹对话框）。只接本机：平板端弹不出这台电脑的对话框，
                 # 那边只能到「设置」里手填；请求会一直挂着直到用户选完或取消。
@@ -1696,6 +1781,8 @@ class Handler(BaseHTTPRequestHandler):
                 no = str(body.get("lesson", "")).strip()
                 course = str(body.get("course", DEFAULT_COURSE)).strip()
                 form = str(body.get("form", "single")).strip() or "single"
+                # 2026-11-18：输出模式（语言档）。全中 = 中文 + 专业术语英文；全英 = 英文 + 专有名称中文。
+                lang = "en" if str(body.get("lang") or "zh").lower().startswith("en") else "zh"
                 t0 = time.time()
                 if form == "book":
                     # 合订本：默认全部讲，按讲号顺序（B 口径：去掉各讲封面与目录）
@@ -1707,14 +1794,20 @@ class Handler(BaseHTTPRequestHandler):
                     return self._json({"ok": rc == 0, "log": log, "form": "book",
                                        "seconds": round(time.time() - t0, 1), "copied": copied})
                 avail = sorted(x[:-3] for x in os.listdir(os.path.join(paths.course_dir(course), "_lessons"))
-                               if x.endswith(".py")) if os.path.isdir(os.path.join(paths.course_dir(course), "_lessons")) else []
+                               if x.endswith(".py") and not x.endswith(".en.py")) \
+                    if os.path.isdir(os.path.join(paths.course_dir(course), "_lessons")) else []
                 if no not in avail:
                     return self._json({"ok": False, "error": "没有这一讲：%s" % no}, 400)
-                log, rc = _inproc("_make", [no], course, "make")
+                pre = []
+                if ensure_body(course, no, lang, pre.append) != 0:
+                    return self._json({"ok": False, "log": "\n".join(pre), "form": "single",
+                                       "lang": lang, "seconds": round(time.time() - t0, 1)})
+                log, rc = _inproc("_make", [no], course, "make", lang=lang)
+                log = "\n".join([x for x in pre + [log] if x])
                 copied = ""
                 if rc == 0 and body.get("save_dir"):
-                    copied = self._copy_out(course, no, str(body["save_dir"]))
-                return self._json({"ok": rc == 0, "log": log, "form": "single",
+                    copied = self._copy_out(course, no, str(body["save_dir"]), lang=lang)
+                return self._json({"ok": rc == 0, "log": log, "form": "single", "lang": lang,
                                    "seconds": round(time.time() - t0, 1), "copied": copied})
             if u.path == "/api/ask":
                 # 问课件：先检索，再由模型回答。
@@ -1799,13 +1892,16 @@ class Handler(BaseHTTPRequestHandler):
             _log_error("POST %s" % u.path, e)
             return self._json({"ok": False, "error": repr(e)}, 500)
 
-    def _copy_out(self, course, no, dest):
+    def _copy_out(self, course, no, dest, lang="zh"):
         """成功后把成品复制到用户选的目录（dest 可在仓内，也可绝对路径）。"""
         if not dest:
             return ""
         # 生成物一律写在数据根（paths.data），自带示例课程也一样——不从资源根拷
         src_dir = os.path.join(ROOT, course, "01_讲义")
         hit = [f for f in os.listdir(src_dir) if f.startswith(no + "_") and f.endswith(".pdf")]
+        # 同一讲可能有中文版与英文版：全英档只取 _EN.pdf，别把中文那份复制过去
+        if lang == "en":
+            hit = [f for f in hit if f.endswith("_EN.pdf")] or hit
         if not hit:
             return ""
         dst = dest if os.path.isabs(dest) else os.path.join(ROOT, dest)

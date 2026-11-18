@@ -289,7 +289,13 @@ nav a.on{background:var(--ink);color:var(--bg)}
 .lsn.dim{opacity:.45;pointer-events:none}
 /* 2026-11-17：讲次删除模式——点「删除」后每个讲号右上角出现红×，点×即删这一讲。
    删除模式下点芯片本体不再改选中，避免「本来想删、结果改了生成范围」。 */
-.lsn button{position:relative}
+.lsn button{position:relative;display:inline-flex;align-items:baseline;gap:7px;max-width:320px;
+   font-family:"Microsoft YaHei","Source Han Sans SC",system-ui,sans-serif;letter-spacing:0}
+.lsn button .ttl{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lsn button .no{font-family:Consolas,monospace;font-size:10.5px;color:var(--faint);letter-spacing:.04em}
+.lsn button.on .no{color:inherit;opacity:.62}
+.lsn button .stub{font-size:10px;line-height:1;color:var(--amber);border:1px solid var(--line);
+   border-radius:5px;padding:1px 4px;letter-spacing:.02em}
 .lsn .kill{display:none}
 .lsn.deling button{padding-right:20px}
 .lsn.deling .kill{display:grid;place-items:center;position:absolute;right:-5px;top:-5px;width:15px;height:15px;
@@ -596,6 +602,12 @@ footer{max-width:1080px;margin:26px auto 0;padding:0 16px;display:flex;align-ite
           <div class="opt on" data-form="single"><b>单本</b><small>一讲一份</small></div>
           <div class="opt" data-form="book"><b>合订本</b><small>全部讲一本</small></div>
         </div>
+        <h3 style="margin-top:16px">讲义语言</h3>
+        <p class="hint">全中：正文中文，专业术语附英文。全英：正文英文，药名、方剂名等专有名称保留中文。</p>
+        <div class="opts" id="langOpts">
+          <div class="opt on" data-lang="zh"><b>全中</b><small>专业术语英文</small></div>
+          <div class="opt" data-lang="en"><b>全英</b><small>专有名称中文</small></div>
+        </div>
         <div class="tools">
           <select id="courseSel"></select>
           <button class="btn ghost" id="btnImport" title="为本课程导入课件 PDF 或图片，也可将文件拖入窗口">＋ 导入课件</button>
@@ -795,7 +807,7 @@ function md(text){
 }
 const plain = t => String(t||'').replace(/```[a-zA-Z0-9_+-]*\n?|```/g,'').replace(/[`*]/g,'').trim();
 
-let B = {}, MODE='local', FORM='single', TAB='all', Q=[], MODEL='deepseek-flash', PAGE='courses';
+let B = {}, MODE='local', FORM='single', LANG='zh', TAB='all', Q=[], MODEL='deepseek-flash', PAGE='courses';
 let CHAT = { code:null, title:'', lessons:[], files:[], messages:[], updated:'', lens:new Set(), sel:new Set() };
 let DRAGGED = null;
 const RD = { doc:null, rel:'', name:'', code:null, page:1, zoom:1, notes:[], busy:false };
@@ -1315,7 +1327,15 @@ function syncLessons(){
   const c = (B.courses||[]).find(x=>x.code===$('#courseSel').value) || (B.courses||[])[0];
   const les = (c ? c.lessons : []) || [];
   LESSON_SEL = new Set();
-  $('#lessonPick').innerHTML = les.map(n=>`<button data-lsn="${esc(n)}">${esc(n)}<span class="kill" data-kill="${esc(n)}" title="删除这一讲">×</span></button>`).join('')
+  const lmeta = (c && c.lesson_meta) || {};
+  $('#lessonPick').innerHTML = les.map(n=>{
+    const m = lmeta[n] || {};
+    const t = m.title || n;
+    const code = (t !== n) ? `<span class="no">${esc(n)}</span>` : '';
+    const stub = m.stub ? '<span class="stub">占位</span>' : '';
+    const tip = m.subtitle && m.subtitle !== t ? (m.subtitle + ' · ' + n) : n;
+    return `<button data-lsn="${esc(n)}" title="${esc(tip)}"><span class="ttl">${esc(t)}</span>${stub}${code}<span class="kill" data-kill="${esc(n)}" title="删除这一讲">×</span></button>`;
+  }).join('')
     || '<span class="hint" style="border:0;padding:0;margin:0">本课程没有可生成的讲次数据（缺少 `_lessons` 目录）</span>';
   // 2026-11-17 用户：「拖进去之后要生成的批次那并没有更新」——导入的是原件，不是讲次；
   //   讲次只能来自 <课程>\_lessons\*.py。这里把差异当场写清，免得以为导入坏了。
@@ -1324,7 +1344,7 @@ function syncLessons(){
   if(ogEl){
     if(ogN){
       ogEl.style.display = '';
-      ogEl.textContent = '另有 ' + ogN + ' 份原件。每导入一份会自动建一个占位讲次（正文待补）——编辑 <课程>\\_lessons\\<讲号>.py 中的 sections 后重新生成即可出 PDF。';
+      ogEl.textContent = '另有 ' + ogN + ' 份原件。每导入一份会自动建一个占位讲次；点「开始生成」时由 DeepSeek 补正文（首次约 1 分钟、约 ¥0.03/讲）。';
     } else { ogEl.style.display = 'none'; }
   }
   $('#lessonPick').querySelectorAll('[data-lsn]').forEach(b=>b.onclick=e=>{
@@ -1349,8 +1369,16 @@ function syncLsnCnt(){
   $('#lsnAll').textContent = (all && n === all) ? '全不选' : '全选';
   $('#lessonPick').classList.toggle('dim', FORM==='book');
   const go = $('#btnGen');
-  go.textContent = FORM==='book' ? '生成合订本' : (n ? ('开始生成（'+n+' 讲）') : '开始生成');
+  const langTag = LANG==='en' ? ' · 全英' : '';
+  go.textContent = FORM==='book' ? '生成合订本' : (n ? ('开始生成（'+n+' 讲'+langTag+'）') : '开始生成');
   go.disabled = FORM==='book' ? false : (n === 0);
+  // 选中占位讲次时把「会花钱、要等」写在按钮旁，不再让用户以为只是排版
+  const meta = ((B.courses||[]).find(x=>x.code===$('#courseSel').value)||{}).lesson_meta || {};
+  const stubs = [...LESSON_SEL].filter(k => (meta[k]||{}).stub).length;
+  const gh = $('#genHint');
+  if(gh) gh.textContent = stubs
+    ? ('所选有 '+stubs+' 讲是导入占位：先用 DeepSeek 补正文（约 1 分钟/讲、约 ¥0.03/讲），补完再出 PDF。')
+    : '单本模式需勾选至少一讲；合订本模式包含全部讲次。';
 }
 $('#lsnAll').onclick = () => {
   const btns = $('#lessonPick').querySelectorAll('[data-lsn]');
@@ -1476,6 +1504,12 @@ document.querySelectorAll('.opt[data-form]').forEach(o=>o.onclick=()=>{
   document.querySelectorAll('.opt[data-form]').forEach(x=>x.classList.remove('on'));
   o.classList.add('on'); FORM=o.dataset.form;
   syncLsnCnt();
+  if(FORM==='book' && LANG==='en') toast('合订本暂只出全中；要英文版请选「单本」');
+});
+document.querySelectorAll('.opt[data-lang]').forEach(o=>o.onclick=()=>{
+  document.querySelectorAll('.opt[data-lang]').forEach(x=>x.classList.remove('on'));
+  o.classList.add('on'); LANG=o.dataset.lang;
+  syncLsnCnt();
 });
 /* 队列：每一项均可取消（2026-11-17 用户要求「队列要有取消按钮」）。
    排队中的取消＝不再发送；正在执行的那一讲请求已发出，无法中途终止渲染，
@@ -1519,6 +1553,7 @@ $('#btnGen').onclick = () => {
   if(GEN_BUSY) return;
   const course = $('#courseSel').value;
   if(!course) return;
+  if(FORM==='book' && LANG==='en'){ toast('合订本暂只出全中；要英文版请选「单本」'); return; }
   if(FORM==='book') return disclaimer(()=>runBatch(course, [''], 'book'));
   const list = [...LESSON_SEL];
   if(!list.length){ toast('先勾要生成的讲次（可多选）'); return; }
@@ -1530,7 +1565,8 @@ function disclaimer(cb){
     <div class="prev" style="max-height:none">
       <div class="row"><span>01</span><div>讲义内容由 AI 辅助整理，可能与原始课件不一致，<b>重要信息请自行核实</b>。</div></div>
       <div class="row"><span>02</span><div>生成只写到你设的保存目录，不改动其它位置。</div></div>
-      <div class="row"><span>03</span><div>每份成品页脚固定印「本内容由 AI 生成，仅供参考；重要信息请自行核实」与软件名、项目地址，不可关闭。</div></div>
+      <div class="row"><span>03</span><div>导入的占位讲次会先由 DeepSeek 补正文，约 1 分钟/讲、约 ¥0.03/讲；补完的内容仍需人工抽查。</div></div>
+      <div class="row"><span>04</span><div>每份成品页脚固定印「本内容由 AI 生成，仅供参考；重要信息请自行核实」与软件名、项目地址，不可关闭。</div></div>
     </div>
     <label class="chk"><input type="checkbox" id="dlgChk">我已阅读并理解上述说明</label>
     <div class="acts"><button class="btn ghost" id="dlgNo">取消</button><button class="btn" id="dlgYes" disabled>继续生成</button></div>`;
@@ -1550,7 +1586,7 @@ async function runGenerate(course, no, form, preset){
   $('#btnGen').disabled = true;
   try{
     const j = await (await fetch('/api/generate',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({course, lesson:no, form, mode:MODE, save_dir:B.save_dir})})).json();
+      body:JSON.stringify({course, lesson:no, form, lang:LANG, mode:MODE, save_dir:B.save_dir})})).json();
     if(CANCEL.has(item)){
       // 用户在执行中取消了：请求已跑完，结果不落队列、不刷界面
       CANCEL.delete(item); Q = Q.filter(q => q !== item); renderQueue();
@@ -2363,6 +2399,16 @@ document.addEventListener('keydown', e => {
   const sp = new URLSearchParams(location.search);
   if(sp.get('theme')) applyTheme(sp.get('theme'));
   if(sp.get('page')==='generate') showPage('generate');
+  // 截图 / 回归用：?lsn=T02 预选一讲；?lang=en 预选全英
+  if(sp.get('lang')==='en'){ const o=document.querySelector('.opt[data-lang="en"]'); if(o) o.click(); }
+  // 截图 / 回归用：?savedir=out 只改显示，不动本机配置（公开截图不能出现真实用户路径）
+  if(sp.get('savedir')){
+    B.save_dir = sp.get('savedir');
+    const op = $('#outPath'); if(op) op.textContent = sp.get('savedir');
+  }
+  if(sp.get('lsn')) setTimeout(()=>{
+    const b=document.querySelector('#lessonPick [data-lsn="'+sp.get('lsn')+'"]'); if(b) b.click();
+  }, 900);
   // 2026-11-17：?course=DEMO 指定课程（截图与复现用，避免把真实课件名拍进图里）
   if(sp.get('course')){ const cs=$('#courseSel'); if(cs){ cs.value = sp.get('course'); syncLessons(); updateImpHint(); } }
   if(sp.get('page')==='host'){ showPage('host'); renderHost(); }

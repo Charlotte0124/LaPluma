@@ -108,6 +108,11 @@ def content_audit(path: str, draft: bool = False) -> dict:
     html = open(path, encoding="utf-8", errors="replace").read()
     rel = _rel(path)
     fails, warns = [], []
+    # 2026-11-18 加：语言档。全英讲义正文是英文，术语附英判据不适用；固定件标题也换成英文。
+    is_en = bool(re.search(r'data-lang="en"', html))
+    # 2026-11-19：拦住「骨架当成品」——导入占位的源里一定有这两句，出现即判红。
+    if "原件导入占位" in html or "正文待补" in html:
+        fails.append("这一讲还是导入占位（正文待补），不是成品；先补正文再生成")
 
     # 1 主题：深色简约风，色值必须与标准一致（2026-11-15 上一轮把样张改成了白底蓝框，这里拦住）
     if 'data-theme="dark"' not in html:
@@ -170,6 +175,8 @@ def content_audit(path: str, draft: bool = False) -> dict:
     #    为什么不是「每次出现都附」：L01-02 的「状态」出现 164 次，每次附要插 82 个括号，正文会变成括号堆。
     pairs = pairs_of(html)
     plain = strip_tags(body)      # 后面「回看 §」与段落检查都用它（2026-11-16：改术语判据时补偿这一行）
+    if is_en:
+        pairs = []                # 全英档：正文本来就是英文，不再要求「中文术语后附英文」
     if not _HAVE_TERMS:
         warns.append("未查术语附英：取不到 tools\\print\\terms.py")
     no_en = []
@@ -195,11 +202,13 @@ def content_audit(path: str, draft: bool = False) -> dict:
 
     # 5 每节有定位标注（方案 §4 门二）
     secs = re.split(r"(?=<h2)", html)[1:]
+    loc_skip = LOC_SKIP + (("Contents", "Read Me First", "Glossary", "Self-check",
+                            "Practice", "Takeaways", "Appendix") if is_en else ())
     no_loc = []
     for sec in secs:
         m = re.search(r'<span class="zh">(.*?)</span>', sec, re.S)
         title = strip_tags(m.group(1)).strip() if m else ""
-        if not title or any(k in title for k in LOC_SKIP):
+        if not title or any(k in title for k in loc_skip):
             continue
         if not LOC_RE.search(strip_tags(sec)):
             no_loc.append(title)
@@ -208,10 +217,12 @@ def content_audit(path: str, draft: bool = False) -> dict:
 
     # 5b 每个概念节都要有「讲法」段（用户 2026-11-16：讲义不能只是 PPT 要点）
     no_lec = []
+    lec_skip = LEC_SKIP + (("Contents", "Read Me First", "Glossary", "Self-check",
+                            "Practice", "Takeaways", "Appendix") if is_en else ())
     for sec in secs:
         m = re.search(r'<span class="zh">(.*?)</span>', sec, re.S)
         title = strip_tags(m.group(1)).strip() if m else ""
-        if not title or any(k in title for k in LEC_SKIP):
+        if not title or any(k in title for k in lec_skip):
             continue
         if 'class="lec"' not in sec.split('<h3>')[0] and 'class="lec"' not in sec:
             no_lec.append(title)
@@ -224,7 +235,7 @@ def content_audit(path: str, draft: bool = False) -> dict:
     for sec in secs:
         m = re.search(r'<span class="zh">(.*?)</span>', sec, re.S)
         title = strip_tags(m.group(1)).strip() if m else ""
-        if not title or any(k in title for k in LEC_SKIP):
+        if not title or any(k in title for k in lec_skip):
             continue
         if not re.search(r'<pre class="code">|<div class="eg">', sec):
             no_prac.append(title)
@@ -240,8 +251,11 @@ def content_audit(path: str, draft: bool = False) -> dict:
     n_ans = len(re.findall(r'class="ans"', html))
 
     if not draft:  # 6–9 固定件 / 术语表 / 自测：预览稿（--draft）不判
-        fixed = {"封面": 'class="cover"', "目录": "CONTENTS", "导读": "导读",
-                 "小结": "小结", "自测": "自测", "术语表": "术语表", "附录": "附录"}
+        fixed = ({"封面": 'class="cover"', "目录": 'class="toc"', "小结": "<table>",
+                  "自测": 'class="q"', "术语表": 'class="glossary"', "附录": 'class="sym"'}
+                 if is_en else
+                 {"封面": 'class="cover"', "目录": "CONTENTS", "导读": "导读",
+                  "小结": "小结", "自测": "自测", "术语表": "术语表", "附录": "附录"})
         miss = [k for k, v in fixed.items() if v not in html]
         if miss:
             fails.append("固定件缺：" + "、".join(miss))
@@ -259,8 +273,8 @@ def content_audit(path: str, draft: bool = False) -> dict:
             fails.append(f"自测 {n_qq} 题，要求 {CONTENT_TH['quiz_min']}–{CONTENT_TH['quiz_max']} 题")
         if n_ans != n_qq:
             fails.append(f"自测 {n_qq} 题但只有 {n_ans} 个答案")
-        if "回看 §" not in plain:
-            fails.append("自测答案里没有「回看 §x」（错题回不去原节）")
+        if not re.search(r"回看\s*§|review\s*§", plain, re.I):
+            fails.append("自测答案里没有「回看 §x / Review §x」（错题回不去原节）")
 
     # 10–11 段落过长 / 表格列数过多
     # 2026-11-16 修：原来写 <p[^>]*>，会把 <pre class="code"> 也当成 <p>（代码整块被算成一个「段落」，
@@ -376,8 +390,11 @@ def audit_one(path: str, light: bool = False) -> dict:
     luma = max(lumas)
 
     cites = len(CITE_RE.findall(full))
-    has_toc = ("目录" in full and "CONTENTS" in full.upper())
-    has_quiz = ("自测" in full or "练习" in full) and ("答案" in full)
+    # 2026-11-18：全英档目录标题是 Contents，没有「目录」两字
+    has_toc = (("目录" in full and "CONTENTS" in full.upper()) or ("Contents" in full))
+    # 2026-11-18：「答：」也是答案标记（DeepSeek 生成的讲次用这个写法）；全英档认 Self-check / Review
+    has_quiz = (("自测" in full or "练习" in full or "Self-check" in full)
+                and ("答案" in full or "答：" in full or "Review §" in full))
     added = full.count("整理者补充")
     body_starts = body_start_pages(doc)
     doc.close()
