@@ -2469,6 +2469,39 @@ class _WinApi:
         except Exception as e:  # noqa: BLE001
             return {"ok": False, "error": str(e)}
 
+    def get_box(self):
+        """窗口位置与大小（拉边缩放用）。"""
+        try:
+            import ctypes
+            import ctypes.wintypes as wt
+            u = ctypes.windll.user32
+            hwnd = _find_hwnd()
+            if not hwnd:
+                return {"ok": False}
+            r = wt.RECT()
+            u.GetWindowRect(hwnd, ctypes.byref(r))
+            return {"ok": True, "x": r.left, "y": r.top,
+                    "w": r.right - r.left, "h": r.bottom - r.top,
+                    "maxed": bool(u.IsZoomed(hwnd))}
+        except Exception as e:  # noqa: BLE001
+            return {"ok": False, "error": str(e)}
+
+    def set_box(self, x: int, y: int, w: int, h: int):
+        """移动到 (x,y) 并改成 w×h（拉边缩放用；最大化时拒绝）。"""
+        try:
+            import ctypes
+            import ctypes.wintypes as wt
+            u = ctypes.windll.user32
+            hwnd = _find_hwnd()
+            if not hwnd or u.IsZoomed(hwnd):
+                return {"ok": False}
+            w = max(640, int(w)); h = max(480, int(h))
+            # SWP_NOZORDER(0x4) | SWP_NOACTIVATE(0x10)
+            u.SetWindowPos(hwnd, 0, int(x), int(y), w, h, 0x0014)
+            return {"ok": True, "x": int(x), "y": int(y), "w": w, "h": h}
+        except Exception as e:  # noqa: BLE001
+            return {"ok": False, "error": str(e)}
+
     def move_by(self, dx: int, dy: int):
         """拖标题栏的旧方案（保留作非 Windows / 原生拖拽不可用时的回退）。"""
         w = self._win()

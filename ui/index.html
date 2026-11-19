@@ -477,6 +477,18 @@ footer{max-width:1080px;margin:26px auto 0;padding:0 16px;display:flex;align-ite
  body.win{height:100vh;overflow:hidden;display:flex;flex-direction:column}
  body.win #appScroll{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden}
  body.win .tbar{position:relative;flex:0 0 36px}
+ /* 导航在窗口模式里也固定（标题栏下面），页面内容从它下面滚 */
+ body.win #navSticky{position:sticky;top:0;z-index:70;background:var(--bg);border-bottom:1px solid var(--line2)}
+ body.win #navSticky .top{padding-bottom:10px}
+ /* 拉边缩放：WebView2 子窗口盖住 NC 边，系统 WM_NCHITTEST 收不到鼠标；
+    用 5–6px 的透明把手自己算，右侧让出 10px 滚动条 */
+ .rz{position:fixed;z-index:90;touch-action:none}
+ .rz-r{top:36px;right:10px;bottom:10px;width:5px;cursor:ew-resize}
+ .rz-l{top:36px;left:0;bottom:10px;width:6px;cursor:ew-resize}
+ .rz-b{left:0;right:10px;bottom:0;height:6px;cursor:ns-resize}
+ .rz-br{right:10px;bottom:0;width:16px;height:16px;cursor:nwse-resize}
+ .rz-bl{left:0;bottom:0;width:16px;height:16px;cursor:nesw-resize}
+ body.fs-read .rz{display:none}
  /* 滚动条收窄、去掉上下箭头按钮（2026-11-19：原来那条 17px 的经典滚动条太像网页，且带按钮） */
  body.win #appScroll{scrollbar-width:thin;scrollbar-color:var(--line) transparent}
  body.win #appScroll::-webkit-scrollbar{width:10px;height:10px}
@@ -543,6 +555,7 @@ footer{max-width:1080px;margin:26px auto 0;padding:0 16px;display:flex;align-ite
   </div>
 </div>
 <div id="appScroll">
+<div id="navSticky">
 <div class="top">
   <div class="brand">
     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round">
@@ -563,6 +576,7 @@ footer{max-width:1080px;margin:26px auto 0;padding:0 16px;display:flex;align-ite
     <span class="link" id="btnSet">设置</span>
   </div>
 </div>
+</div><!-- /navSticky -->
 
 <div class="wrap">
   <!-- 课程 -->
@@ -2519,6 +2533,53 @@ document.addEventListener('keydown', e => {
     bind('tbClose', a2 => a2.close());
   }
 
+  /* ---- 拉边缩放（2026-11-19）----
+     WebView2 的 child 窗口盖住了窗口的非客户区，系统的 WM_NCHITTEST 收不到鼠标，
+     WS_THICKFRAME 形同虚设；这里用 5 个透明把手自己做，位置/尺寸走 pywebview API。 */
+  function initResize(){
+    if(!WIN) return;
+    const api = () => (window.pywebview && window.pywebview.api) || null;
+    const specs = [
+      ['rz-r', 'r'], ['rz-l', 'l'], ['rz-b', 'b'], ['rz-br', 'rb'], ['rz-bl', 'lb']
+    ];
+    specs.forEach(([cls, edge]) => {
+      const el = document.createElement('div');
+      el.className = 'rz ' + cls;
+      document.body.appendChild(el);
+      el.addEventListener('pointerdown', e => {
+        const a = api();
+        if(!a || !a.get_box) return;
+        e.preventDefault();
+        a.get_box().then(box => {
+          if(!box || !box.ok || box.maxed) return;
+          const sx = e.screenX, sy = e.screenY;
+          let raf = 0, last = {x:box.x, y:box.y, w:box.w, h:box.h};
+          const move = ev => {
+            if(ev.buttons === 0) return;
+            const dx = ev.screenX - sx, dy = ev.screenY - sy;
+            let x = box.x, y = box.y, w = box.w, h = box.h;
+            if(edge.includes('r')) w = box.w + dx;
+            if(edge.includes('l')) { w = box.w - dx; x = box.x + dx; }
+            if(edge.includes('b')) h = box.h + dy;
+            if(w < 640){ if(edge.includes('l')) x = box.x + box.w - 640; w = 640; }
+            if(h < 480) h = 480;
+            last = {x, y, w, h};
+            if(!raf) raf = requestAnimationFrame(() => {
+              raf = 0;
+              try{ a.set_box(last.x, last.y, last.w, last.h); }catch(_){}
+            });
+          };
+          const up = () => {
+            document.removeEventListener('pointermove', move);
+            document.removeEventListener('pointerup', up);
+          };
+          document.addEventListener('pointermove', move);
+          document.addEventListener('pointerup', up, {once:true});
+        }).catch(() => {});
+      });
+    });
+  }
+
   /* ---- 更新提示 ---- */
   function snoozed(){
     try{ const t = Number(localStorage.getItem(SNOOZE) || 0); return !!t && Date.now() < t; }
@@ -2639,7 +2700,7 @@ document.addEventListener('keydown', e => {
   function initBarOnce(){
     if(barDone) return;
     if(!document.getElementById('tbar')) return;   // DOM 还没到就等下一次事件，别把「没初始化」记成完成
-    barDone = true; initBar();
+    barDone = true; initBar(); initResize();
   }
 
   window.addEventListener('pywebviewready', () => { if(WIN) initBarOnce(); });
