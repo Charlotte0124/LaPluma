@@ -35,6 +35,7 @@ for _p in (paths.res("api"), paths.res("engine")):
 import client  # noqa: E402  api\client.py
 
 MAX_SRC = 45000          # 一次送进模型的源文本上限（字符）
+MAX_FIGS = 40            # 最多抽多少张课件页图（整页截图）
 GLOSSARY_MIN = 20        # 内容门要求的最小术语条数
 ORIG_DIR = "00_原件"
 
@@ -51,6 +52,7 @@ _SYS_ZH = """你是课程讲义编辑。把给定课件（逐页文本，页码�
 9. 全中模式：正文中文；术语英文只在术语表给，正文不要自己加英文括号。
 10. 节数 8-12 节，no 从 0 连续；summary / glossary / appendix / quiz 的 no 顺延。
 11. 输出尽量紧凑，避免超出输出长度。
+12. 如果课件某页有图/结构图/表格截图，用 fig 块引用给定文件名：["fig", "gen/T02/p012.png", "图注（课件 p.12）"]；只能引用清单里的文件，没有合适图就不放。
 """
 
 _SYS_EN = """You are a course handout editor. Turn the given lecture slides (page texts, page numbers marked) into printable self-study handout data.
@@ -193,6 +195,46 @@ def pages_text(pdf: str, emit=print) -> tuple[str, int, int]:
     return text, n, total
 
 
+def extract_figures(pdf: str, course: str, no: str, emit=print) -> list:
+    """把课件里「有图/表」的页导出成整页 PNG，供模型用 fig 块引用。
+
+    2026-11-19 用户：「生成的东西少了引用课件 PDF 原文截图图片」——讲义要以课件为依据，
+    不是只把文字复述一遍。这里只导出有图片对象的页，最多 MAX_FIGS 张，96 dpi。
+    返回 [(相对路径, 页码), …]（相对 <课程>\\06_笔记\\assets）。
+    """
+    try:
+        import pymupdf
+    except Exception:  # noqa: BLE001
+        return []
+    out_root = paths.data(course, "06_笔记", "assets", "gen", no)
+    try:
+        os.makedirs(out_root, exist_ok=True)
+    except Exception as e:  # noqa: BLE001
+        emit("[图] 建目录失败：%r" % (e,))
+        return []
+    out = []
+    try:
+        with pymupdf.open(pdf) as doc:
+            for i, page in enumerate(doc, 1):
+                if len(out) >= MAX_FIGS:
+                    break
+                try:
+                    if not page.get_images(full=True):
+                        continue
+                    pix = page.get_pixmap(dpi=96)
+                    name = "p%03d.png" % i
+                    pix.save(os.path.join(out_root, name))
+                    out.append(("gen/%s/%s" % (no, name), i))
+                except Exception:  # noqa: BLE001
+                    continue
+    except Exception as e:  # noqa: BLE001
+        emit("[图] 抽图失败：%r" % (e,))
+        return []
+    if out:
+        emit("[图] 导出课件页图 %d 张 → %s" % (len(out), out_root))
+    return out
+
+
 def _strip_fence(txt: str) -> str:
     txt = (txt or "").strip()
     fence = chr(96) * 3
@@ -256,6 +298,10 @@ def _norm(data: dict) -> dict:
                     continue
                 steps = b[2] if isinstance(b[2], (list, tuple)) else [b[2]]
                 b = ["eg", str(b[1]), [str(x) for x in steps], str(b[3])]
+            elif kind == "fig":
+                if len(b) < 3:
+                    continue
+                b = ["fig", str(b[1]), str(b[2])]
             elif kind == "q":
                 if len(b) < 3:
                     continue
@@ -350,15 +396,25 @@ def draft(course: str, no: str, lang: str = "zh", emit=print, model: str | None 
     emit("[原件] %s" % orig)
     src, ntext, total = pages_text(pdf, emit=emit)
     emit("[源文本] %d 页有文字 / 共 %d 页 · %d 字符" % (ntext, total, len(src)))
+    figs = extract_figures(pdf, course, no, emit=emit)
+    fig_help = ""
+    if figs:
+        fig_help = "\n\n可用的课件页图（整页截图，fig 块只能引用这些文件名）：\n" + "\n".join(
+            "p.%d → %s" % (pg, rel) for rel, pg in figs)
     sysmsg = _SYS_EN if lang == "en" else _SYS_ZH
-    user = (("Slides (%d pages with text):\n\n%s\n\nProduce LESSON JSON in this shape:\n%s"
-             % (ntext, src, _SCHEMA)) if lang == "en" else
-            ("下面是课件全文（%d 页有文字）：\n\n%s\n\n按这个 JSON 结构输出 LESSON：\n%s"
-             % (ntext, src, _SCHEMA)))
+    user = (("Slides (%d pages with text):\n\n%s%s\n\nProduce LESSON JSON in this shape:\n%s"
+             % (ntext, src, fig_help, _SCHEMA)) if lang == "en" else
+            ("下面是课件全文（%d 页有文字）：\n\n%s%s\n\n按这个 JSON 结构输出 LESSON：\n%s"
+             % (ntext, src, fig_help, _SCHEMA)))
     emit("[生成] %s · %s" % (model, "全英（专有名称中文）" if lang == "en" else "全中（专业名称英文）"))
     out = client.chat([{"role": "system", "content": sysmsg}, {"role": "user", "content": user}],
                       model=model, temperature=0.3, max_tokens=30000)
     data = _norm(_json_of(out["text"]))
+    # 模型可能编一个不存在的图名：只保留清单里真有的 fig，避免「缺图」整讲失败
+    allowed = {rel for rel, _pg in figs}
+    for s in data.get("sections", []):
+        s["body"] = [b for b in s.get("body", [])
+                     if b[0] != "fig" or (len(b) > 1 and b[1] in allowed)]
     emit("[生成] 完成 %.1fs · 入 %d / 出 %d tokens（含思考 %d）"
          % (out["seconds"], out.get("usage", {}).get("prompt_tokens", 0),
             out.get("usage", {}).get("completion_tokens", 0),

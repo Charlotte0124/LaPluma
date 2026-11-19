@@ -377,9 +377,24 @@ nav a.on{background:var(--ink);color:var(--bg)}
 .read-card.fs .read-body{flex:1;min-height:0}
 .read-card.fs .reader{max-height:none;height:100%}
 .read-card.fs .side{max-height:none;overflow:auto}
+.read-card.hide-side .read-body{grid-template-columns:1fr}
+.read-card.hide-side .side{display:none}
+#readerBox{cursor:grab}
+#readerBox.panning{cursor:grabbing}
 .reader{background:var(--reader-bg);padding:18px;min-height:560px;display:flex;justify-content:center;
    align-items:flex-start;overflow:auto;max-height:calc(100vh - 190px)}
+#pdfwrap{position:relative;display:inline-block;line-height:0}
 #pdfcanvas{background:var(--page);box-shadow:var(--sheet-shadow);border-radius:2px;display:block}
+#pdftext{position:absolute;left:0;top:0;overflow:hidden;line-height:1;color:transparent;
+  user-select:text;-webkit-user-select:text}
+#pdftext span{position:absolute;white-space:pre;transform-origin:0 0;cursor:text;color:transparent}
+#pdftext span::selection{background:rgba(231,194,70,.45);color:transparent}
+#pdftext span::-moz-selection{background:rgba(231,194,70,.45);color:transparent}
+.note-menu{position:fixed;z-index:95;background:var(--card);border:1px solid var(--ink);border-radius:8px;
+  box-shadow:0 10px 30px rgba(0,0,0,.22);padding:4px;min-width:130px}
+.note-menu button{display:block;width:100%;text-align:left;border:0;background:transparent;border-radius:6px;
+  padding:7px 10px;font-size:12.5px;color:var(--ink)}
+.note-menu button:hover{background:var(--card2)}
 .side{background:var(--card);padding:14px;border-left:1px solid var(--line2);min-height:560px;display:flex;flex-direction:column;gap:12px}
 .nlist{display:flex;flex-direction:column;gap:8px;max-height:320px;overflow:auto}
 .nitem{border:1px solid var(--line2);border-left:2px solid var(--line);border-radius:8px;padding:8px 10px;font-size:12.5px;
@@ -450,6 +465,14 @@ nav a.on{background:var(--ink);color:var(--bg)}
   border-radius:11px;padding:11px 16px;font-size:12.5px;box-shadow:0 12px 34px rgba(0,0,0,.28);opacity:0;pointer-events:none;
   transition:.24s;z-index:80;display:flex;align-items:center;gap:12px;max-width:min(620px,92vw)}
 .toast.on{opacity:1;transform:translateX(-50%) translateY(0);pointer-events:auto}
+/* 生成进度条（2026-11-19）*/
+.genprog{display:none;margin-top:10px}
+.genprog.on{display:block}
+.genprog .bar{height:6px;border-radius:4px;background:var(--line);overflow:hidden}
+.genprog .bar i{display:block;height:100%;width:0;background:var(--ok);transition:width .25s ease}
+.genprog .st{display:block;margin-top:5px;font-size:11.5px;color:var(--sub)}
+.trans{white-space:pre-wrap;font-size:13px;line-height:1.8;max-height:55vh;overflow:auto;
+  background:var(--card2);border:1px solid var(--line2);border-radius:9px;padding:12px 14px;margin:10px 0}
 .toast button{background:transparent;border:1px solid currentColor;border-radius:7px;padding:3px 10px;font-size:11.5px;color:inherit;opacity:.9}
 footer{max-width:1080px;margin:26px auto 0;padding:0 16px;display:flex;align-items:center;gap:14px;
   font-size:11.5px;color:var(--faint);border-top:1px solid var(--line);padding-top:14px;flex-wrap:wrap}
@@ -655,6 +678,7 @@ footer{max-width:1080px;margin:26px auto 0;padding:0 16px;display:flex;align-ite
           <button class="btn" id="btnGen">开始生成</button>
           <span class="hint" id="genHint" style="border:0;margin:0;padding:0;align-self:center">单本模式需勾选至少一讲；合订本模式包含全部讲次。</span>
         </div>
+        <div class="genprog" id="genProg"><div class="bar"><i id="genBar"></i></div><span class="st" id="genStage">准备…</span></div>
         <div class="queue" id="queue"></div>
         <div class="log" id="log"></div>
       </div>
@@ -733,12 +757,14 @@ footer{max-width:1080px;margin:26px auto 0;padding:0 16px;display:flex;align-ite
         <div class="read-ctl">
           <div class="seg"><button id="pgPrev">‹</button><span class="val" id="pgVal">— / —</span><button id="pgNext">›</button></div>
           <div class="seg"><button id="zOut">−</button><span class="val" id="zVal">100%</span><button id="zIn">＋</button></div>
+          <button class="tbtn" id="btnNotes" title="显示 / 隐藏笔记栏">▤ <span id="notesLabel">笔记</span></button>
+          <button class="tbtn" id="btnTrans" title="翻译这一页（会调用模型）">译</button>
           <button class="tbtn" id="btnFs"><span id="fsIcon">⤢</span><span id="fsLabel">全屏</span></button>
           <button class="tbtn" id="btnTheme2"><span id="themeIcon2">◐</span><span id="themeLabel2">深色</span></button>
         </div>
       </div>
       <div class="read-body">
-        <div class="reader" id="readerBox"><canvas id="pdfcanvas"></canvas></div>
+        <div class="reader" id="readerBox"><div id="pdfwrap"><canvas id="pdfcanvas"></canvas><div id="pdftext"></div></div></div>
         <div class="side">
           <div>
             <h5 style="margin:0 0 10px;font-size:12.5px;font-weight:600;display:flex;justify-content:space-between">
@@ -865,6 +891,8 @@ function scrollApp(top){
   else window.scrollTo({top, behavior:'instant'});
 }
 function showPage(p){
+  // 2026-11-19：全屏阅读时点导航/返回，先把全屏与 fs-read 收掉，否则顶栏消失、页面像卡死
+  if(p !== 'read' && typeof exitReaderFullscreen === 'function') exitReaderFullscreen();
   PAGE = p;
   if(p !== 'courses' && typeof findOpen === 'function' && FIND.open) findOpen(false);
   if(typeof closeDrawer === 'function') closeDrawer();   // 切导航时抽屉不留着
@@ -1618,6 +1646,18 @@ async function runGenerate(course, no, form, preset){
   else { item = {course, lesson:label, st:'run'}; Q.unshift(item); }
   renderQueue();
   const log = $('#log'); log.style.display='block'; log.textContent = '正在生成 '+label+' …';
+  const gp = $('#genProg'), gb = $('#genBar'), gs = $('#genStage');
+  gp.classList.add('on'); gb.style.width = '3%'; gs.textContent = '准备…';
+  let pTimer = setInterval(async () => {
+    try{
+      const p = await (await fetch('/api/progress')).json();
+      if(!p || !p.ok) return;
+      const pct = Math.max(0, Math.min(100, p.pct || 0));
+      gb.style.width = pct + '%';
+      gs.textContent = (p.stage || '生成中') + (p.elapsed ? (' · ' + p.elapsed + 's') : '');
+      if(!p.on && pct >= 100){ clearInterval(pTimer); pTimer = 0; setTimeout(()=>gp.classList.remove('on'), 900); }
+    }catch(_){}
+  }, 700);
   $('#btnGen').disabled = true;
   try{
     const j = await (await fetch('/api/generate',{method:'POST',headers:{'Content-Type':'application/json'},
@@ -1630,9 +1670,26 @@ async function runGenerate(course, no, form, preset){
       return;
     }
     log.textContent = (j.ok ? '成功（'+j.seconds+'s）\n\n' : '失败\n\n') + (j.log || j.error || '');
-    if(j.ok){ Q = Q.filter(q=>q!==item); renderQueue(); B = await (await fetch('/api/bootstrap')).json(); render(); refreshUsage(); }
+    if(j.ok){
+      Q = Q.filter(q=>q!==item); renderQueue();
+      B = await (await fetch('/api/bootstrap')).json(); render(); refreshUsage();
+      // 生成成功后把这一门课的抽屉打开（用户：生成成功之后课程那并没有弹出来）
+      gb.style.width = '100%'; gs.textContent = '完成';
+      const c = (B.courses||[]).find(x => x.code === course);
+      if(c) openDrawer(c);
+      const path = j.copied || '';
+      toast('生成完成：' + label, path ? '打开本地' : '', () => {
+        if(!path) return;
+        fetch('/api/reveal',{method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({path})}).then(r=>r.json()).then(x=>{ if(!x.ok) toast(x.error||'打不开'); }).catch(()=>{});
+      });
+    }
     else { item.st='fail'; item.msg=(j.error||'').slice(0,40); renderQueue(); }
   }catch(e){ item.st='fail'; item.msg='请求失败'; renderQueue(); log.textContent='请求失败：'+e; }
+  finally{
+    if(pTimer){ clearInterval(pTimer); pTimer = 0; }
+    setTimeout(()=>gp.classList.remove('on'), 700);
+  }
   // 批量里（preset 不为空）不由单讲解开按钮，否则排队中途按钮看着可点
   if(!preset) $('#btnGen').disabled = false;
 }
@@ -1891,13 +1948,14 @@ async function openReader(rel, name, code, goPage){
   $('#rTitle').textContent = RD.name;
   $('#rSub').textContent = rel;
   showPage('read');
+  applySide();
   $('#readerBox').innerHTML = '<div class="pdfmsg">正在打开 ' + esc(RD.name) + ' …</div>';
   await loadNotes();
   try{
     const lib = await loadPdfjs();
     const task = lib.getDocument({ url: '/api/pdf?p=' + encodeURIComponent(rel) });
     RD.doc = await task.promise;
-    $('#readerBox').innerHTML = '<canvas id="pdfcanvas"></canvas>';
+    $('#readerBox').innerHTML = '<div id="pdfwrap"><canvas id="pdfcanvas"></canvas><div id="pdftext"></div></div>';
     RD.page = Math.min(Math.max(1, RD.page), RD.doc.numPages);
     await renderPdf();
   }catch(e){
@@ -1930,6 +1988,43 @@ function imageBoxes(page, viewport, lib){
     }
     return boxes;
   }).catch(()=>[]);
+}
+async function renderTextLayer(page, vp, lib){
+  const box = document.getElementById('pdftext');
+  const wrap = document.getElementById('pdfwrap');
+  if(!box || !wrap) return;
+  wrap.style.width = Math.round(vp.width) + 'px';
+  wrap.style.height = Math.round(vp.height) + 'px';
+  box.style.width = Math.round(vp.width) + 'px';
+  box.style.height = Math.round(vp.height) + 'px';
+  box.innerHTML = '';
+  try{
+    const tc = await page.getTextContent();
+    const frag = document.createDocumentFragment();
+    // 按行合并：pdf.js 的 items 常是单字，逐字建 span 会让选中文本变成「D E M O」。
+    let line = '', first = null, fh = 0;
+    const flush = () => {
+      if(!line || !first) { line = ''; first = null; return; }
+      const el = document.createElement('span');
+      el.textContent = line;
+      el.style.left = first[4].toFixed(2) + 'px';
+      el.style.top = (first[5] - fh).toFixed(2) + 'px';
+      el.style.fontSize = fh.toFixed(2) + 'px';
+      frag.appendChild(el);
+      line = ''; first = null;
+    };
+    for(const it of (tc.items || [])){
+      if(!it.str) continue;
+      const tx = lib.Util.transform(vp.transform, it.transform);
+      const h2 = Math.hypot(tx[2], tx[3]);
+      if(!(h2 > 1)) continue;
+      if(!first){ first = tx; fh = h2; }
+      line += it.str;
+      if(it.hasEOL) flush();
+    }
+    flush();
+    box.appendChild(frag);
+  }catch(e){ /* 没有文字层就留空，不影响看图 */ }
 }
 async function renderPdf(){
   if(!RD.doc || RD.busy) return;
@@ -2005,6 +2100,7 @@ async function renderPdf(){
       canvas.width = off.width; canvas.height = off.height;
     }
     canvas.getContext('2d').drawImage(off, 0, 0);
+    await renderTextLayer(page, vp, await loadPdfjs());
     $('#pgVal').textContent = RD.page + ' / ' + RD.doc.numPages;
     $('#zVal').textContent = Math.round(RD.zoom*100) + '%';
     $('#curP').textContent = 'p.' + RD.page; $('#curP2').textContent = 'p.' + RD.page;
@@ -2018,7 +2114,68 @@ $('#pgPrev').onclick = () => { if(RD.doc && RD.page>1){ RD.page--; renderPdf(); 
 $('#pgNext').onclick = () => { if(RD.doc && RD.page<RD.doc.numPages){ RD.page++; renderPdf(); } };
 $('#zOut').onclick = () => { RD.zoom = Math.max(0.7, RD.zoom-0.1); renderPdf(); };
 $('#zIn').onclick = () => { RD.zoom = Math.min(1.5, RD.zoom+0.1); renderPdf(); };
+/* 滚动 = 翻页（2026-11-19 用户：「向下滚动PDF是下一页」）；节流，触控板一次手势不连翻 */
+let wheelAt = 0;
+$('#readerBox').addEventListener('wheel', e => {
+  if(!RD.doc || Math.abs(e.deltaY) < 18) return;
+  if(Date.now() - wheelAt < 260) return;
+  wheelAt = Date.now();
+  e.preventDefault();
+  if(e.deltaY > 0) $('#pgNext').click(); else $('#pgPrev').click();
+}, {passive:false});
+/* 左键拖拽 = 平移（缩放后页面大于阅读框时） */
+let pan = null;
+$('#readerBox').addEventListener('pointerdown', e => {
+  if(!RD.doc) return;
+  // 左键在文字层上=选字；左键在空白/扫描件=平移；中键始终平移
+  if(e.button === 0 && e.target.closest('#pdftext')) return;
+  if(e.button !== 0 && e.button !== 1) return;
+  const box = $('#readerBox');
+  if(box.scrollWidth <= box.clientWidth + 2 && box.scrollHeight <= box.clientHeight + 2) return;
+  pan = {x:e.clientX, y:e.clientY, sl:box.scrollLeft, st:box.scrollTop};
+  box.classList.add('panning');
+  try{ box.setPointerCapture(e.pointerId); }catch(_){}
+});
+$('#readerBox').addEventListener('pointermove', e => {
+  if(!pan) return;
+  const box = $('#readerBox');
+  box.scrollLeft = pan.sl - (e.clientX - pan.x);
+  box.scrollTop = pan.st - (e.clientY - pan.y);
+});
+const endPan = () => { pan = null; $('#readerBox').classList.remove('panning'); };
+$('#readerBox').addEventListener('pointerup', endPan);
+$('#readerBox').addEventListener('pointercancel', endPan);
 $('#readBack').onclick = () => showPage('courses');
+
+/* 选中 PDF 文字 → 右键「记笔记」（2026-11-19 用户第 10 条）*/
+let noteMenu = null;
+function closeNoteMenu(){ if(noteMenu){ noteMenu.remove(); noteMenu = null; } }
+document.addEventListener('click', closeNoteMenu);
+window.addEventListener('scroll', closeNoteMenu, true);
+document.addEventListener('contextmenu', e => {
+  if(!e.target.closest('#pdftext')) return;
+  const sel = String(window.getSelection ? window.getSelection().toString() : '').trim();
+  if(!sel) return;
+  e.preventDefault(); closeNoteMenu();
+  noteMenu = document.createElement('div');
+  noteMenu.className = 'note-menu';
+  const b = document.createElement('button');
+  b.textContent = '记笔记（引用这段原文）';
+  b.onclick = () => {
+    const ta = $('#nDraft');
+    if(ta){
+      const quote = sel.length > 500 ? sel.slice(0, 500) + '…' : sel;
+      ta.value = '【原文 p.' + RD.page + '】' + quote + '\n' + (ta.value || '');
+      ta.focus();
+      ta.scrollIntoView({block:'center'});
+    }
+    closeNoteMenu();
+  };
+  noteMenu.appendChild(b);
+  noteMenu.style.left = Math.min(window.innerWidth - 170, e.clientX) + 'px';
+  noteMenu.style.top = Math.min(window.innerHeight - 60, e.clientY) + 'px';
+  document.body.appendChild(noteMenu);
+});
 /* 全屏（2026-11-17 用户：「全屏模式不见了」）：只把阅读卡全屏，顶栏与笔记栏一起进去；
    按下后重新排版一次（可视宽度变了，按旧的 fit 算会留白）。键盘 F 同效，Esc 由浏览器退出。 */
 function readCard(){ return document.querySelector('#page-read .read-card'); }
@@ -2032,6 +2189,28 @@ function syncFsLabel(){
   if($('#fsIcon')) $('#fsIcon').textContent = on ? '⤡' : '⤢';
   if($('#fsLabel')) $('#fsLabel').textContent = on ? '退出全屏' : '全屏';
 }
+function exitReaderFullscreen(){
+  const card = readCard();
+  if(card) card.classList.remove('fs');
+  document.body.classList.remove('fs-read');
+  if(document.fullscreenElement){
+    try{ document.exitFullscreen(); }catch(_){}
+  }
+  syncFsLabel();
+}
+let SIDE_HIDDEN = false;
+try{ SIDE_HIDDEN = localStorage.getItem('pluma.hideSide') === '1'; }catch(_){}
+function applySide(){
+  const card = readCard(); if(!card) return;
+  card.classList.toggle('hide-side', SIDE_HIDDEN);
+  if($('#notesLabel')) $('#notesLabel').textContent = SIDE_HIDDEN ? '显示笔记' : '笔记';
+}
+$('#btnNotes').onclick = () => {
+  SIDE_HIDDEN = !SIDE_HIDDEN;
+  try{ localStorage.setItem('pluma.hideSide', SIDE_HIDDEN ? '1' : '0'); }catch(_){}
+  applySide();
+  setTimeout(()=>{ if(RD.doc) renderPdf(); }, 120);
+};
 async function setFullscreen(on){
   const card = readCard(); if(!card) return;
   if(!on){
@@ -2052,6 +2231,39 @@ async function setFullscreen(on){
   setTimeout(() => { if(RD.doc) renderPdf(); }, 160);
 }
 $('#btnFs').onclick = () => setFullscreen(!inFullscreen());
+/* 翻译这一页（2026-11-19 用户：「增加一个翻译器按钮在 在软件里读 的时候」）*/
+function transDialog(){
+  if(!RD.doc){ toast('先打开一份讲义'); return; }
+  $('#dlg').innerHTML = `
+    <div class="eb">Translate</div><h4>翻译第 ${RD.page} 页</h4>
+    <p class="desc">只翻这一页的文字层；扫描件没有文字层，会直接说读不到。</p>
+    <div class="acts" style="justify-content:flex-start">
+      <button class="btn" id="trZh">译成中文</button>
+      <button class="btn ghost" id="trEn">译成英文</button>
+      <button class="btn ghost" id="trNo" style="margin-left:auto">取消</button>
+    </div>
+    <div id="trOut"></div>`;
+  openVeil();
+  $('#trNo').onclick = closeVeil;
+  const go = async (to) => {
+    const out = $('#trOut');
+    out.innerHTML = '<p class="hint" style="border:0">翻译中…（一次模型调用）</p>';
+    try{
+      const j = await (await fetch('/api/translate',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({rel:RD.rel, page:RD.page, to})})).json();
+      if(!j.ok){ out.innerHTML = '<p class="hint" style="border:0;color:var(--red)">' + esc(j.error||'翻译失败') + '</p>'; return; }
+      out.innerHTML = '<div class="trans" id="trText">' + esc(j.text) + '</div>' +
+        '<div class="acts" style="justify-content:flex-start"><button class="btn ghost" id="trCopy">复制译文</button></div>';
+      $('#trCopy').onclick = async () => {
+        try{ await navigator.clipboard.writeText(j.text); toast('译文已复制'); }
+        catch(e){ toast('复制失败，请手动选中'); }
+      };
+    }catch(e){ out.innerHTML = '<p class="hint" style="border:0;color:var(--red)">请求失败：' + esc(String(e)) + '</p>'; }
+  };
+  $('#trZh').onclick = () => go('zh');
+  $('#trEn').onclick = () => go('en');
+}
+$('#btnTrans').onclick = transDialog;
 document.addEventListener('fullscreenchange', () => syncFsLabel());
 document.addEventListener('keydown', e=>{
   if(PAGE!=='read' || !RD.doc) return;

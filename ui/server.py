@@ -78,8 +78,43 @@ HOST, PORT = "127.0.0.1", 8765
 #   每次打开/刷新阅读器都全量重传（本机无感，平板走 WiFi 明显）。
 #   index.html 必须仍走 no-store（改完界面要能立刻看到新版）。
 _STATIC_ETAG = {}
-VERSION = "1.9.11"
+VERSION = "1.9.12"
 APP_NAME = "羽毛笔 La Pluma"
+
+# 2026-11-19：生成进度（一个进程同时只跑一讲；前端轮询 /api/progress）
+GEN_PROG = {"on": False, "stage": "", "pct": 0, "t0": 0.0}
+
+
+def set_prog(stage: str | None = None, pct: int | None = None, on: bool | None = None) -> None:
+    if on is not None:
+        GEN_PROG["on"] = bool(on)
+        if on:
+            GEN_PROG["t0"] = time.time()
+    if stage is not None:
+        GEN_PROG["stage"] = str(stage)
+    if pct is not None:
+        GEN_PROG["pct"] = max(0, min(100, int(pct)))
+
+
+def prog_from_log(line: str) -> None:
+    """把引擎日志翻译成粗粒度进度（不追求精确，够进度条走）。"""
+    s = str(line)
+    if "[源文本]" in s:
+        set_prog("读课件文字层", 15)
+    elif "[生成] 完成" in s:
+        set_prog("DeepSeek 写完正文", 45)
+    elif "[术语]" in s:
+        set_prog("补术语表", 52)
+    elif "[落盘]" in s:
+        set_prog("正文落盘", 60)
+    elif s.startswith("## "):
+        set_prog("生成讲义源", 65)
+    elif "生成 " in s and "_讲义_源.html" in s:
+        set_prog("内容门", 75)
+    elif "已写" in s:
+        set_prog("打印 PDF", 92)
+    elif "OK " in s:
+        set_prog("版式门", 96)
 
 
 def _load_brand():
@@ -1326,6 +1361,10 @@ class Handler(BaseHTTPRequestHandler):
                 return self._static(os.path.join(PDFJS_DIR, fn))
             if u.path == "/api/host":
                 return self._json(dict(ok=True, **host_state()))
+            if u.path == "/api/progress":
+                d = dict(GEN_PROG)
+                d["elapsed"] = round(time.time() - d.pop("t0", time.time()), 1) if d.get("on") else 0
+                return self._json(dict(ok=True, **d))
             if u.path == "/api/notes":
                 return self._json(dict(ok=True, **load_notes(q.get("code", [DEFAULT_COURSE])[0],
                                                              q.get("doc", [""])[0])))
@@ -1787,6 +1826,61 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({"ok": True, "kind": kind, "count": len(moved),
                                    "trash": moved[0] if moved else "",
                                    "trash_dir": os.path.join(ROOT, TRASH_DIR)})
+            if u.path == "/api/reveal":
+                # 生成完成后「打开本地」：只允许数据根内的路径；打开所在文件夹
+                p = os.path.abspath(str(body.get("path") or ""))
+                if not p or not p.startswith(os.path.abspath(ROOT) + os.sep):
+                    return self._json({"ok": False, "error": "路径不在软件目录内"}, 403)
+                if os.path.isfile(p):
+                    target = os.path.dirname(p)
+                elif os.path.isdir(p):
+                    target = p
+                else:
+                    return self._json({"ok": False, "error": "文件不存在：%s" % p}, 404)
+                try:
+                    os.startfile(target)  # noqa: S606  Windows 专用
+                except Exception as e:  # noqa: BLE001
+                    return self._json({"ok": False, "error": "打不开文件夹：%r" % (e,)}, 500)
+                return self._json({"ok": True, "opened": target})
+
+            if u.path == "/api/translate":
+                # 阅读器「译」按钮：把当前页 PDF 文字翻成中文/英文（一次调用，会花钱）
+                rel = str(body.get("rel") or "").strip()
+                try:
+                    page = int(body.get("page") or 1)
+                except Exception:  # noqa: BLE001
+                    page = 1
+                to = "en" if str(body.get("to") or "zh").lower().startswith("en") else "zh"
+                if not rel:
+                    return self._json({"ok": False, "error": "缺 rel（PDF 相对路径）"}, 400)
+                try:
+                    path = safe_join(*[x for x in rel.replace("\\", "/").split("/") if x])
+                    import pymupdf
+                    with pymupdf.open(path) as doc:
+                        if page < 1 or page > len(doc):
+                            return self._json({"ok": False, "error": "页码超出范围：%s" % page}, 400)
+                        src = (doc[page - 1].get_text("text") or "").strip()
+                except Exception as e:  # noqa: BLE001
+                    return self._json({"ok": False, "error": "读不到这一页：%r" % (e,)}, 500)
+                if len(src) < 2:
+                    return self._json({"ok": False, "error": "这一页没有文字层（扫描件/图片）"}, 400)
+                cfg = load_cfg()
+                if api_client is None or not cfg.get("api_key"):
+                    return self._json({"ok": False, "need_key": True, "error": "没配置 API 钥匙，不能翻译"}, 400)
+                sysmsg = ("你是专业译者。把给定 PDF 页文本翻译成英文，保留中文专有名称（药名/方剂名）原样。"
+                          "只输出译文，不要解释。" if to == "en" else
+                          "你是专业译者。把给定 PDF 页文本翻译成简体中文，专业术语首次出现时在括号里保留英文。"
+                          "只输出译文，不要解释。")
+                try:
+                    out = api_client.chat([{"role": "system", "content": sysmsg},
+                                           {"role": "user", "content": src[:6000]}],
+                                          model=cfg["model"], temperature=0.2, max_tokens=2400)
+                except Exception as e:  # noqa: BLE001
+                    return self._json({"ok": False, "error": "翻译失败：%s" % e}, 502)
+                log_usage(out.get("model") or cfg["model"], out.get("usage") or {})
+                return self._json({"ok": True, "text": out.get("text", ""), "page": page,
+                                   "to": to, "chars": len(src), "seconds": out.get("seconds")})
+
             if u.path == "/api/generate":
                 no = str(body.get("lesson", "")).strip()
                 course = str(body.get("course", DEFAULT_COURSE)).strip()
@@ -1794,6 +1888,7 @@ class Handler(BaseHTTPRequestHandler):
                 # 2026-11-18：输出模式（语言档）。全中 = 中文 + 专业术语英文；全英 = 英文 + 专有名称中文。
                 lang = "en" if str(body.get("lang") or "zh").lower().startswith("en") else "zh"
                 t0 = time.time()
+                set_prog("准备", 5, on=True)
                 if form == "book":
                     if lang == "en":
                         return self._json({"ok": False,
@@ -1812,14 +1907,22 @@ class Handler(BaseHTTPRequestHandler):
                 if no not in avail:
                     return self._json({"ok": False, "error": "没有这一讲：%s" % no}, 400)
                 pre = []
-                if ensure_body(course, no, lang, pre.append) != 0:
+                def emit_pre(s):
+                    pre.append(s)
+                    prog_from_log(s)
+                if ensure_body(course, no, lang, emit_pre) != 0:
+                    set_prog("补正文失败", 100, on=False)
                     return self._json({"ok": False, "log": "\n".join(pre), "form": "single",
                                        "lang": lang, "seconds": round(time.time() - t0, 1)})
+                set_prog("生成讲义源", 65)
                 log, rc = _inproc("_make", [no], course, "make", lang=lang)
+                for line in str(log).splitlines():
+                    prog_from_log(line)
                 log = "\n".join([x for x in pre + [log] if x])
                 copied = ""
                 if rc == 0 and body.get("save_dir"):
                     copied = self._copy_out(course, no, str(body["save_dir"]), lang=lang)
+                set_prog("完成" if rc == 0 else "有红项", 100, on=False)
                 return self._json({"ok": rc == 0, "log": log, "form": "single", "lang": lang,
                                    "seconds": round(time.time() - t0, 1), "copied": copied})
             if u.path == "/api/ask":
