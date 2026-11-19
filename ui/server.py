@@ -78,7 +78,7 @@ HOST, PORT = "127.0.0.1", 8765
 #   每次打开/刷新阅读器都全量重传（本机无感，平板走 WiFi 明显）。
 #   index.html 必须仍走 no-store（改完界面要能立刻看到新版）。
 _STATIC_ETAG = {}
-VERSION = "1.9.12"
+VERSION = "1.9.13"
 APP_NAME = "羽毛笔 La Pluma"
 
 # 2026-11-19：生成进度（一个进程同时只跑一讲；前端轮询 /api/progress）
@@ -1624,6 +1624,26 @@ class Handler(BaseHTTPRequestHandler):
                 elif not done:
                     tip["error"] = "；".join(r.get("error", "") for r in results)[:300]
                 return self._json(tip)
+            if u.path == "/api/course/new":
+                # 2026-11-19：以前界面没有「新建课程」，用户只能把原件都导进 DEMO。
+                code = _safe_code(str(body.get("code") or "").strip())
+                title = str(body.get("title") or "").strip() or code
+                if not code or code in ("_", "__"):
+                    return self._json({"ok": False, "error": "课程代号不能为空"}, 400)
+                if any(c["code"] == code for c in discover_courses()):
+                    return self._json({"ok": False, "error": "课程已存在：%s" % code}, 400)
+                d = paths.data(code)
+                try:
+                    for sub in ("_lessons", "01_讲义", "06_笔记", "00_原件"):
+                        os.makedirs(os.path.join(d, sub), exist_ok=True)
+                    meta_path = paths.data("courses.json")
+                    meta = _read_json(paths.data_or_res("courses.json"), {})
+                    meta[code] = {"title": title, "en": "", "desc": str(body.get("desc") or ""), "reader": "大学"}
+                    _write_json(meta_path, meta)
+                except Exception as e:  # noqa: BLE001
+                    return self._json({"ok": False, "error": "新建课程失败：%r" % (e,)}, 500)
+                return self._json({"ok": True, "code": code, "title": title})
+
             if u.path == "/api/import":
                 # 2026-11-17 用户：「他怎么只有保存的地方，没让我能丢进去的地方」
                 #   两种入口：mode=pick（本机弹文件对话框，不走浏览器上传，大 PDF 也快）
@@ -2709,17 +2729,25 @@ def run_window(url: str) -> int:
     win_url = url + ("&" if "?" in url else "?") + "win=1"   # 页面靠它判断「该不该画自绘标题栏」
     # 2026-11-17：默认 1280×880 在 1366×768 的笔记本上比屏幕还高，窗口底部与右下角的提示卡
     #   会跑到屏幕外面（实测截图只看到卡片的上边缘）。按屏幕工作区的 86% 收一下，但不小于最小值。
-    def _fit_size() -> tuple:
+    def _workarea() -> tuple:
+        """主屏工作区（去掉任务栏），窗口按它居中；不再让窗口停到屏幕左上/外面。"""
         try:
+            import ctypes.wintypes as wt
             u = ctypes.windll.user32
-            sw, sh = u.GetSystemMetrics(0), u.GetSystemMetrics(1)
-            return (min(1280, max(980, int(sw * 0.86))), min(880, max(640, int(sh * 0.86))))
+            r = wt.RECT()
+            if u.SystemParametersInfoW(0x0030, 0, ctypes.byref(r), 0):  # SPI_GETWORKAREA
+                return (r.left, r.top, r.right - r.left, r.bottom - r.top)
         except Exception:  # noqa: BLE001
-            return 1280, 880
+            pass
+        return (0, 0, 1280, 880)
 
-    w0, h0 = _fit_size()
+    wa_x, wa_y, wa_w, wa_h = _workarea()
+    w0 = min(1280, max(640, int(wa_w * 0.86)))
+    h0 = min(880, max(480, int(wa_h * 0.86)))
+    x0 = wa_x + max(0, (wa_w - w0) // 2)
+    y0 = wa_y + max(0, (wa_h - h0) // 2)
     webview.create_window("%s v%s" % (APP_NAME, VERSION), win_url,
-                          width=w0, height=h0, min_size=(980, 640),
+                          width=w0, height=h0, x=x0, y=y0, min_size=(980, 640),
                           frameless=True, easy_drag=False, js_api=api,
                           background_color="#F7F5EF")
     # 2026-11-17 用户：「为什么我本地的软件的图标还是一样的」——

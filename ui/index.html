@@ -471,6 +471,10 @@ nav a.on{background:var(--ink);color:var(--bg)}
 .genprog .bar{height:6px;border-radius:4px;background:var(--line);overflow:hidden}
 .genprog .bar i{display:block;height:100%;width:0;background:var(--ok);transition:width .25s ease}
 .genprog .st{display:block;margin-top:5px;font-size:11.5px;color:var(--sub)}
+.gen-note{margin-top:12px;border:1px solid var(--line2);border-radius:10px;padding:10px 12px;background:var(--card2)}
+.gen-note h5{margin:0 0 6px;font-size:12px;color:var(--sub);font-weight:600}
+.gen-note .row{display:flex;gap:9px;font-size:11.5px;line-height:1.65;color:var(--sub);padding:2px 0}
+.gen-note .row span{color:var(--faint);font-family:Consolas,monospace;flex:none}
 .trans{white-space:pre-wrap;font-size:13px;line-height:1.8;max-height:55vh;overflow:auto;
   background:var(--card2);border:1px solid var(--line2);border-radius:9px;padding:12px 14px;margin:10px 0}
 .toast button{background:transparent;border:1px solid currentColor;border-radius:7px;padding:3px 10px;font-size:11.5px;color:inherit;opacity:.9}
@@ -663,6 +667,7 @@ footer{max-width:1080px;margin:26px auto 0;padding:0 16px;display:flex;align-ite
         <div class="tools">
           <select id="courseSel"></select>
           <button class="btn ghost" id="btnImport" title="为本课程导入课件 PDF 或图片，也可将文件拖入窗口">＋ 导入课件</button>
+          <button class="btn ghost" id="btnNewCourse" title="新建一门课程，把课件分开放（不再全堆在示例课程里）">＋ 新建课程</button>
           <span class="hint" id="impHint" style="border:0;margin:0;padding:0;align-self:center">原件 —</span>
         </div>
         <div class="lsn-h">
@@ -681,6 +686,13 @@ footer{max-width:1080px;margin:26px auto 0;padding:0 16px;display:flex;align-ite
         <div class="genprog" id="genProg"><div class="bar"><i id="genBar"></i></div><span class="st" id="genStage">准备…</span></div>
         <div class="queue" id="queue"></div>
         <div class="log" id="log"></div>
+        <div class="gen-note" id="genNote">
+          <h5>生成前请确认</h5>
+          <div class="row"><span>01</span><div>讲义内容由 AI 辅助整理，可能与原始课件不一致，<b>重要信息请自行核实</b>。</div></div>
+          <div class="row"><span>02</span><div>生成只写到你设的保存目录，不改动其它位置。</div></div>
+          <div class="row"><span>03</span><div>导入的占位讲次会先由 DeepSeek 补正文，约 1 分钟/讲、约 ¥0.03/讲；补完的内容仍需人工抽查。</div></div>
+          <div class="row"><span>04</span><div>每份成品页脚固定印「本内容由 AI 生成，仅供参考；重要信息请自行核实」与软件名、项目地址，不可关闭。</div></div>
+        </div>
       </div>
       <div>
         <div class="card pad">
@@ -1222,7 +1234,14 @@ function renderFiles(){
   const tot = all.length + org.length;
   $('#drCount').textContent = kw ? ((list.length+origs.length)+' / '+tot) : (tot+' 份');
   let html = '';
-  // 2026-11-17：抽屉分两段——原件（用户自己导进来的源课件）/ 成品（生成出来的讲义）
+  // 2026-11-19 用户：成品与原件的位置互换——成品在上，原件在下
+  html += `<div class="dr-files-grp">成品 · ${all.length}<span>已生成的讲义</span></div>`;
+  html += list.length ? list.map(f=>`
+    <div class="f" data-pdf="${esc(f.rel)}" data-name="${esc(f.name)}" title="${esc(f.rel)}">
+      <div class="n">${esc(f.name)}</div>
+      <div class="pg">${f.pages} p</div><div class="op">在软件里读 →</div>
+      <button class="fdel" data-fdel="${esc(f.rel)}" data-fname="${esc(f.name)}" title="删除这份成品">删除</button>
+    </div>`).join('') : '<div class="empty">'+(kw?'无匹配成品':'本课程暂无成品。')+'</div>';
   html += `<div class="dr-files-grp">原件 · ${org.length}<span>导入的源课件</span></div>`;
   html += origs.length ? origs.map(f=>`
     <div class="f" data-pdf="${esc(f.rel)}" data-name="${esc(f.name)}" title="${esc(f.rel)}">
@@ -1231,13 +1250,6 @@ function renderFiles(){
       <button class="fdel" data-fdel="${esc(f.rel)}" data-fname="${esc(f.name)}" title="删除这份原件">删除</button>
     </div>`).join('')
     : '<div class="empty">'+(kw?'无匹配原件':'暂无原件。可在「生成」页点「＋ 导入课件」，或将 PDF 拖入窗口。')+'</div>';
-  html += `<div class="dr-files-grp">成品 · ${all.length}<span>已生成的讲义</span></div>`;
-  html += list.length ? list.map(f=>`
-    <div class="f" data-pdf="${esc(f.rel)}" data-name="${esc(f.name)}" title="${esc(f.rel)}">
-      <div class="n">${esc(f.name)}</div>
-      <div class="pg">${f.pages} p</div><div class="op">在软件里读 →</div>
-      <button class="fdel" data-fdel="${esc(f.rel)}" data-fname="${esc(f.name)}" title="删除这份成品">删除</button>
-    </div>`).join('') : '<div class="empty">'+(kw?'无匹配成品':'本课程暂无成品。')+'</div>';
   $('#drFiles').innerHTML = html;
   $('#drFiles').querySelectorAll('[data-pdf]').forEach(el=>el.onclick = e => {
     if(e.target.classList.contains('fdel')) return;
@@ -1326,6 +1338,32 @@ $('#btnImport').onclick = async () => {
     await afterImport(j, code);
   }catch(e){ toast('请求失败：' + e); }
   finally{ btn.disabled = false; btn.innerHTML = old; }
+};
+$('#btnNewCourse').onclick = () => {
+  $('#dlg').innerHTML = `
+    <div class="eb">New course</div><h4>新建课程</h4>
+    <p class="desc">一门课一个目录：原件放 <code>00_原件</code>，讲义放 <code>01_讲义</code>。之后导入与生成都只动这一门。</p>
+    <label class="chk" style="display:block;margin:10px 0 6px">课程代号（目录名，汉字/字母/数字）</label>
+    <input id="ncCode" placeholder="例如：药剂学" style="width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:9px;background:var(--card2);color:var(--ink)">
+    <label class="chk" style="display:block;margin:12px 0 6px">显示名称（可留空，默认同代号）</label>
+    <input id="ncTitle" placeholder="例如：药剂学 · 散剂" style="width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:9px;background:var(--card2);color:var(--ink)">
+    <div class="acts"><button class="btn ghost" id="ncNo">取消</button><button class="btn" id="ncOk">新建</button></div>`;
+  openVeil();
+  $('#ncNo').onclick = closeVeil;
+  $('#ncOk').onclick = async () => {
+    const code = ($('#ncCode').value || '').trim();
+    const title = ($('#ncTitle').value || '').trim();
+    if(!code){ toast('先填课程代号'); return; }
+    const j = await (await fetch('/api/course/new',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({code, title})})).json();
+    if(!j.ok){ toast(j.error || '新建失败'); return; }
+    closeVeil();
+    B = await (await fetch('/api/bootstrap')).json();
+    render(); fillSelects();
+    const cs = $('#courseSel'); if(cs){ cs.value = j.code; syncLessons(); updateImpHint(); }
+    showPage('generate');
+    toast('已建课程：' + j.code);
+  };
 };
 let dropDepth = 0;
 function setDrop(on, code){
@@ -1617,10 +1655,10 @@ $('#btnGen').onclick = () => {
   const course = $('#courseSel').value;
   if(!course) return;
   if(FORM==='book' && LANG==='en'){ toast('合订本暂只出全中；要英文版请选「单本」'); return; }
-  if(FORM==='book') return disclaimer(()=>runBatch(course, [''], 'book'));
+  if(FORM==='book') return runBatch(course, [''], 'book');
   const list = [...LESSON_SEL];
   if(!list.length){ toast('先勾要生成的讲次（可多选）'); return; }
-  disclaimer(()=>runBatch(course, list, 'single'));
+  runBatch(course, list, 'single');
 };
 function disclaimer(cb){
   $('#dlg').innerHTML = `
