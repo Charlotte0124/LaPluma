@@ -477,6 +477,13 @@ footer{max-width:1080px;margin:26px auto 0;padding:0 16px;display:flex;align-ite
  body.win{height:100vh;overflow:hidden;display:flex;flex-direction:column}
  body.win #appScroll{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden}
  body.win .tbar{position:relative;flex:0 0 36px}
+ /* 滚动条收窄、去掉上下箭头按钮（2026-11-19：原来那条 17px 的经典滚动条太像网页，且带按钮） */
+ body.win #appScroll{scrollbar-width:thin;scrollbar-color:var(--line) transparent}
+ body.win #appScroll::-webkit-scrollbar{width:10px;height:10px}
+ body.win #appScroll::-webkit-scrollbar-track{background:transparent}
+ body.win #appScroll::-webkit-scrollbar-thumb{background:var(--line);border-radius:5px;border:2px solid var(--bg)}
+ body.win #appScroll::-webkit-scrollbar-thumb:hover{background:var(--faint)}
+ body.win #appScroll::-webkit-scrollbar-button{display:none}
 .tbar .tb-name{display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:600;letter-spacing:.03em;color:var(--ink)}
 .tbar .tb-name svg{stroke:var(--ink)}
 .tbar .tb-ver{font-size:11px;color:var(--faint);font-weight:400;letter-spacing:0}
