@@ -466,10 +466,11 @@ footer{max-width:1080px;margin:26px auto 0;padding:0 16px;display:flex;align-ite
   .reader{padding:12px}
 }
 /* 自绘标题栏（2026-11-17 用户：系统顶栏太突出，要和软件 UI 融为一体）*/
-.tbar{position:relative;z-index:80;display:flex;align-items:center;gap:10px;height:36px;padding:0 8px 0 12px;
+.tbar{position:sticky;top:0;z-index:80;display:flex;align-items:center;gap:10px;height:36px;padding:0 8px 0 12px;
   background:var(--card);border-bottom:1px solid var(--line);user-select:none;
   -webkit-user-select:none;cursor:default}
 .tbar[hidden]{display:none}
+ body.fs-read .tbar{display:none}   /* 阅读全屏时不占顶部 36px，退出全屏自动回来 */
 .tbar .tb-name{display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:600;letter-spacing:.03em;color:var(--ink)}
 .tbar .tb-name svg{stroke:var(--ink)}
 .tbar .tb-ver{font-size:11px;color:var(--faint);font-weight:400;letter-spacing:0}
@@ -1336,7 +1337,7 @@ function syncLessons(){
     const tip = m.subtitle && m.subtitle !== t ? (m.subtitle + ' · ' + n) : n;
     return `<button data-lsn="${esc(n)}" title="${esc(tip)}"><span class="ttl">${esc(t)}</span>${stub}${code}<span class="kill" data-kill="${esc(n)}" title="删除这一讲">×</span></button>`;
   }).join('')
-    || '<span class="hint" style="border:0;padding:0;margin:0">本课程没有可生成的讲次数据（缺少 `_lessons` 目录）</span>';
+    || '<span class="hint" style="border:0;padding:0;margin:0">本课程没有可生成的讲次数据（缺少 _lessons 目录）</span>';
   // 2026-11-17 用户：「拖进去之后要生成的批次那并没有更新」——导入的是原件，不是讲次；
   //   讲次只能来自 <课程>\_lessons\*.py。这里把差异当场写清，免得以为导入坏了。
   const ogN = ((c && c.originals) || []).length;
@@ -1993,6 +1994,7 @@ function inFullscreen(){
 }
 function syncFsLabel(){
   const on = inFullscreen();
+  document.body.classList.toggle('fs-read', on);   // 全屏阅读时收起自绘标题栏
   if($('#fsIcon')) $('#fsIcon').textContent = on ? '⤡' : '⤢';
   if($('#fsLabel')) $('#fsLabel').textContent = on ? '退出全屏' : '全屏';
 }
@@ -2406,6 +2408,8 @@ document.addEventListener('keydown', e => {
     B.save_dir = sp.get('savedir');
     const op = $('#outPath'); if(op) op.textContent = sp.get('savedir');
   }
+  // 截图 / 回归用：?scroll=600 把页面滚到指定位置（检查标题栏是否固定）
+  if(sp.get('scroll')) setTimeout(() => window.scrollTo(0, parseInt(sp.get('scroll'), 10) || 0), 1200);
   if(sp.get('lsn')) setTimeout(()=>{
     const b=document.querySelector('#lessonPick [data-lsn="'+sp.get('lsn')+'"]'); if(b) b.click();
   }, 900);
@@ -2462,25 +2466,33 @@ document.addEventListener('keydown', e => {
     fetch('/api/bootstrap').then(r => r.json()).then(j => {
       if (ver && j && j.version) ver.textContent = 'v' + j.version;
     }).catch(() => {});
-    const a = api();
-    let drag = false, lx = 0, ly = 0;
-    bar.addEventListener('pointerdown', e => {
-      if(e.target.closest('.tb-btn')) return;
-      drag = true; lx = e.screenX; ly = e.screenY;
-      try{ bar.setPointerCapture(e.pointerId); }catch(_){}
-    });
-    bar.addEventListener('pointermove', e => {
-      if(!drag || !a) return;
+    // 2026-11-19：不再在 init 时抓一次 pywebview.api（那时可能还没就绪，抓到的 null 会一直用）；
+    //   每个事件发生时现取。拖拽优先走原生 start_drag，失败才用旧 move_by 回退。
+    let drag = false, lx = 0, ly = 0, nativeUsed = false, nativeAt = 0;
+    function fallbackMove(e){
+      const a = api(); if(!a) return;
       const dx = e.screenX - lx, dy = e.screenY - ly;
       if(Math.abs(dx) < 2 && Math.abs(dy) < 2) return;
       lx = e.screenX; ly = e.screenY;
       try{ a.move_by(dx, dy); }catch(_){}
+    }
+    const stop = () => { drag = false; document.removeEventListener('pointermove', fallbackMove); };
+    bar.addEventListener('pointerdown', e => {
+      if(e.target.closest('.tb-btn')) return;
+      const a = api();
+      if(!a) return;
+      // 2026-11-19 实测：原生 start_drag 在 js_api 线程里 ReleaseCapture 拿不到捕获，
+      //   窗口不动；改回 move_by，但把 pointermove/up 挂到 document 上（原来挂 bar，
+      //   窗口一动指针就离开 36px 标题栏，事件断掉）。
+      drag = true; lx = e.screenX; ly = e.screenY;
+      document.addEventListener('pointermove', fallbackMove);
+      document.addEventListener('pointerup', stop, {once:true});
+      document.addEventListener('pointercancel', stop, {once:true});
     });
-    const stop = () => { drag = false; };
-    bar.addEventListener('pointerup', stop);
-    bar.addEventListener('pointercancel', stop);
-    bar.addEventListener('dblclick', () => { if(a) a.toggle_max(); });
-    const bind = (id, fn) => { const el = document.getElementById(id); if(el) el.onclick = () => { if(a) fn(a); }; };
+    bar.addEventListener('dblclick', () => {
+      const a = api(); if(a) a.toggle_max();
+    });
+    const bind = (id, fn) => { const el = document.getElementById(id); if(el) el.onclick = () => { const a = api(); if(a) fn(a); }; };
     bind('tbMin', a2 => a2.minimize());
     bind('tbMax', a2 => a2.toggle_max());
     bind('tbClose', a2 => a2.close());
@@ -2603,7 +2615,11 @@ document.addEventListener('keydown', e => {
   }
 
   let barDone = false;
-  function initBarOnce(){ if(barDone) return; barDone = true; initBar(); }
+  function initBarOnce(){
+    if(barDone) return;
+    if(!document.getElementById('tbar')) return;   // DOM 还没到就等下一次事件，别把「没初始化」记成完成
+    barDone = true; initBar();
+  }
 
   window.addEventListener('pywebviewready', () => { if(WIN) initBarOnce(); });
   // 2026-11-17：窗口里脚本可能跑在 DOMContentLoaded 之后（嵌入环境下实测没触发），

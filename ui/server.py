@@ -78,7 +78,7 @@ HOST, PORT = "127.0.0.1", 8765
 #   每次打开/刷新阅读器都全量重传（本机无感，平板走 WiFi 明显）。
 #   index.html 必须仍走 no-store（改完界面要能立刻看到新版）。
 _STATIC_ETAG = {}
-VERSION = "1.9.10"
+VERSION = "1.9.11"
 APP_NAME = "羽毛笔 La Pluma"
 
 
@@ -2443,8 +2443,34 @@ class _WinApi:
             w.destroy()
         return {"ok": bool(w)}
 
+    def start_drag(self):
+        """拖标题栏：交给 Windows 原生拖拽（WM_NCLBUTTONDOWN + HTCAPTION）。
+
+        2026-11-19 用户实测「视窗拖不动」：原来的 pointermove + move_by 方案
+        依赖指针捕获，窗口一动指针就离开标题栏，move 事件断掉；改用系统拖拽循环，
+        高 DPI / 多屏 / 贴边都由 Windows 自己处理，也顺带恢复双击标题栏最大化。
+        """
+        w = self._win()
+        if not w or self.maxed:
+            return {"ok": False}
+        try:
+            import ctypes
+            import ctypes.wintypes as wt
+            u = ctypes.windll.user32
+            hwnd = _find_hwnd()
+            if not hwnd:
+                return {"ok": False, "error": "找不到窗口句柄"}
+            u.ReleaseCapture()
+            # WM_NCLBUTTONDOWN = 0x00A1，HTCAPTION = 2
+            u.SendMessageW.argtypes = [wt.HWND, ctypes.c_uint, ctypes.c_void_p, ctypes.c_void_p]
+            u.SendMessageW.restype = ctypes.c_ssize_t
+            u.SendMessageW(hwnd, 0x00A1, 2, 0)
+            return {"ok": True}
+        except Exception as e:  # noqa: BLE001
+            return {"ok": False, "error": str(e)}
+
     def move_by(self, dx: int, dy: int):
-        """拖标题栏：增量移动（用绝对坐标，避免累计误差）。"""
+        """拖标题栏的旧方案（保留作非 Windows / 原生拖拽不可用时的回退）。"""
         w = self._win()
         if not w or self.maxed:
             return {"ok": False}
@@ -2453,6 +2479,35 @@ class _WinApi:
         except Exception:  # noqa: BLE001
             return {"ok": False}
         return {"ok": True}
+
+
+def _find_hwnd() -> int:
+    """找本进程的可见顶层窗口句柄（pywebview 6.x 的 window.native 是 None）。
+
+    2026-11-19：标题栏拖拽改用 Windows 原生的 WM_NCLBUTTONDOWN，需要真句柄；
+    与 _enable_resize 同一套 EnumWindows 逻辑，抽出来共用。
+    """
+    try:
+        import ctypes
+        import ctypes.wintypes as wt
+        u = ctypes.windll.user32
+        GWL_STYLE, WS_VISIBLE = -16, 0x10000000
+        hits = []
+        CB = ctypes.WINFUNCTYPE(ctypes.c_bool, wt.HWND, wt.LPARAM)
+
+        def cb(hwnd, _l):
+            pid = wt.DWORD()
+            u.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+            if pid.value == os.getpid():
+                st = u.GetWindowLongW(hwnd, GWL_STYLE)
+                if st & WS_VISIBLE:
+                    hits.append(hwnd)
+            return True
+
+        u.EnumWindows(CB(cb), 0)
+        return int(hits[0]) if hits else 0
+    except Exception:  # noqa: BLE001
+        return 0
 
 
 def _enable_resize() -> None:
