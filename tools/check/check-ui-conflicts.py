@@ -53,6 +53,9 @@ def main() -> int:
                 pg.goto(BASE + "/?dbg=1&win=1&course=DEMO&pdf=" + urllib.request.quote(PDF, safe="") + "&code=DEMO",
                         wait_until="networkidle")
                 pg.wait_for_timeout(3200)
+                # CI 是全新配置：首次配置/欢迎浮层会挡住按钮，先按软件自己的关闭函数收掉
+                pg.evaluate("try{ if(document.querySelector('#veil.on')) closeVeil(); }catch(e){}")
+                pg.wait_for_timeout(200)
                 if action == "fullscreen_nav":
                     pg.click("#btnFs"); pg.wait_for_timeout(500)
                     pg.evaluate("document.querySelector('#nav a[data-page=\"courses\"]').click()")
