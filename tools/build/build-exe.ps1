@@ -14,6 +14,14 @@ if ($LASTEXITCODE -ne 0) {
     if ($LASTEXITCODE -ne 0) { Write-Host '装 PyInstaller 失败' -ForegroundColor Red; exit 3 }
 }
 
+# 2026-11-19 用户第 8 条：打包前必须真点一遍按钮/浮层冲突，静态扫描抓不到
+Write-Host '打包前行为判据（全屏/弹窗 → 导航）...' -ForegroundColor DarkGray
+& python -X utf8 tools\check\check-ui-conflicts.py
+if ($LASTEXITCODE -ne 0) {
+    Write-Host '行为判据未过：不打包（先修按钮/浮层冲突）' -ForegroundColor Red
+    exit 6
+}
+
 Write-Host '开始打包（一两分钟）...' -ForegroundColor DarkGray
 & python -m PyInstaller "tools\build\lapluma.spec" --noconfirm --clean --distpath dist --workpath .build --log-level WARN
 if ($LASTEXITCODE -ne 0) { Write-Host '打包失败，看上面的输出' -ForegroundColor Red; exit 4 }
