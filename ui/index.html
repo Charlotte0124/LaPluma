@@ -471,6 +471,12 @@ footer{max-width:1080px;margin:26px auto 0;padding:0 16px;display:flex;align-ite
   -webkit-user-select:none;cursor:default}
 .tbar[hidden]{display:none}
  body.fs-read .tbar{display:none}   /* 阅读全屏时不占顶部 36px，退出全屏自动回来 */
+ /* 2026-11-19：窗口模式把「标题栏」与「滚动区」分开——
+    原来 body 自己滚，滚动条从窗口最顶上铺下来，会穿过标题栏、压住窗口按钮；
+    现在 #appScroll 从标题栏下方开始滚，标题栏不再需要 sticky，滚动条也到不了它上面。 */
+ body.win{height:100vh;overflow:hidden;display:flex;flex-direction:column}
+ body.win #appScroll{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden}
+ body.win .tbar{position:relative;flex:0 0 36px}
 .tbar .tb-name{display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:600;letter-spacing:.03em;color:var(--ink)}
 .tbar .tb-name svg{stroke:var(--ink)}
 .tbar .tb-ver{font-size:11px;color:var(--faint);font-weight:400;letter-spacing:0}
@@ -529,6 +535,7 @@ footer{max-width:1080px;margin:26px auto 0;padding:0 16px;display:flex;align-ite
     <button class="upd-x" id="updX" title="关掉">✕</button>
   </div>
 </div>
+<div id="appScroll">
 <div class="top">
   <div class="brand">
     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round">
@@ -769,6 +776,7 @@ footer{max-width:1080px;margin:26px auto 0;padding:0 16px;display:flex;align-ite
   <div class="aibadge"><i>i</i>本内容由 AI 生成，仅供参考；重要信息请自行核实</div>
   <div>羽毛笔 La Pluma · <span id="ver"></span> · © 2026 Ryo</div>
 </footer>
+</div><!-- /appScroll -->
 
 <div class="dveil" id="dveil"></div>
 <div class="dropveil" id="dropveil"><div class="box"><b>释放以导入到 <span id="dropCourse">本课程</span></b>
@@ -830,13 +838,18 @@ $('#btnTheme').onclick = () => applyTheme(rdTheme() ? 'light' : 'dark');
 $('#btnTheme2').onclick = $('#btnTheme').onclick;
 
 /* ---------- 分页 ---------- */
+function scrollApp(top){
+  const sc = document.getElementById('appScroll');
+  if(sc && document.body.classList.contains('win')) sc.scrollTop = top;
+  else window.scrollTo({top, behavior:'instant'});
+}
 function showPage(p){
   PAGE = p;
   if(p !== 'courses' && typeof findOpen === 'function' && FIND.open) findOpen(false);
   if(typeof closeDrawer === 'function') closeDrawer();   // 切导航时抽屉不留着
   document.querySelectorAll('.page').forEach(e=>e.classList.toggle('on', e.id==='page-'+p));
   document.querySelectorAll('#nav a').forEach(a=>a.classList.toggle('on', a.dataset.page===p));
-  window.scrollTo({top:0,behavior:'instant'});
+  scrollApp(0);
 }
 document.querySelectorAll('#nav a').forEach(a=>a.onclick=()=>{
   if(a.dataset.page==='read' && !RD.doc){ toast('先到课程抽屉里点一份讲义'); return; }
@@ -2409,7 +2422,7 @@ document.addEventListener('keydown', e => {
     const op = $('#outPath'); if(op) op.textContent = sp.get('savedir');
   }
   // 截图 / 回归用：?scroll=600 把页面滚到指定位置（检查标题栏是否固定）
-  if(sp.get('scroll')) setTimeout(() => window.scrollTo(0, parseInt(sp.get('scroll'), 10) || 0), 1200);
+  if(sp.get('scroll')) setTimeout(() => scrollApp(parseInt(sp.get('scroll'), 10) || 0), 1200);
   if(sp.get('lsn')) setTimeout(()=>{
     const b=document.querySelector('#lessonPick [data-lsn="'+sp.get('lsn')+'"]'); if(b) b.click();
   }, 900);
@@ -2452,6 +2465,7 @@ document.addEventListener('keydown', e => {
 (function(){
   const SNOOZE = 'pluma.updateSnooze';
   const WIN = new URLSearchParams(location.search).get('win') === '1';
+  if(WIN) document.body.classList.add('win');   // 窗口模式：标题栏固定、#appScroll 独立滚动
 
   function api(){ return (window.pywebview && window.pywebview.api) || null; }
 

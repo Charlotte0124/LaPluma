@@ -8,6 +8,7 @@
 
 - **窗口拖不动**（用户：「视窗拖不动」）：原方案在标题栏监听 pointermove + 调 move_by，指针一离开 36px 标题栏事件就断（setPointerCapture 在 WebView2 里没兜住）。现在 pointermove / pointerup 挂到 document 上，并在事件发生时现取 pywebview.api（原来 init 时抓一次，api 没就绪就永远为 null）。实测拖拽位移 148×54 px，最小化 / 最大化 / 还原 / 双击标题栏都通过
 - **标题栏跟着滚**（用户：「顶栏在软件往下滚的时候会一起移动」）：自绘标题栏从 position:relative 改为 position:sticky；实测生成页下滚 10 格，标题栏停在窗口顶部
+- **滚动条穿过标题栏**（用户截图：右侧一条竖条顶出窗口标题栏）：原来 body 自己滚，滚动条从窗口最顶端铺下来，压住标题栏与窗口按钮。现在窗口模式改成 app shell——标题栏独立一行，#appScroll 从标题栏下方开始滚，滚动条起点在标题栏下面，不再"突破"出去
 - **阅读全屏时标题栏遮住内容**：全屏阅读给 body 加 fs-read，标题栏收起，退出全屏自动回来
 - **初始化竞态**：DOM 里还没有标题栏时不再把「已初始化」记成完成；版本号仍从 /api/bootstrap 取
 
