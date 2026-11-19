@@ -686,13 +686,7 @@ footer{max-width:1080px;margin:26px auto 0;padding:0 16px;display:flex;align-ite
         <div class="genprog" id="genProg"><div class="bar"><i id="genBar"></i></div><span class="st" id="genStage">准备…</span></div>
         <div class="queue" id="queue"></div>
         <div class="log" id="log"></div>
-        <div class="gen-note" id="genNote">
-          <h5>生成前请确认</h5>
-          <div class="row"><span>01</span><div>讲义内容由 AI 辅助整理，可能与原始课件不一致，<b>重要信息请自行核实</b>。</div></div>
-          <div class="row"><span>02</span><div>生成只写到你设的保存目录，不改动其它位置。</div></div>
-          <div class="row"><span>03</span><div>导入的占位讲次会先由 DeepSeek 补正文，约 1 分钟/讲、约 ¥0.03/讲；补完的内容仍需人工抽查。</div></div>
-          <div class="row"><span>04</span><div>每份成品页脚固定印「本内容由 AI 生成，仅供参考；重要信息请自行核实」与软件名、项目地址，不可关闭。</div></div>
-        </div>
+
       </div>
       <div>
         <div class="card pad">
@@ -706,6 +700,13 @@ footer{max-width:1080px;margin:26px auto 0;padding:0 16px;display:flex;align-ite
         <div class="rcard" style="margin-top:12px">
           <h5>三道门<span class="n">任一门红即停</span></h5>
           <p class="hint" style="border:0;padding:0;margin:0">生成 → 术语每节首次附英 → 拆长段 → 内容门 → PDF → 版式门。</p>
+        </div>
+        <div class="gen-note" id="genNote">
+          <h5>生成前请确认</h5>
+          <div class="row"><span>01</span><div>讲义内容由 AI 辅助整理，可能与原始课件不一致，<b>重要信息请自行核实</b>。</div></div>
+          <div class="row"><span>02</span><div>生成只写到你设的保存目录，不改动其它位置。</div></div>
+          <div class="row"><span>03</span><div>导入的占位讲次会先由 DeepSeek 补正文，约 1 分钟/讲、约 ¥0.03/讲；补完的内容仍需人工抽查。</div></div>
+          <div class="row"><span>04</span><div>每份成品页脚固定印「本内容由 AI 生成，仅供参考；重要信息请自行核实」与软件名、项目地址，不可关闭。</div></div>
         </div>
       </div>
     </div>
@@ -1327,6 +1328,62 @@ async function afterImport(j, code){
   if(!jump) msg += '（现在在' + whereAmI() + '，没有跳页）';
   toast(msg);
   if((j.skipped||[]).length) setTimeout(()=>toast('跳过：' + j.skipped.join('；')), 1600);
+  if((j.added||[]).length) setTimeout(()=>classifyAfterImport(code, j.added), 800);
+}
+
+/* 2026-11-19：导入后自动判断「更像哪门课」，只给建议；用户点确认才搬原件与占位讲次。 */
+async function classifyAfterImport(code, names){
+  let j;
+  try{
+    j = await (await fetch('/api/classify',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({course:code, files:names})})).json();
+  }catch(e){ return; }
+  if(!j.ok || !Array.isArray(j.suggestions)) return;
+  const sug = j.suggestions.filter(s => s && ((s.course && s.course !== code) || s.new_title));
+  if(!sug.length) return;
+  const rows = sug.map(s => {
+    const dst = s.course ? (s.course + ' · ' + ((j.courses||[]).find(c=>c.code===s.course)||{}).title || '')
+                         : ('新建「' + (s.new_title || '新课程') + '」');
+    const conf = s.confidence != null ? (' · 相似度 ' + Math.round(Number(s.confidence) * 100) + '%') : '';
+    return `<div class="row"><span>·</span><div><b>${esc(s.name)}</b> → ${esc(dst)}${esc(conf)}<br><small>${esc(s.reason||'')}</small></div></div>`;
+  }).join('');
+  $('#dlg').innerHTML = `
+    <div class="eb">Classify</div><h4>这些原件更像别的课程</h4>
+    <p class="desc">只是建议，不会自动移动；点「按建议归类」后，原件与对应占位讲次一起搬过去。</p>
+    <div class="gen-note" style="margin:8px 0 12px">${rows}</div>
+    <div class="acts"><button class="btn ghost" id="clStay">留在 ${esc(code)}</button>
+      <button class="btn" id="clMove">按建议归类</button></div>`;
+  openVeil();
+  $('#clStay').onclick = closeVeil;
+  $('#clMove').onclick = async () => {
+    $('#clMove').disabled = true;
+    const groups = {};
+    for(const s of sug){
+      let dst = s.course || '';
+      if(!dst){
+        const title = String(s.new_title || '').trim() || '新课程';
+        const r = await (await fetch('/api/course/new',{method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({code:title, title})})).json();
+        if(!r.ok){
+          // 已存在同名课就直接用
+          const c = (B.courses||[]).find(x => x.title === title || x.code === title);
+          if(!c){ toast(r.error || '新建课程失败'); continue; }
+          dst = c.code;
+        } else dst = r.code;
+      }
+      (groups[dst] = groups[dst] || []).push(s.name);
+    }
+    let moved = 0, failed = 0, last = '';
+    for(const [dst, files] of Object.entries(groups)){
+      const r = await (await fetch('/api/move-originals',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({from:code, to:dst, files})})).json();
+      if(r.ok){ moved += (r.moved||[]).length; last = dst; } else failed += files.length;
+    }
+    closeVeil();
+    B = await (await fetch('/api/bootstrap')).json(); render(); fillSelects();
+    if(last){ const cs = $('#courseSel'); if(cs){ cs.value = last; syncLessons(); updateImpHint(); } }
+    toast('已归类 ' + moved + ' 份' + (failed ? ('，失败 ' + failed + ' 份') : ''));
+  };
 }
 $('#btnImport').onclick = async () => {
   const code = currentCourse();
@@ -1713,6 +1770,11 @@ async function runGenerate(course, no, form, preset){
       B = await (await fetch('/api/bootstrap')).json(); render(); refreshUsage();
       // 生成成功后把这一门课的抽屉打开（用户：生成成功之后课程那并没有弹出来）
       gb.style.width = '100%'; gs.textContent = '完成';
+      // 生成成功后从「要生成的批次」里移除这一讲（用户：课件生成完了并没有消失）
+      LESSON_SEL.delete(no);
+      const chip = document.querySelector('#lessonPick [data-lsn="' + CSS.escape(no) + '"]');
+      if(chip) chip.classList.remove('on');
+      syncLsnCnt();
       const c = (B.courses||[]).find(x => x.code === course);
       if(c) openDrawer(c);
       const path = j.copied || '';

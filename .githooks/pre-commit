@@ -7,4 +7,6 @@ echo "[hook] 占位防护 check-stub-guard ..."
 python -X utf8 tools/check/check-stub-guard.py || { echo "[hook] 占位防护未过：提交已拦下"; exit 1; }
 echo "[hook] 界面预览 check-ui-preview ..."
 python -X utf8 tools/check/check-ui-preview.py || { echo "[hook] 界面改动没带预览图/真实截图：提交已拦下"; exit 1; }
+echo "[hook] 按钮/浮层冲突 check-ui-conflicts ..."
+python -X utf8 tools/check/check-ui-conflicts.py || { echo "[hook] 全屏/弹窗与导航冲突：提交已拦下"; exit 1; }
 echo "[hook] 通过"

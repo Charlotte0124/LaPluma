@@ -23,3 +23,7 @@ jobs:
         run: python -X utf8 tools/check/check-stub-guard.py
       - name: 界面预览 0 红 0 黄
         run: python -X utf8 tools/check/check-ui-preview.py
+      - name: 按钮/浮层冲突 3/3（需要 Playwright + Edge）
+        run: |
+          python -m pip install --disable-pip-version-check playwright
+          python -X utf8 tools/check/check-ui-conflicts.py

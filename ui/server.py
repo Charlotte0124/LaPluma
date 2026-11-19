@@ -78,7 +78,7 @@ HOST, PORT = "127.0.0.1", 8765
 #   每次打开/刷新阅读器都全量重传（本机无感，平板走 WiFi 明显）。
 #   index.html 必须仍走 no-store（改完界面要能立刻看到新版）。
 _STATIC_ETAG = {}
-VERSION = "1.9.13"
+VERSION = "1.9.14"
 APP_NAME = "羽毛笔 La Pluma"
 
 # 2026-11-19：生成进度（一个进程同时只跑一讲；前端轮询 /api/progress）
@@ -1624,6 +1624,105 @@ class Handler(BaseHTTPRequestHandler):
                 elif not done:
                     tip["error"] = "；".join(r.get("error", "") for r in results)[:300]
                 return self._json(tip)
+            if u.path == "/api/classify":
+                # 2026-11-19：导入后按「文件名 + 首页文字」判断更像哪门课；不自动搬，先问
+                cur = _safe_code(str(body.get("course") or DEFAULT_COURSE))
+                names = [os.path.basename(str(x)) for x in (body.get("files") or []) if str(x).strip()]
+                if not names:
+                    return self._json({"ok": False, "error": "没有要分类的文件"}, 400)
+                cfg = load_cfg()
+                if api_client is None or not cfg.get("api_key"):
+                    return self._json({"ok": False, "need_key": True, "error": "没配置 API 钥匙，不能自动分类"})
+                courses = [{"code": c["code"], "title": c["title"], "desc": c.get("desc", "")}
+                           for c in discover_courses()]
+                items = []
+                for nm in names:
+                    p = os.path.join(originals_dir(cur), nm)
+                    text = ""
+                    try:
+                        if nm.lower().endswith(".pdf"):
+                            import pymupdf
+                            with pymupdf.open(p) as doc:
+                                for i in range(min(2, len(doc))):
+                                    text += (doc[i].get_text("text") or "") + "\n"
+                    except Exception:  # noqa: BLE001
+                        pass
+                    items.append({"name": nm, "text": text.strip()[:1200]})
+                sysmsg = ("你是课程资料管理员。根据「文件名 + 首页文字」，把每份新导入的课件归到最匹配的已有课程；"
+                          "都明显不匹配时，给一个简短的新课程名（中文，如 药剂学）。只输出 JSON 数组，不要解释。")
+                user = ("已有课程：\n" + json.dumps(courses, ensure_ascii=False) +
+                        "\n\n新导入的原件：\n" + json.dumps(items, ensure_ascii=False) +
+                        "\n\n输出格式：[{\"name\":\"…\",\"course\":\"已有课程code或空\","
+                        "\"new_title\":\"新课程名或空\",\"confidence\":0.0-1.0,\"reason\":\"一句中文\"}]")
+                try:
+                    out = api_client.chat([{"role": "system", "content": sysmsg},
+                                           {"role": "user", "content": user}],
+                                          model=cfg["model"], temperature=0.1, max_tokens=2000)
+                except Exception as e:  # noqa: BLE001
+                    return self._json({"ok": False, "error": "分类失败：%s" % e}, 502)
+                log_usage(out.get("model") or cfg["model"], out.get("usage") or {})
+                txt = (out.get("text") or "").strip()
+                if txt.startswith(chr(96) * 3):
+                    txt = txt.strip(chr(96)).replace("json", "", 1).strip()
+                try:
+                    arr = json.loads(txt)
+                except Exception:  # noqa: BLE001
+                    a, b = txt.find("["), txt.rfind("]")
+                    arr = json.loads(txt[a:b + 1]) if a >= 0 and b > a else []
+                if not isinstance(arr, list):
+                    arr = []
+                return self._json({"ok": True, "suggestions": arr, "courses": courses})
+
+            if u.path == "/api/move-originals":
+                # 用户确认后：原件 + 它的占位讲次一起移到目标课程；不删不改内容
+                src = _safe_code(str(body.get("from") or ""))
+                dst = _safe_code(str(body.get("to") or ""))
+                names = [os.path.basename(str(x)) for x in (body.get("files") or []) if str(x).strip()]
+                if not src or not dst or src == dst or not names:
+                    return self._json({"ok": False, "error": "参数不完整或源/目标相同"}, 400)
+                if not os.path.isdir(paths.course_dir(dst)):
+                    return self._json({"ok": False, "error": "目标课程不存在：%s" % dst}, 400)
+                moved, skipped = [], []
+                s_orig = originals_dir(src)
+                d_orig = originals_dir(dst)
+                os.makedirs(d_orig, exist_ok=True)
+                for nm in names:
+                    sp = os.path.join(s_orig, nm)
+                    if not os.path.isfile(sp):
+                        skipped.append("%s：原件不在" % nm)
+                        continue
+                    dp = _unique_path(d_orig, nm)
+                    try:
+                        shutil.move(sp, dp)
+                    except Exception as e:  # noqa: BLE001
+                        skipped.append("%s：%s" % (nm, e))
+                        continue
+                    new_nm = os.path.basename(dp)
+                    moved.append(new_nm)
+                    # 找到对应占位讲次，改 code 后一起搬
+                    s_les = paths.data(src, "_lessons")
+                    d_les = paths.data(dst, "_lessons")
+                    os.makedirs(d_les, exist_ok=True)
+                    for py in (os.listdir(s_les) if os.path.isdir(s_les) else []):
+                        if not py.endswith(".py") or py.endswith(".en.py"):
+                            continue
+                        pp = os.path.join(s_les, py)
+                        try:
+                            txt = open(pp, encoding="utf-8").read()
+                        except Exception:  # noqa: BLE001
+                            continue
+                        if ("stub-from: %s/%s" % (ORIG_DIR, nm)) not in txt:
+                            continue
+                        txt = txt.replace('"code": "%s"' % src, '"code": "%s"' % dst)
+                        txt = txt.replace("stub-from: %s/%s" % (ORIG_DIR, nm),
+                                          "stub-from: %s/%s" % (ORIG_DIR, new_nm))
+                        tgt = _unique_path(d_les, py)
+                        with open(tgt, "w", encoding="utf-8") as fh:
+                            fh.write(txt)
+                        os.remove(pp)
+                return self._json({"ok": bool(moved), "from": src, "to": dst,
+                                   "moved": moved, "skipped": skipped})
+
             if u.path == "/api/course/new":
                 # 2026-11-19：以前界面没有「新建课程」，用户只能把原件都导进 DEMO。
                 code = _safe_code(str(body.get("code") or "").strip())
