@@ -56,7 +56,20 @@ def _looks_broke(status: int, body: str) -> bool:
 # 写成 deepseek-4.1-flash 之类会被服务端拒。
 MODELS = ("deepseek-flash", "deepseek-v4-pro")
 
-USER_CFG = os.path.join(os.path.expanduser("~"), ".pluma", "api.json")
+def _user_dir() -> str:
+    """本机配置目录：`PLUMA_HOME` 优先，否则 `%USERPROFILE%\\.pluma`。
+
+    2026-11-21 修：ui\\server.py 的 USER_DIR 早就认 PLUMA_HOME（配置、会话、更新缓存都落在那里），
+    这里却一直只看 `~`。后果是「用 PLUMA_HOME 隔离一份干净配置」根本不生效——
+    界面写的是 PLUMA_HOME，读钥匙却还是回 ~\\.pluma，于是「全新环境」永远能读到本机的 key
+    （自测里就撞到了：没有钥匙的环境居然答得出问题）。
+    两处口径必须一致，配置目录只有一个。
+    """
+    home = (os.environ.get("PLUMA_HOME") or "").strip()
+    return home or os.path.join(os.path.expanduser("~"), ".pluma")
+
+
+USER_CFG = os.path.join(_user_dir(), "api.json")
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # PRTS 侧密钥文件的相对位置（仓外，禁止提交）
 _SECRET_TAIL = ("projects", "课程", "ops", "secrets", "api.json")
