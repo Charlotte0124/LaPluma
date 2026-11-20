@@ -1,29 +1,31 @@
 # -*- coding: utf-8 -*-
-"""全新安装自测：把打包好的 exe 放进一个空目录（模拟用户第一次拿到软件），真点一遍。
+"""全新安装自测：把打包好的 exe 放进空目录，**在它自己的窗口里真点按钮**。
 
-为什么有（用户 2026-11-21）：「以后软件测试是要在实体软件、模拟全新环境，完全去测试软件的按键，
-测试 BUG 等等——有一些是依赖本机的一直没发现，很多 BUG 都是那么来的」。
-当晚就是证据：源码里 `python ui\\server.py` 一路绿，打包后的 exe 却在**打印 PDF** 那步
-Chrome 以 0x80000003 退出（父进程没有真的 stdio 句柄），而目录里还留着上一轮生成的 PDF，
-所以本机看起来「能生成」。换成空目录跑，一次就露。
+为什么这么测（用户 2026-11-21，两次强调）：
+  「以后软件测试是要在实体软件、模拟全新环境，完全去测试软件的按键，测试 BUG 等等
+   —— 有一些是依赖本机的一直没发现，很多 BUG 都是那么来的」
+  「我指的是这种方式测试（浏览器打开 127.0.0.1:8896）有很多 BUG 都找不到，
+   然后打包的时候就一大堆 BUG 出来了 —— 所以直接改用打包 APP 去测试吧，
+   不然这种测试是无意义的」
+所以判据分两段：
+  A–D  接口段：exe 起得来 / 缺东西说得清 / 真出 PDF / 版本检查通（快，先跑）
+  W1–W4 窗口段：**exe 自己的窗口**（WebView2，不是浏览器）里用 CDP 真点——
+        点课程卡开抽屉（抽屉不许被顶栏压住）、点「生成」→ 选讲次 → 点「开始生成」→ 等 PDF、
+        点「设置」看版本行。顶栏挡 UI 这种 bug 只有真窗口里点得出来，走接口看不见。
+  只有窗口段才是「实体软件」；接口段留作快速定位。
 
-口径：
-  · **实体软件**：只测 dist\\LaPluma.exe，不测源码
-  · **全新环境**：exe 复制到空临时目录（数据根＝那里，没有 courses.json / _logs / 旧 PDF）、
-    PLUMA_HOME 指到空目录（没有 API 钥匙、没有 update.json 缓存）
-  · **真点按键**：走界面用的同一批接口——首页 bootstrap、生成、版本检查；不看「函数返回 True」
-  · 判据：
-      A 起得来：exe 起来并在 30 秒内回 /api/bootstrap（版号非空）
-      B 无钥匙时说得清：生成一讲必须给出「没配置 API 钥匙」这类**人话**，不许静默失败
-      C 真能出 PDF：装上钥匙后生成 DEMO/D01（出厂示例课，正文是现成的，不花钱），
-        必须新出现一份 PDF，且日志里不许有「打印失败」
-      D 版本检查通：/api/update 回 200（缓存目录是空的时候也不许 403）
+环境：
+  · 实体软件：只测 dist\\LaPluma.exe，不测源码，也不在浏览器里开 localhost
+  · 全新环境：exe 复制到空临时目录（数据根），PLUMA_HOME 指到空目录（没有钥匙 / 更新缓存）
+  · 窗口段靠 PLUMA_TEST_CDP=<端口> 打开 WebView2 的远程调试端口（只在自测里用）
+  · 截图落在 _logs\\fresh-window-*.png，红了先看它们
 
 用法：
-    python tools\\check\\check-fresh-install.py            # 全跑
-    python tools\\check\\check-fresh-install.py --keep     # 留下临时目录（排查用）
+    python tools\\check\\check-fresh-install.py            # 全跑（会短暂弹出软件窗口）
+    python tools\\check\\check-fresh-install.py --api-only # 只跑接口段
+    python tools\\check\\check-fresh-install.py --keep     # 留下临时目录
 
-退出码：0 全绿；1 有红；2 没查（没有 exe / 没 python 能力）
+退出码：0 全绿；1 有红；2 没查（没有 exe / 缺 playwright）
 """
 from __future__ import annotations
 
@@ -41,9 +43,11 @@ import urllib.request
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-ROOT = HERE.parent.parent          # <仓根>
+ROOT = HERE.parent.parent
 EXE = ROOT / "dist" / "LaPluma.exe"
-BOOT_WAIT = 45.0                   # 单文件自解包，第一次起要十几秒
+SHOTS = ROOT / "_logs"
+BOOT_WAIT = 45.0
+CDP_WAIT = 90.0
 
 
 def free_port() -> int:
@@ -74,7 +78,7 @@ def http_json(url: str, timeout: float = 30.0, body: dict | None = None) -> tupl
 class Fresh:
     """一个全新的「用户目录」：exe 副本 + 空数据根 + 空配置目录。"""
 
-    def __init__(self) -> None:
+    def __init__(self, with_key: bool = False) -> None:
         self.base = Path(tempfile.mkdtemp(prefix="pluma-fresh-"))
         self.app = self.base / "app"
         self.home = self.base / "home"
@@ -82,20 +86,30 @@ class Fresh:
         self.home.mkdir(parents=True, exist_ok=True)
         self.exe = self.app / EXE.name
         shutil.copy2(EXE, self.exe)
+        if with_key:
+            src = Path(os.path.expanduser("~")) / ".pluma" / "api.json"
+            if src.is_file():
+                shutil.copy2(src, self.home / "api.json")
         self.port = free_port()
         self.proc = None
 
-    def env(self) -> dict:
+    def env(self, cdp: int = 0) -> dict:
         e = dict(os.environ)
         e["PLUMA_HOME"] = str(self.home)
-        e.pop("PLUMA_API_KEY", None)          # 全新环境没有钥匙
-        e["PLUMA_NO_UPDATE_CHECK"] = "1"      # 别让首启的更新检查干扰判定（仍然单独测 D）
+        e["TEMP"] = str(self.base / "tmp")
+        e["TMP"] = e["TEMP"]
+        Path(e["TEMP"]).mkdir(parents=True, exist_ok=True)
+        e.pop("PLUMA_API_KEY", None)
+        if cdp:
+            e["PLUMA_TEST_CDP"] = str(cdp)
         return e
 
-    def start(self) -> tuple:
+    def start(self, window: bool = False, cdp: int = 0) -> tuple:
+        args = [str(self.exe), "--port", str(self.port)]
+        if not window:
+            args += ["--no-window", "--no-browser"]
         self.proc = subprocess.Popen(
-            [str(self.exe), "--no-window", "--no-browser", "--port", str(self.port)],
-            cwd=str(self.app), env=self.env(),
+            args, cwd=str(self.app), env=self.env(cdp),
             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
         )
         t0 = time.time()
@@ -132,12 +146,142 @@ class Fresh:
                 time.sleep(0.5)
 
 
+def api_phase(ok: list, red: list, keep: bool) -> None:
+    f = Fresh(with_key=False)
+    try:
+        up, boot, sec = f.start()
+        if not up:
+            red.append("A 起不来：%s" % (boot,))
+            return
+        ok.append("A 起得来：v%s · %s 秒（单文件自解包）" % (boot.get("version"), sec))
+        base = "http://127.0.0.1:%d" % f.port
+
+        code, ask = http_json(base + "/api/ask", timeout=120,
+                              body={"course": "DEMO", "lesson": "D01", "question": "这一讲讲了什么"})
+        msg = str(ask.get("error") or "")
+        if ask.get("need_key") and ("钥匙" in msg or "key" in msg.lower()):
+            ok.append("B 没钥匙时说得清：" + msg[:50])
+        else:
+            red.append("B 没钥匙时没说清（HTTP %s · need_key=%s）" % (code, ask.get("need_key")))
+
+        shutil.copy2(Path(os.path.expanduser("~")) / ".pluma" / "api.json", f.home / "api.json")
+        pdf = f.app / "DEMO" / "01_讲义" / "D01_一份讲义是怎么出来的_讲义.pdf"
+        before = pdf.stat().st_mtime if pdf.is_file() else 0
+        code, g = http_json(base + "/api/generate", timeout=600,
+                            body={"lesson": "D01", "course": "DEMO", "form": "single", "lang": "zh"})
+        log = str(g.get("log") or "")
+        if "打印失败" in log:
+            red.append("C 打印失败：%s" % log.split("打印失败")[-1].strip().splitlines()[0][:80])
+        elif not pdf.is_file() or pdf.stat().st_mtime <= before:
+            red.append("C 没出 PDF：ok=%s" % g.get("ok"))
+        else:
+            ok.append("C 真出 PDF：%.0f KB" % (pdf.stat().st_size / 1024))
+
+        code, u = http_json(base + "/api/update?force=1", timeout=60)
+        if code == 200 and u.get("ok"):
+            ok.append("D 版本检查：current %s · latest %s" % (u.get("current"), u.get("latest")))
+        else:
+            red.append("D 版本检查 HTTP %s" % code)
+    finally:
+        f.cleanup(keep)
+
+
+def window_phase(ok: list, red: list, keep: bool) -> None:
+    """实体软件：真窗口 + 真点击。这一段才判「有没有 bug」。"""
+    try:
+        from playwright.sync_api import sync_playwright
+    except Exception as e:  # noqa: BLE001
+        red.append("W 没查成：装不上 playwright（%r）" % (e,))
+        return
+
+    f = Fresh(with_key=True)
+    cdp = free_port()
+    try:
+        up, boot, sec = f.start(window=True, cdp=cdp)
+        if not up:
+            red.append("W1 窗口起不来：%s" % (boot,))
+            return
+        t0 = time.time()
+        while time.time() - t0 < CDP_WAIT:
+            code, v = http_json("http://127.0.0.1:%d/json/version" % cdp, timeout=2)
+            if code == 200 and v.get("Browser"):
+                break
+            time.sleep(0.8)
+        else:
+            red.append("W1 窗口起来了但拿不到调试端口（%d）：无法真点" % cdp)
+            return
+        ok.append("W1 打包件窗口起来了：v%s · WebView2 %s" % (boot.get("version"), str(v.get("Browser"))[:40]))
+
+        SHOTS.mkdir(parents=True, exist_ok=True)
+        with sync_playwright() as p:
+            br = p.chromium.connect_over_cdp("http://127.0.0.1:%d" % cdp)
+            ctx = br.contexts[0] if br.contexts else br.new_context()
+            page = ctx.pages[0] if ctx.pages else ctx.new_page()
+            page.set_default_timeout(20000)
+            page.wait_for_selector(".course", timeout=30000)
+            page.screenshot(path=str(SHOTS / "fresh-window-1-home.png"))
+
+            # W2 点课程卡开抽屉：抽屉顶部不许被顶栏压住（今晚那个 bug 的判据）
+            page.click(".course")
+            page.wait_for_selector(".drawer.on", timeout=15000)
+            box = page.evaluate("""() => {
+              const d = document.querySelector('.drawer.on');
+              const t = document.getElementById('tbar');
+              const b = d.getBoundingClientRect(), tb = t ? t.getBoundingClientRect() : {bottom: 0};
+              const head = d.querySelector('h3, .dr-files-grp, header');
+              return {top: Math.round(b.top), tbarBottom: Math.round(tb.bottom),
+                      headTop: head ? Math.round(head.getBoundingClientRect().top) : null};
+            }""")
+            page.screenshot(path=str(SHOTS / "fresh-window-2-drawer.png"))
+            if box["top"] >= box["tbarBottom"]:
+                ok.append("W2 抽屉没被顶栏压住（抽屉 top=%s · 顶栏底=%s）" % (box["top"], box["tbarBottom"]))
+            else:
+                red.append("W2 抽屉被顶栏压住：top=%s < 顶栏底 %s" % (box["top"], box["tbarBottom"]))
+            page.keyboard.press("Escape")
+            time.sleep(0.6)
+
+            # W3 点「生成」→ 选一讲 → 点「开始生成」→ 等 PDF 真落地
+            page.click("#nav a[data-page=generate]")
+            page.wait_for_selector("#btnGen", timeout=15000)
+            page.click('#lessonPick [data-lsn="D01"]')
+            pdf = f.app / "DEMO" / "01_讲义" / "D01_一份讲义是怎么出来的_讲义.pdf"
+            before = pdf.stat().st_mtime if pdf.is_file() else 0
+            page.click("#btnGen")
+            done = False
+            for _ in range(120):
+                time.sleep(1.0)
+                if pdf.is_file() and pdf.stat().st_mtime > before:
+                    done = True
+                    break
+            page.screenshot(path=str(SHOTS / "fresh-window-3-generate.png"))
+            if done:
+                ok.append("W3 真窗口点「开始生成」出了 PDF：%.0f KB" % (pdf.stat().st_size / 1024))
+            else:
+                red.append("W3 真窗口点「开始生成」没出 PDF（看 fresh-window-3-generate.png）")
+
+            # W4 点「设置」：版本行要说清本机与仓库
+            page.click("#btnSet")
+            page.wait_for_selector("#sVer", timeout=15000)
+            time.sleep(1.2)
+            ver = page.inner_text("#sVer")
+            upd = page.inner_text("#sUpd")
+            page.screenshot(path=str(SHOTS / "fresh-window-4-settings.png"))
+            if "本机 v" in ver and ("仓库" in upd or "最新" in upd):
+                ok.append("W4 设置页版本行：%s · %s" % (ver[:24], upd[:34]))
+            else:
+                red.append("W4 设置页版本行不对：%r / %r" % (ver, upd))
+            br.close()
+    finally:
+        f.cleanup(keep)
+
+
 def main(argv=None) -> int:
     for s in (sys.stdout, sys.stderr):
         if hasattr(s, "reconfigure"):
             s.reconfigure(encoding="utf-8")
-    ap = argparse.ArgumentParser(description="全新环境真跑打包后的 exe")
+    ap = argparse.ArgumentParser(description="全新环境 + 实体软件真点")
     ap.add_argument("--keep", action="store_true")
+    ap.add_argument("--api-only", action="store_true")
     a = ap.parse_args(argv)
 
     if not EXE.is_file():
@@ -146,67 +290,16 @@ def main(argv=None) -> int:
     print("用 %s（%.1f MB · %s）" % (EXE, EXE.stat().st_size / 1048576,
                                   time.strftime("%Y-%m-%d %H:%M", time.localtime(EXE.stat().st_mtime))))
 
-    red, ok = [], []
-    f = Fresh()
-    try:
-        # ---- A 起得来 ----
-        up, boot, sec = f.start()
-        if up:
-            ok.append("A 起得来：v%s · %s 秒（单文件自解包）" % (boot.get("version"), sec))
-        else:
-            red.append("A 起不来：%s" % (boot,))
-            return _report(ok, red)
-
-        base = "http://127.0.0.1:%d" % f.port
-
-        # ---- B 没钥匙时说得清 ----
-        # 用「问课件」这条不用钱也不会被原件缺失挡住的路径：全新环境没有钥匙，
-        # 必须回 need_key + 一句人话，而不是静默失败或抛栈。
-        code, ask = http_json(base + "/api/ask", timeout=120,
-                              body={"course": "DEMO", "lesson": "D01", "question": "这一讲讲了什么"})
-        msg = str(ask.get("error") or "")
-        if ask.get("need_key") and ("钥匙" in msg or "key" in msg.lower()):
-            ok.append("B 没钥匙时说得清：" + msg[:60])
-        else:
-            red.append("B 没钥匙时没说清（HTTP %s · need_key=%s · %s）"
-                       % (code, ask.get("need_key"), msg[:120] or str(ask)[:120]))
-
-        # ---- C 装上钥匙，真出一份 PDF ----
-        src = Path(os.path.expanduser("~")) / ".pluma" / "api.json"
-        if not src.is_file():
-            red.append("C 没查成：本机没有 %s（判据需要一把真钥匙）" % src)
-        else:
-            shutil.copy2(src, f.home / "api.json")
-            pdf = f.app / "DEMO" / "01_讲义" / "D01_一份讲义是怎么出来的_讲义.pdf"
-            before = pdf.stat().st_mtime if pdf.is_file() else 0
-            code, g2 = http_json(base + "/api/generate", timeout=600,
-                                 body={"lesson": "D01", "course": "DEMO", "form": "single", "lang": "zh"})
-            log2 = str(g2.get("log") or "")
-            if "打印失败" in log2:
-                red.append("C 打印失败：" + log2.split("打印失败")[-1].strip().splitlines()[0][:100])
-            elif not pdf.is_file() or pdf.stat().st_mtime <= before:
-                red.append("C 没出 PDF：ok=%s · %s" % (g2.get("ok"), log2[-200:].replace("\n", " / ")))
-            else:
-                ok.append("C 真出 PDF：%.0f KB · ok=%s" % (pdf.stat().st_size / 1024, g2.get("ok")))
-
-        # ---- D 版本检查不许 403 ----
-        code, up_j = http_json(base + "/api/update?force=1", timeout=60)
-        if code == 200 and up_j.get("ok"):
-            ok.append("D 版本检查：current %s · latest %s" % (up_j.get("current"), up_j.get("latest")))
-        else:
-            red.append("D 版本检查 HTTP %s：%s" % (code, str(up_j)[:120]))
-    finally:
-        f.cleanup(a.keep)
-
-    return _report(ok, red)
-
-
-def _report(ok: list, red: list) -> int:
+    ok, red = [], []
+    api_phase(ok, red, a.keep)
+    if not a.api_only:
+        window_phase(ok, red, a.keep)
     for x in ok:
         print("  [绿] " + x)
     for x in red:
         print("  [红] " + x)
-    print("结论：%d/%d 绿 · %d 红" % (len(ok), len(ok) + len(red), len(red)))
+    total = len(ok) + len(red)
+    print("结论：%d/%d 绿 · %d 红" % (len(ok), total, len(red)))
     return 0 if not red else 1
 
 

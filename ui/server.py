@@ -2860,6 +2860,18 @@ def run_window(url: str) -> int:
     想要回浏览器（例如平板、远程调试）用 --no-window。
     """
     import webview
+    # 2026-11-21 用户：「我指的是这种方式测试（浏览器打开 127.0.0.1）有很多 BUG 都找不到，
+    #   打包的时候就一大堆 BUG 出来——直接用打包 APP 去测试」。
+    #   要驱动**真窗口里的页面**，只能走 WebView2 的远程调试端口：设了 PLUMA_TEST_CDP=<端口>
+    #   才开（只在自测里用，正常启动完全不受影响）。tools\check\check-fresh-install.py 用它
+    #   连上来真点按钮——顶栏挡 UI 这类 bug 只有真窗口里点得出来，走接口是看不见的。
+    _cdp = (os.environ.get("PLUMA_TEST_CDP") or "").strip()
+    if _cdp.isdigit():
+        try:
+            webview.settings["REMOTE_DEBUGGING_PORT"] = int(_cdp)
+            print("  自测模式：WebView2 远程调试端口 %s" % _cdp, flush=True)
+        except Exception:  # noqa: BLE001
+            pass
     # 2026-11-17 用户：「exe 顶栏能不能和软件 UI 融为一体，系统那个太突出了」——
     #   改成无边框窗口（frameless），标题栏由界面自己画（拖拽 / 最小化 / 最大化 / 关闭都走 _WinApi）。
     #   缩放与贴边靠 _enable_resize() 把 WS_THICKFRAME 补回去，不让用户丢掉拉边与 Win+←→。
