@@ -362,7 +362,23 @@ def ensure_body(course: str, no: str, lang: str, emit) -> int:
                   info.get("usage") or {})
         return 0
     except Exception as e:  # noqa: BLE001
-        emit("[停] 补正文失败：%r" % (e,))
+        # 2026-11-21：用户「中文和英文都没办法生成」。实测这一讲的正文是空的（导入占位），
+        #   补正文要先调模型；本机 key 找不到时，报的是一句技术味很重的 RuntimeError，
+        #   界面看着就像「生成坏了」。这里换成一句能照做的话，并指出查过哪些位置。
+        msg = str(e)
+        if "找不到 API key" in msg:
+            tried = ""
+            try:
+                import client as _ac
+                hit = [p for p in _ac.config_candidates()]
+                tried = "（查过 %d 处：%s）" % (len(hit), "；".join(hit[:3]))
+            except Exception:  # noqa: BLE001
+                pass
+            emit("[停] 这一讲是导入的占位，正文要由模型补，但本机没配置 API 钥匙。")
+            emit("     到「设置」里填一次（只存本机 %s），再点开始生成。%s"
+                 % (USER_DIR, tried))
+        else:
+            emit("[停] 补正文失败：%r" % (e,))
         return 1
 
 
@@ -2403,7 +2419,14 @@ def _fetch_github() -> dict:
 
 
 def check_update(force: bool = False, channel: str = "auto") -> dict:
-    """看有没有新版。先 feed（能拿到可下载的包），不通再问 GitHub（只能给页面）。
+    """看有没有新版。
+
+    2026-11-21 用户：「项目版本那要检测现在本地是什么版本、仓库是什么版本」。
+    原来 auto 只问 feed，**feed 一成功就不再问 GitHub**——而 feed 是随仓库发布的清单，
+    发版时忘了重跑 make-feed.py 它就一直是旧版本（本机实测：仓里已 1.9.14、GitHub
+    Release 也已 1.9.14，清单还停在 1.9.9），于是「检查更新」永远说没有新版。
+    现在 auto 两边都问，按版本号取高的那个；同版本时优先用 feed（它带 sha256，能一键换程序），
+    并把两边各自报的版本号留在 sources 里，界面可以直说「本地 / 仓库」两个数。
 
     断网 / 超时 / 限流一律回 ok:False，界面就静默（不打扰用户）。失败不写缓存。
     """
@@ -2418,23 +2441,33 @@ def check_update(force: bool = False, channel: str = "auto") -> dict:
         data = dict(data, cached=True, current=VERSION,
                     newer=_ver_num(data.get("latest")) > _ver_num(VERSION))
         return data
-    errs = []
+
+    errs, got = [], {}
     if channel in ("auto", "feed"):
         try:
-            data = _fetch_feed()
-            _write_json(UPDATE_CACHE, {"ts": now, "data": data})
-            return data
+            got["feed"] = _fetch_feed()
         except Exception as e:  # noqa: BLE001
             errs.append("清单：%s" % e)
     if channel in ("auto", "github"):
         try:
-            data = _fetch_github()
-            _write_json(UPDATE_CACHE, {"ts": now, "data": data})
-            return data
+            got["github"] = _fetch_github()
         except Exception as e:  # noqa: BLE001
             errs.append("GitHub：%s" % e.__class__.__name__)
-    return {"ok": False, "current": VERSION, "channel": channel,
-            "error": "没连上更新源（%s），不影响使用" % "；".join(errs)}
+    if not got:
+        return {"ok": False, "current": VERSION, "channel": channel,
+                "error": "没连上更新源（%s），不影响使用" % "；".join(errs)}
+
+    feed, gh = got.get("feed"), got.get("github")
+    # 取版本号最高的那条；同版本优先 feed（有 sha256，能一键更新）
+    if feed and (not gh or _ver_num(feed["latest"]) >= _ver_num(gh["latest"])):
+        data = dict(feed)
+    else:
+        data = dict(gh)
+    data["sources"] = {k: v["latest"] for k, v in got.items()}
+    data["newer"] = _ver_num(data.get("latest")) > _ver_num(VERSION)
+    data["current"] = VERSION
+    _write_json(UPDATE_CACHE, {"ts": now, "data": data})
+    return data
 
 
 # ---------- 应用内下载与自替换（feed 渠道）----------

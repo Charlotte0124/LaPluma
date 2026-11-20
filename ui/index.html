@@ -144,17 +144,17 @@ nav a.on{background:var(--ink);color:var(--bg)}
 /* 抽屉 */
 .drawer{position:fixed;inset:0 0 0 auto;width:520px;max-width:92vw;background:var(--card);border-left:1px solid var(--line);
   box-shadow:-20px 0 50px rgba(0,0,0,.16);transform:translateX(102%);transition:transform .22s cubic-bezier(.22,.61,.36,1);
-  display:flex;flex-direction:column;z-index:30}
+  display:flex;flex-direction:column;z-index:93}
 .drawer.on{transform:none}
 /* 2026-11-17：抽屉加一层遮罩——用户说「侧栗点击空白依旧没实现」。
    有了遮罩，「点空白关闭」才有可点的空白；同时抽屉滑出时页面不再是硬切。 */
 .dveil{position:fixed;inset:0;background:rgba(10,10,9,.26);opacity:0;pointer-events:none;
-  transition:opacity .22s ease;z-index:29}
+  transition:opacity .22s ease;z-index:92}
 .dveil.on{opacity:1;pointer-events:auto}
 .dr-files-grp{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);
   padding:12px 22px 6px;display:flex;gap:8px;align-items:baseline}
 .dr-files-grp span{letter-spacing:0;text-transform:none;font-size:11.5px;color:var(--faint);opacity:.8}
-.dropveil{position:fixed;inset:0;z-index:60;display:none;align-items:center;justify-content:center;
+.dropveil{position:fixed;inset:0;z-index:94;display:none;align-items:center;justify-content:center;
   background:rgba(10,10,9,.45);backdrop-filter:blur(2px)}
 .dropveil.on{display:flex}
 .dropveil .box{border:2px dashed var(--card);border-radius:18px;padding:38px 46px;color:#fff;text-align:center;
@@ -313,7 +313,7 @@ nav a.on{background:var(--ink);color:var(--bg)}
 
 /* 弹窗 */
 .veil{position:fixed;inset:0;background:rgba(10,10,9,.42);backdrop-filter:blur(2px);display:none;align-items:flex-start;
-  justify-content:center;padding:56px 16px;z-index:40;overflow:auto}
+  justify-content:center;padding:56px 16px;z-index:95;overflow:auto}
 .veil.on{display:flex;animation:fade .16s ease}
 .veil.closing{animation:veilOut .15s ease forwards}
 @keyframes veilOut{to{opacity:0}}
@@ -390,7 +390,7 @@ nav a.on{background:var(--ink);color:var(--bg)}
 #pdftext span{position:absolute;white-space:pre;transform-origin:0 0;cursor:text;color:transparent}
 #pdftext span::selection{background:rgba(231,194,70,.45);color:transparent}
 #pdftext span::-moz-selection{background:rgba(231,194,70,.45);color:transparent}
-.note-menu{position:fixed;z-index:95;background:var(--card);border:1px solid var(--ink);border-radius:8px;
+.note-menu{position:fixed;z-index:96;background:var(--card);border:1px solid var(--ink);border-radius:8px;
   box-shadow:0 10px 30px rgba(0,0,0,.22);padding:4px;min-width:130px}
 .note-menu button{display:block;width:100%;text-align:left;border:0;background:transparent;border-radius:6px;
   padding:7px 10px;font-size:12.5px;color:var(--ink)}
@@ -463,7 +463,7 @@ nav a.on{background:var(--ink);color:var(--bg)}
 /* toast / 页脚 */
 .toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%) translateY(16px);background:var(--ink);color:var(--bg);
   border-radius:11px;padding:11px 16px;font-size:12.5px;box-shadow:0 12px 34px rgba(0,0,0,.28);opacity:0;pointer-events:none;
-  transition:.24s;z-index:80;display:flex;align-items:center;gap:12px;max-width:min(620px,92vw)}
+  transition:.24s;z-index:97;display:flex;align-items:center;gap:12px;max-width:min(620px,92vw)}
 .toast.on{opacity:1;transform:translateX(-50%) translateY(0);pointer-events:auto}
 /* 生成进度条（2026-11-19）*/
 .genprog{display:none;margin-top:10px}
@@ -504,6 +504,11 @@ footer{max-width:1080px;margin:26px auto 0;padding:0 16px;display:flex;align-ite
  body.win{height:100vh;overflow:hidden;display:flex;flex-direction:column}
  body.win #appScroll{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden}
  body.win .tbar{position:relative;flex:0 0 36px}
+ /* 2026-11-21 用户：「顶栏依旧会挡住软件UI」。
+    原来浮层的层级是 抽屉 30 / 遮罩 29 / 弹窗 40 / 拖放 60，全在导航（70）与自绘标题栏（80）下面：
+    抽屉滑出来时自己顶部那 98px 被顶栏盖住（课程名与关闭都在里面），遮罩也盖不住顶栏。
+    现在浮层排在顶栏之上，但都从 36px 之下开始——窗口按钮（— □ ✕）仍可点，顶栏不被遮罩压下。 */
+ body.win .drawer,body.win .dveil,body.win .veil,body.win .dropveil{top:36px}
  /* 导航在窗口模式里也固定（标题栏下面），页面内容从它下面滚 */
  body.win #navSticky{position:sticky;top:0;z-index:70;background:var(--bg);border-bottom:1px solid var(--line2)}
  body.win #navSticky .top{padding-bottom:10px}
@@ -2670,6 +2675,8 @@ $('#btnSet').onclick = () => {
     <p class="pickfine" id="sFine">当前指向：<code>${esc(dirText(B.save_dir))}</code></p>
     <div class="kv"><span>账户余额</span><b id="sBal">读取中…</b></div>
     <div class="kv"><span>累计消耗（估）</span><b id="sCost">—</b></div>
+    <div class="kv"><span>版本</span><b id="sVer">读取中…</b></div>
+    <p class="pickfine" id="sUpd">正在检查仓库版本…</p>
     <p class="fine">© 2026 Ryo · 代码 MIT / 示例内容 CC BY-NC 4.0 / 文档 CC BY 4.0，边界见随程序附带的 NOTICE.md</p>
     <div class="acts"><button class="btn ghost" id="sTut">重看教学</button><button class="btn" id="sSave">保存</button></div>`;
   openVeil();
@@ -2678,6 +2685,30 @@ $('#btnSet').onclick = () => {
     $('#sBal').textContent = b.ok ? ('¥'+b.balance) : '未配置';
     const u = (await (await fetch('/api/bootstrap')).json()).usage||{};
     $('#sCost').textContent = '¥'+(u.cost_est||0).toFixed(3)+'（估）· '+(u.calls||0)+' 次';
+    // 2026-11-21：本机版本 vs 仓库版本，要不要更新，就写在这一行里
+    $('#sVer').textContent = '本机 v' + (B.version || '?');
+    let up = null;
+    try{ up = await (await fetch('/api/update?force=1')).json(); }catch(_){}
+    const hint = $('#sUpd');
+    if(!up || !up.ok){
+      hint.textContent = '仓库版本读不到（' + ((up && up.error) || '没连上') + '），不影响使用';
+      return;
+    }
+    const repo = 'v' + up.latest;
+    if(up.newer){
+      hint.innerHTML = '仓库 ' + esc(repo) + ' · <b>有新版本</b> ';
+      const goBtn = document.createElement('button');
+      goBtn.className = 'btn';
+      goBtn.style.cssText = 'padding:3px 10px;font-size:12px;margin-left:6px';
+      goBtn.textContent = (up.assets && up.assets.exe) ? '立即更新' : '去看看';
+      goBtn.onclick = () => {
+        closeVeil();
+        if(window.__plumaUpd) window.__plumaUpd.show(up);
+      };
+      hint.appendChild(goBtn);
+    }else{
+      hint.innerHTML = '仓库 ' + esc(repo) + ' · 已是最新（' + esc(String(up.checked || '')) + ' 查过一次）';
+    }
   })();
   $('#sTut').onclick = () => { closeVeil(); showTut(); };
   bindDirLine('#sDir', '#sPick', '#sFine');
@@ -2979,6 +3010,11 @@ document.addEventListener('keydown', e => {
       try{ j = await (await fetch('/api/update')).json(); }catch(_){ return; }
     }
     if(!j || !j.ok || !j.newer) return;
+    showCard(j);
+  }
+
+  /* 2026-11-21：卡片内容单独抽出来，设置页「版本」那行也能直接用它（一处算、一处画） */
+  function showCard(j){
     const box = document.getElementById('upd');
     if(!box) return;
     document.getElementById('updTitle').textContent = '有新版本 ' + (j.latest || '') + '（当前 ' + (j.current || '') + '）';
@@ -3007,6 +3043,9 @@ document.addEventListener('keydown', e => {
     };
     document.getElementById('updX').onclick = () => { box.hidden = true; };
   }
+
+  // 设置页的「版本」那行要用：本机版本由后端给，仓库版本由 /api/update 给
+  window.__plumaUpd = { check: checkUpdate, show: showCard };
 
   let barDone = false;
   function initBarOnce(){
