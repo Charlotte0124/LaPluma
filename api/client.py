@@ -58,9 +58,53 @@ MODELS = ("deepseek-flash", "deepseek-v4-pro")
 
 USER_CFG = os.path.join(os.path.expanduser("~"), ".pluma", "api.json")
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-PRTS_CFG = os.environ.get("PLUMA_PRTS_SECRETS") or os.path.normpath(
-    os.path.join(_ROOT, "..", "Project", "PRTS", "projects", "课程", "ops", "secrets", "api.json")
-)
+# PRTS 侧密钥文件的相对位置（仓外，禁止提交）
+_SECRET_TAIL = ("projects", "课程", "ops", "secrets", "api.json")
+
+
+def _app_roots() -> list:
+    """可能「站在 PRTS 旁边」的目录：冻结点 = exe 所在目录，源码 = 仓根。"""
+    out = []
+    for r in ((os.path.dirname(os.path.abspath(sys.executable)) if getattr(sys, "frozen", False) else ""),
+              _ROOT):
+        if r and r not in out:
+            out.append(r)
+    return out
+
+
+def secret_candidates() -> list:
+    """按「离得最近」的顺序列出可能藏 key 的 PRTS 密钥文件。
+
+    为什么不是一条写死的相对路径：2026-11-19 把 LaPluma 从 `F:\\DSH\\work\\…` 挪到
+    `F:\\DSH\\apps\\LaPluma` 之后，原来那条 `..\\Project\\PRTS\\…` 指向了不存在的
+    `F:\\DSH\\apps\\Project\\PRTS\\…`；界面只显示「未配置模型」，点生成就报
+    「找不到 API key」。软件位置一变就再坏一次，所以改成从自己所在的目录往上找几层，
+    两种常见摆法（`<p>\\work\\Project\\PRTS`、`<p>\\Project\\PRTS`）都试。
+    环境变量 PLUMA_PRTS_SECRETS 仍然优先，可以指任意路径。
+    """
+    cands = []
+    env = (os.environ.get("PLUMA_PRTS_SECRETS") or "").strip()
+    if env:
+        cands.append(env)
+    for root in _app_roots():
+        p = os.path.abspath(root)
+        for _ in range(7):
+            for head in (("work", "Project", "PRTS"), ("Project", "PRTS")):
+                cands.append(os.path.join(p, *(head + _SECRET_TAIL)))
+            nxt = os.path.dirname(p)
+            if nxt == p:
+                break
+            p = nxt
+    out = []
+    for c in cands:
+        c = os.path.normpath(c)
+        if c not in out:
+            out.append(c)
+    return out
+
+
+# 兼容旧引用：第一条候选（通常就是本机真实的那份）
+PRTS_CFG = secret_candidates()[0]
 
 
 def _read(path: str) -> dict:
@@ -70,6 +114,15 @@ def _read(path: str) -> dict:
             return json.load(f)
     except Exception:
         return {}
+
+
+def config_candidates() -> list:
+    """本机所有可能读到 key 的文件，按优先级排（界面「设置」页与 --check 都用它）。"""
+    out = [USER_CFG]
+    for c in secret_candidates():
+        if c not in out:
+            out.append(c)
+    return out
 
 
 def load_config(explicit_key: str | None = None) -> dict:
@@ -84,7 +137,7 @@ def load_config(explicit_key: str | None = None) -> dict:
         cfg["model"] = os.environ.get("PLUMA_MODEL", DEFAULT_MODEL)
         return cfg
 
-    for path in (USER_CFG, PRTS_CFG):
+    for path in config_candidates():
         disk = _read(path)
         if disk.get("api_key"):
             cfg.update({k: v for k, v in disk.items() if k in cfg and v})
@@ -98,7 +151,7 @@ def load_config(explicit_key: str | None = None) -> dict:
 
     raise RuntimeError(
         "找不到 API key。三条路任选：① 设环境变量 PLUMA_API_KEY；"
-        "② 建 %s；③ 在界面里手填。" % USER_CFG
+        "② 建 %s；③ 在界面「设置」里填一次。" % USER_CFG
     )
 
 
@@ -163,8 +216,12 @@ def chat(messages: list[dict], model: str | None = None, temperature: float = 0.
 
 
 def health(cfg: dict | None = None) -> dict:
-    """不花钱的探活：/models。"""
-    cfg = cfg or load_config()
+    """不花钱的探活：/models。没 key 时把找过的路径一起列出来（排查「未配置模型」用）。"""
+    if cfg is None:
+        try:
+            cfg = load_config()
+        except Exception as e:  # noqa: BLE001
+            return {"ok": False, "error": str(e), "tried": config_candidates()}
     t0 = time.time()
     try:
         models = list_models(cfg)

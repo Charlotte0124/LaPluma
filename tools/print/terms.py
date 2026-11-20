@@ -40,10 +40,18 @@ def pairs_of(html: str) -> list[tuple[str, str]]:
 
 
 def _mask(html: str) -> str:
-    """把不该动的区域（标题、术语表）替换成等长空格，保持下标不变。"""
+    """把不该动的区域（标题、术语表、所有标签）替换成等长空格，保持下标不变。
+
+    2026-11-21 补「所有标签」：原来只遮 h2/h3/svg/pre/glossary，标签**属性**里的文字仍然
+    参与匹配。撞到的是导入课件的自动配图——`<img alt="Bellman 最优方程（Bellman Optimality
+    Equation）…">` 里已经有「术语 + 英文」，于是这里判「本节已附过」直接跳过；而内容门
+    用 strip_tags 去掉标签后，本节正文第一次出现是在 `<figcaption>` 里、后面没有英文，
+    于是判红「术语首次出现没附英文」。生成必挂，看着像「生成坏了」。
+    遮掉标签后两边看的是同一段正文。
+    """
     out = list(html)
     for pat in (r"<h2>.*?</h2>", r"<h3>.*?</h3>", r'<table class="glossary">.*?</table>',
-                r"<svg.*?</svg>", r'<pre class="code">.*?</pre>'):
+                r"<svg.*?</svg>", r'<pre class="code">.*?</pre>', r"<[^>]*>"):
         for m in re.finditer(pat, html, re.S):
             for i in range(m.start(), m.end()):
                 if out[i] != "\n":
@@ -103,7 +111,9 @@ def attach_first_per_section(html: str) -> tuple[str, int]:
                 break
             if pos < 0:
                 continue
-            tail = html[pos:pos + 6]
+            # 「已经附过英文」的判据与内容门一致：看遮掉标签后的正文，
+            # 这样 `术语</em>（English）` 这种中间隔着标签的也算已附，不会再插一遍。
+            tail = masked[pos:pos + 12].lstrip()
             if re.match(r"[（(]\s*[A-Za-z]", tail):
                 used.append((pos - len(zh), pos))
                 continue
