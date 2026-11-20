@@ -111,7 +111,11 @@ def make(nos: list, course: str | None = None, emit=print, lang: str | None = No
         rc, out = _call('html2pdf', [src, '-o', pdf, '--theme', 'dark', '--toc',
                                      '--bg', '#0E0E0C',
                                      '--footer', '%s %s · %s' % (lesson['code'], no, foot_title)])
-        emit(out.strip().splitlines()[-1] if out.strip() else '(no output)')
+        # 2026-11-21：原来只回显最后一行——打印失败时那行正好是空行，
+        #   界面上只剩「[停] 打印失败」，连 Chrome 的退出码和命令都看不到（用户没法报，我也没法查）。
+        #   现在把 tail 的最后几行原样给出来。
+        tail = [ln for ln in (out or '').strip().splitlines() if ln.strip()]
+        emit('\n'.join(tail[-6:]) if tail else '(no output)')
         if rc != 0:
             emit('[停] 打印失败')
             return 1

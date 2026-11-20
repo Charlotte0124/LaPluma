@@ -22,6 +22,7 @@
 """
 
 import argparse
+import os
 import re
 import shutil
 import subprocess
@@ -70,23 +71,63 @@ def find_chrome() -> str:
 
 
 def render(chrome: str, html: Path, out: Path) -> bool:
-    cmd = [
+    """Chrome 无头打印一页。
+
+    2026-11-21 实测（打包后的 exe）：Chrome 退出码 2147483651 = 0x80000003
+    STATUS_BREAKPOINT，零输出、零字节，PDF 不落地；同一条命令在 python 下跑却是好的。
+    根因是**父进程是 console=False 的打包程序**：它没有真的 stdin/stdout 句柄，
+    子进程继承过去的是一堆无效句柄，Chrome 起来就撞断点。两处一起治：
+      · stdin 显式给 DEVNULL，不再继承；
+      · 万一还是 0x80000003（受限环境里 Chrome 的沙箱起不来），自动带 --no-sandbox 重试一次。
+    另外失败时把 rc / 命令 / 两个尾部都写出来——原来只回显最后一行，那行正好是空行，
+    界面上只剩「[停] 打印失败」，谁也查不出原因。
+    """
+    # 独立 profile：免得好落到用户正在用的默认 profile 上（那也会让 headless 静默退出）
+    profile = Path(os.environ.get("TEMP") or ".") / "pluma-chrome-profile"
+    try:
+        profile.mkdir(parents=True, exist_ok=True)
+    except Exception:  # noqa: BLE001
+        profile = Path(os.environ.get("TEMP") or ".")
+    base = [
         chrome,
         "--headless=new",
         "--disable-gpu",
         "--no-pdf-header-footer",
         "--print-to-pdf-no-header",
         "--virtual-time-budget=5000",
+        f"--user-data-dir={profile}",
         f"--print-to-pdf={out}",
         html.as_uri(),
     ]
-    r = subprocess.run(cmd, capture_output=True, text=True, timeout=120,
-                       encoding="utf-8", errors="replace")
-    if out.exists():
-        return True
+    BRK = 2147483651          # 0x80000003 STATUS_BREAKPOINT
+    tries = [("默认", []), ("--no-sandbox", ["--no-sandbox"])]
+    last = None
+    for label, extra in tries:
+        cmd = base[:-1] + extra + [base[-1]] if extra else list(base)
+        try:
+            r = subprocess.run(cmd, stdin=subprocess.DEVNULL, capture_output=True, text=True,
+                               timeout=120, encoding="utf-8", errors="replace",
+                               creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        except Exception as e:  # noqa: BLE001
+            print("打印失败：Chrome 起不来 %r" % (e,), file=sys.stderr)
+            print("  命令：%s" % " ".join(cmd), file=sys.stderr)
+            return False
+        if out.exists() and out.stat().st_size > 0:
+            if extra:
+                print("（Chrome 第一次以 0x80000003 退出，带 --no-sandbox 重试成功）", file=sys.stderr)
+            return True
+        last = (label, cmd, r)
+        if getattr(r, "returncode", None) != BRK:
+            break
+    label, cmd, r = last
     print("打印失败，Chrome 输出：", file=sys.stderr)
-    print((r.stdout or "")[-800:], file=sys.stderr)
-    print((r.stderr or "")[-800:], file=sys.stderr)
+    print("  尝试：%s" % label, file=sys.stderr)
+    print("  命令：%s" % " ".join(cmd), file=sys.stderr)
+    print("  退出码：%r · 有输出 %d / 错误 %d 字节" % (getattr(r, "returncode", None),
+                                                     len(r.stdout or ""), len(r.stderr or "")),
+          file=sys.stderr)
+    print("  stdout：" + (r.stdout or "")[-600:], file=sys.stderr)
+    print("  stderr：" + (r.stderr or "")[-600:], file=sys.stderr)
     return False
 
 

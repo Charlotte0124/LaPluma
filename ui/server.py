@@ -2466,7 +2466,13 @@ def check_update(force: bool = False, channel: str = "auto") -> dict:
     data["sources"] = {k: v["latest"] for k, v in got.items()}
     data["newer"] = _ver_num(data.get("latest")) > _ver_num(VERSION)
     data["current"] = VERSION
-    _write_json(UPDATE_CACHE, {"ts": now, "data": data})
+    # 2026-11-21：缓存写不进去不能把「检查更新」弄死——实测 update.json 被占用/只读时，
+    #   _write_json 抛 PermissionError，整个 /api/update 回 403，界面只看到「读不到仓库版本」。
+    #   缓存只是省一次网络往返，写不了就跳过。
+    try:
+        _write_json(UPDATE_CACHE, {"ts": now, "data": data})
+    except Exception as e:  # noqa: BLE001
+        _log_error("update cache", e)
     return data
 
 
