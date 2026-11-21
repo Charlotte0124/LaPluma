@@ -186,6 +186,17 @@ def api_phase(ok: list, red: list, keep: bool) -> None:
         f.cleanup(keep)
 
 
+
+def _close_drawer(page) -> bool:
+    """把抽屉与遮罩收干净。生成完成后软件会自动打开课程抽屉（v1.9.12 的既定行为），
+    它会挡住后面的导航 / 设置按钮——不关掉就成了脚本自己的假红。"""
+    for _ in range(20):
+        if not page.evaluate("() => !!document.querySelector('.drawer.on, .dveil.on')"):
+            return True
+        page.keyboard.press("Escape")
+        time.sleep(0.15)
+    return False
+
 def window_phase(ok: list, red: list, keep: bool) -> None:
     """实体软件：真窗口 + 真点击。这一段才判「有没有 bug」。"""
     try:
@@ -237,8 +248,8 @@ def window_phase(ok: list, red: list, keep: bool) -> None:
                 ok.append("W2 抽屉没被顶栏压住（抽屉 top=%s · 顶栏底=%s）" % (box["top"], box["tbarBottom"]))
             else:
                 red.append("W2 抽屉被顶栏压住：top=%s < 顶栏底 %s" % (box["top"], box["tbarBottom"]))
-            page.keyboard.press("Escape")
-            time.sleep(0.6)
+            if not _close_drawer(page):
+                red.append("W2 抽屉关不掉（点了课程卡之后收不回去）")
 
             # W3 点「生成」→ 选一讲 → 点「开始生成」→ 等 PDF 真落地
             page.click("#nav a[data-page=generate]")
@@ -260,6 +271,7 @@ def window_phase(ok: list, red: list, keep: bool) -> None:
                 red.append("W3 真窗口点「开始生成」没出 PDF（看 fresh-window-3-generate.png）")
 
             # W4 点「设置」：版本行要说清本机与仓库
+            _close_drawer(page)      # 生成完软件会自动开课程抽屉，先收起
             page.click("#btnSet")
             page.wait_for_selector("#sVer", timeout=15000)
             time.sleep(1.2)
@@ -293,7 +305,11 @@ def main(argv=None) -> int:
     ok, red = [], []
     api_phase(ok, red, a.keep)
     if not a.api_only:
-        window_phase(ok, red, a.keep)
+        # 窗口段任何异常都要变成一条红，不许抛栈把调用方（check-prts / 钩子）打断
+        try:
+            window_phase(ok, red, a.keep)
+        except Exception as e:  # noqa: BLE001
+            red.append('W 窗口段崩了：%r' % (e,))
     for x in ok:
         print("  [绿] " + x)
     for x in red:
