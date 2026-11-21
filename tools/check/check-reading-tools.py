@@ -12,12 +12,14 @@ r"""check-reading-tools.py — 阅读页六件事的判据（2026-11-22）
   4 译文有「记成笔记」，以【译文 p.N】进 #nDraft 并切笔记页签；菜单只由右键打开
   5 记笔记有独立整页（左原文引用 / 右输入框），#nDraft 仍保留
   6 翻译历史存 ~/.pluma/translate-history.json，最多 5 条；页签顶部可回填
+  7 翻译是上下两个框 + 中间 ↑↓（上面输入、下面出译文；没译文时是占位不是空框）
+  8 正常记笔记（没有引用）时不出那个灰框：灰框只给「引用原文/译文」用
 
 用法：
     python tools\check\check-reading-tools.py            # 判本仓
     python tools\check\check-reading-tools.py --selftest # 临时副本逐个造坏，先证明会红
 
-退出码：0 = 6/6 · 1 = 有红
+退出码：0 = 8/8 · 1 = 有红
 """
 from __future__ import annotations
 
@@ -160,6 +162,15 @@ def check(root):
         and "if($('#trGo'))" in idx and "TR.to" in idx and "syncTrDir()" in idx
     ), "翻译：上面一个框输入、中间 ↑↓ 换方向、下面一个框出译文（没译文时是占位）")
 
+    # 2026-11-23 用户：「正常记笔记（就是没有引用的情况下）就不用灰字」
+    add(8, "无引用不出灰框", (
+        "const q = String(quote || '').trim();" in np
+        and "currentPageQuote()" not in np          # 不再拿整页文字兜底当引用
+        and "qw.hidden = !q" in np and "no-quote" in np
+        and "function currentSelText()" in idx and "openNotePage(currentSelText()" in idx
+        and ".note-quote[hidden]" in idx
+    ), "没引用时灰框整块不出（连占位也没有）；「记笔记」只引用当前选中，选不到就是纯笔记")
+
     hist = block(idx, "function renderTransHistory(items)", "async function transPage")
     ok_hist, detail = behavior_history(root)
     add(6, "翻译历史 5 条", (
@@ -180,10 +191,10 @@ def main():
     rows = check(ROOT)
     bad = 0
     for no, name, ok, detail in rows:
-        print("[%s] %d/7 %s —— %s" % ("绿" if ok else "红", no, name, detail))
+        print("[%s] %d/%d %s —— %s" % ("绿" if ok else "红", no, len(rows), name, detail))
         if not ok:
             bad += 1
-    print("结论：%d/7" % (len(rows) - bad))
+    print("结论：%d/%d" % (len(rows) - bad, len(rows)))
     return 0 if bad == 0 else 1
 
 
@@ -216,6 +227,7 @@ def selftest():
             ("左键松手也弹菜单", 4, IDX, "/* 全屏（2026-11-17", "document.addEventListener('mouseup', e => { const s = String(window.getSelection()); if(s) openTextMenu(1,1,s); });\n/* 全屏（2026-11-17"),
             ("侧栏写作页缺失", 5, IDX, 'id="noteCompose"', 'id="noteCompose-x"'),
             ("历史条数改成 9", 6, SRV, "TRANS_HISTORY_MAX = 5", "TRANS_HISTORY_MAX = 9"),
+            ("没引用也画灰框", 8, IDX, "if(qw) qw.hidden = !q;", "if(qw) qw.hidden = false;"),
         ]
         all_ok = True
         for label, no, rel, old, new in defects:

@@ -442,6 +442,8 @@ html,body{background:var(--bg)}
 #noteCompose .nhead .np{font-family:Consolas,monospace;color:var(--faint);font-weight:400;font-size:11.5px}
 #noteCompose .np-kind{font-size:10.5px;color:#b07d1f;border:1px solid currentColor;border-radius:5px;padding:0 5px}
 #noteCompose .note-quote{padding:0}
+#noteCompose .note-quote[hidden]{display:none}
+#noteCompose.no-quote textarea{margin-top:0}
 #noteCompose blockquote{max-height:120px}
 #noteCompose textarea{width:100%;min-height:130px;margin-top:8px;border:1px solid var(--line);
   background:var(--card2);border-radius:9px;padding:9px 11px;font:inherit;font-size:12.5px;resize:vertical;outline:none}
@@ -2849,6 +2851,19 @@ function currentPageQuote(){
     .replace(/[ \t]+\n/g,'\n').trim().slice(0, 4000);
 }
 let NP_QUOTE = '';            // 这一条笔记引用的原文（保存时一起写进笔记，列表里能看出出处）
+/* 2026-11-23 用户：「正常记笔记（没有引用的情况下）就不用灰字」。
+   所以：① 没引用时不显示那个灰框（连占位那行也不留），② 点「记笔记」只认当前选中，
+   没选中就是一条纯笔记——不再把整页文字兜底塞进去当引用。 */
+function currentSelText(){
+  try{
+    const s = window.getSelection();
+    const t = s ? String(s).toString().trim() : '';
+    if(!t) return '';
+    const el = n => (n ? (n.nodeType === 3 ? n.parentElement : n) : null);
+    const inTxt = n => { const e = el(n); return !!(e && e.closest && e.closest('#pdftext')); };
+    return (inTxt(s.anchorNode) || inTxt(s.focusNode)) ? t : '';
+  }catch(_){ return ''; }
+}
 let NP_KIND = 'self';         // self = 自己写的；trans = 引用译文（列表里用不同颜色区分）
 function noteView(compose){
   // 侧栏里两个视图：列表（默认）/ 写的那一页。见 2026-11-22 用户：
@@ -2859,12 +2874,15 @@ function noteView(compose){
 }
 function openNotePage(quote, kind){
   if(!RD.doc){ toast('先打开一份讲义'); return; }
-  const q = String(quote || currentPageQuote() || '').trim();
+  const q = String(quote || '').trim();
   NP_QUOTE = q;
   NP_KIND = (kind === 'trans') ? 'trans' : 'self';
   if($('#npPage')) $('#npPage').textContent = 'p.' + RD.page;
   if($('#npKind')) $('#npKind').hidden = (NP_KIND !== 'trans');
-  if($('#npQuote')) $('#npQuote').textContent = q || '（这一页没有选中文字，也没有可读的文字层）';
+  const qw = document.querySelector('#noteCompose .note-quote');
+  if(qw) qw.hidden = !q;                       // 没引用就不出灰框
+  if($('#noteCompose')) $('#noteCompose').classList.toggle('no-quote', !q);
+  if($('#npQuote')) $('#npQuote').textContent = q;
   const ta = $('#npText'); if(ta) ta.value = '';
   showSide();
   sideTab('notes');
@@ -2890,7 +2908,7 @@ async function saveNotePage(){
   closeNoteCompose();
   toast(NP_KIND === 'trans' ? '已记在 p.…（引用译文）'.replace('…', RD.page) : ('已记在 p.' + RD.page));
 }
-if($('#btnNotePage')) $('#btnNotePage').onclick = () => openNotePage('', 'self');
+if($('#btnNotePage')) $('#btnNotePage').onclick = () => openNotePage(currentSelText(), 'self');
 if($('#npBack')) $('#npBack').onclick = () => closeNoteCompose();
 if($('#npSave')) $('#npSave').onclick = saveNotePage;
 if($('#npText')) $('#npText').addEventListener('keydown', e => {
@@ -3344,12 +3362,23 @@ document.addEventListener('keydown', e => {
      WebView2 的宿主子窗口不会自己跟上父窗口的尺寸变化（窗口变大，它还是旧高度，
      下半截没东西可画）。这里在窗口尺寸变化 / 全屏切换后请 Python 侧按客户区重设子窗口
      并重画（_WinApi.relayout），再让页面重排一次 PDF。 */
+  /* 2026-11-23 用户：「依旧一直闪烁，无法选中，我电脑指针都在闪」。
+     成因（自激动循环）：relayout 为了逼 WebView2 收一次 WM_SIZE，会把窗口高度 +1px 再改回来；
+     页面因此收到 resize → 又调 relayout → 又 +1px … 一秒好几轮，窗口一直在改尺寸，
+     整页跟着重排、PDF 跟着重画，指针在改尺寸窗口上也会跟着闪。
+     这里记「这一下是我们自己造的」：自己 nudge 之后 2 秒内、变化 ≤2px 的 resize 直接吞掉。 */
+  let lastNudge = 0, stableW = window.innerWidth, stableH = window.innerHeight;
   function nudgeWin(){
+    lastNudge = Date.now();
     try{ const a = api(); if(a && a.relayout) a.relayout(); }catch(_){ }
   }
   document.addEventListener('fullscreenchange', () => { setTimeout(nudgeWin, 140); });
   let rzTimer = 0;
   window.addEventListener('resize', () => {
+    const dw = Math.abs(window.innerWidth - stableW);
+    const dh = Math.abs(window.innerHeight - stableH);
+    if(dw <= 2 && dh <= 2 && (Date.now() - lastNudge) < 2000) return;  // 自己那 1px 的回声
+    stableW = window.innerWidth; stableH = window.innerHeight;
     clearTimeout(rzTimer);
     rzTimer = setTimeout(() => {
       nudgeWin();

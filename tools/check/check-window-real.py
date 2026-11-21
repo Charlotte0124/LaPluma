@@ -20,6 +20,8 @@ r"""真窗口自测：在羽毛笔**自己的 WebView2 窗口**里量窗口矩�
   W10 翻译两框：上下两个框 + 中间 ↑↓ 可交换方向；上面能输入；没译文时不出「引用翻译记成笔记」
   W11 拖选：起点在按下的地方（不是行首），松手后选区保留
   W12 滚动条槽：出滚动条前后内容宽度不变（gutter 固定；不然「刚好一屏」时界面抖、底边闪白条）
+  W13 不自激：relayout 之后 4 秒不再持续收到 resize（它 +1px 逼重算，页面别回头再调它）
+  W14 正常记笔记（没引用）时不显示那个灰框；有选中时灰框回来
 
 注意：主脚本是 <script type="module">，函数不在 window 上——所以这里只点界面元素，
       不调页面函数；页面里只读 DOM、设选区。
@@ -607,6 +609,8 @@ def main():
                     page.wait_for_function(
                         "document.querySelectorAll('#pdftext span').length > 3", timeout=30000)
                     time.sleep(0.8)
+                    page.evaluate("window.pywebview.api.relayout()")   # 预热：先出一遍冷却期，再量
+                    time.sleep(0.8)
                     img0 = snap(hwnd)
                     r0 = rect_of(hwnd)
                     res = page.evaluate("window.pywebview.api.relayout()")
@@ -618,7 +622,10 @@ def main():
                     drift = max(abs(r1[i] - r0[i]) for i in range(4))
                     vis = diff_ratio(img0, img1)
                     opaque = bool(bg) and bg not in ("transparent", "rgba(0, 0, 0, 0)")
-                    if not (res or {}).get("ok"):
+                    if (res or {}).get("skipped"):
+                        # 被冷却挡掉就等于什么都没做：量了个空，不能算绿
+                        bad("W7 黑框兜底", "relayout() 被冷却挡掉（%r）：这一项等于没查" % (res,))
+                    elif not (res or {}).get("ok"):
                         bad("W7 黑框兜底", "relayout() 返回 %r" % (res,))
                     elif drift > 1 or vis > 0.02:
                         bad("W7 黑框兜底", "relayout() 动了窗口/画面：矩形漂 %dpx、画面差 %.0f%%"
@@ -634,9 +641,15 @@ def main():
             # ---- W8 全屏后按 Esc 能退出 ----
             if opened:
                 try:
+                    # WebView2 偶尔会把第一次 requestFullscreen 当「没有用户手势」拒掉（2026-11-23 见过一次），
+                    # 所以再点一次；两次都进不去才算「没验」，不许把没查当成通过。
                     page.click("#btnFs")
                     time.sleep(1.0)
                     was = page.evaluate("!!document.fullscreenElement")
+                    if not was:
+                        page.click("#btnFs")
+                        time.sleep(1.0)
+                        was = page.evaluate("!!document.fullscreenElement")
                     page.keyboard.press("Escape")
                     time.sleep(1.2)
                     now_fs = page.evaluate("!!document.fullscreenElement")
@@ -717,6 +730,59 @@ def main():
                            % (info["quoteLen"], info["quoteColor"], after["count"], after["quotes"], after["self"]))
                 except Exception as e:  # noqa: BLE001
                     bad("W9 记笔记单框", "没验成：%r" % (e,))
+
+            # ---- W14 正常记笔记（没引用）不出灰框 ----
+            # 2026-11-23 用户：「如果正常记笔记（就是没有引用的情况下）就不用灰字」。
+            # 所以：没选中文字时点「记笔记」，灰框整块不出现（连占位也没有）；
+            # 有选中时灰框回来，引用就是选中的那段。
+            if opened:
+                try:
+                    page.click("a[data-page='read']")
+                    page.click("#tabNotes")
+                    time.sleep(0.4)
+                    page.evaluate("""() => {
+                      const b = document.getElementById('npBack');
+                      if(b && b.offsetParent) b.click();          // 万一还停在写作页，先回列表
+                      const s = window.getSelection(); if(s) s.removeAllRanges();
+                      document.getElementById('btnNotePage').click();
+                    }""")
+                    time.sleep(0.7)
+                    n0 = page.evaluate("""() => {
+                      const w = document.querySelector('#noteCompose .note-quote');
+                      const ta = document.querySelector('#npText');
+                      const cs = ta ? getComputedStyle(ta) : null;
+                      return {display: w ? getComputedStyle(w).display : '',
+                              mt: cs ? cs.marginTop : '',
+                              inCompose: !document.querySelector('#noteCompose').hidden};
+                    }""")
+                    # 写的时候列表是藏着的，#btnNotePage 点不到——先选中，再用 JS 触发那次点击
+                    page.evaluate("""() => {
+                      const sp = [...document.querySelectorAll('#pdftext span')]
+                        .filter(s => s.getBoundingClientRect().width > 80)[0];
+                      const rg = document.createRange(); rg.selectNodeContents(sp);
+                      const s = window.getSelection(); s.removeAllRanges(); s.addRange(rg);
+                      document.getElementById('btnNotePage').click();
+                    }""")
+                    time.sleep(0.7)
+                    n1 = page.evaluate("""() => {
+                      const w = document.querySelector('#noteCompose .note-quote');
+                      const q = document.querySelector('#npQuote');
+                      return {display: w ? getComputedStyle(w).display : '',
+                              len: q ? q.textContent.trim().length : -1};
+                    }""")
+                    if not n0["inCompose"]:
+                        bad("W14 无引用不出灰框", "点「记笔记」没进写作页：%r" % (n0,))
+                    elif n0["display"] != "none":
+                        bad("W14 无引用不出灰框", "没选中文字时灰框还在（display=%r）" % (n0["display"],))
+                    elif n0["mt"] not in ("0px", "0"):
+                        bad("W14 无引用不出灰框", "灰框藏了但输入框还留着上边距 %r" % (n0["mt"],))
+                    elif n1["display"] == "none" or n1["len"] < 4:
+                        bad("W14 无引用不出灰框", "有选中时灰框/引用没回来：%r" % (n1,))
+                    else:
+                        ok("W14 无引用不出灰框", "没选中时灰框 display=none、输入框贴顶；选中后灰框回来（引用 %d 字）"
+                           % n1["len"])
+                except Exception as e:  # noqa: BLE001
+                    bad("W14 无引用不出灰框", "没验成：%r" % (e,))
 
             # ---- W10 翻译：两个框 + 中间 ↑↓ ----
             if opened:
@@ -843,6 +909,34 @@ def main():
                     ok("W12 滚动条槽", "滚动条出现前后内容宽度都是 %dpx（槽固定，不会抖）" % m0["cw"])
             except Exception as e:  # noqa: BLE001
                 bad("W12 滚动条槽", "没验成：%r" % (e,))
+
+            # ---- W13 不再自激：relayout 之后窗口尺寸不许反复来回 ----
+            # 2026-11-23 用户：「依旧一直闪烁，无法选中，我电脑指针都在闪」。
+            # 成因：relayout 为逼 WebView2 收 WM_SIZE 会 +1px 再改回，页面收到 resize 又调 relayout，
+            #   成了每秒好几轮的自激循环（窗口一直在改尺寸 → 整页重排、PDF 重画、指针跟着闪）。
+            # 这里数 4 秒里的 resize：前 2 秒最多 4 次（自己那一下的回声），后 2 秒必须 0 次。
+            try:
+                page.evaluate("""() => {
+                  window.__rz = [];
+                  if(!window.__rzHooked){
+                    window.__rzHooked = 1;
+                    window.addEventListener('resize', () => { window.__rz.push(Date.now()); });
+                  }
+                }""")
+                page.evaluate("window.pywebview.api.relayout()")
+                time.sleep(2.0)
+                n1 = page.evaluate("window.__rz.length")
+                time.sleep(2.0)
+                n2 = page.evaluate("window.__rz.length")
+                if n2 - n1 > 0:
+                    bad("W13 不自激", "前 2 秒 resize %d 次、后 2 秒又 %d 次：relayout 在自激"
+                        % (n1, n2 - n1))
+                elif n1 > 4:
+                    bad("W13 不自激", "2 秒内 resize %d 次（自己那一下最多 4 次）" % n1)
+                else:
+                    ok("W13 不自激", "relayout 之后 4 秒共 %d 次 resize，后 2 秒 0 次（不自激）" % n1)
+            except Exception as e:  # noqa: BLE001
+                bad("W13 不自激", "没验成：%r" % (e,))
 
             # ---- W6 真拖动（可选，会动鼠标）----
             if args.drag:

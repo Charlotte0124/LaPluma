@@ -2794,6 +2794,11 @@ class _WinApi:
         # relayout 会「把窗口加 1px 再改回来」逼 WebView2 重算表面；两个线程同时做会互相
         # 踩出 1~2px 的漂移（真窗口量测见过 842 → 844），所以串起来。
         self._relock = threading.Lock()
+        # 2026-11-23 用户：「一直闪烁、指针都在闪」。成因是 relayout 的 +1px 触发了页面 resize，
+        # 页面又回头调 relayout，成了自激循环。页面侧已吞掉自己那 1px 的回声；这里再加一道闸：
+        # 冷却期内重复调用直接跳过（返回 skip 字段，不假装做了），任何调用方都掀不起风暴。
+        self._last_relayout = 0.0
+        self.REL_COOLDOWN = 0.45
 
     def keep_bounds(self):
         """记下进入全屏前的窗口矩形。
@@ -2889,6 +2894,10 @@ class _WinApi:
             if not self._relock.acquire(blocking=False):
                 return {"ok": True, "busy": True}      # 另一个 relayout 正在做，跳过就好
             try:
+                if time.time() - self._last_relayout < self.REL_COOLDOWN:
+                    # 冷却中：不重设窗口（重设就是那 1px 抖动本身），如实说跳过了
+                    return {"ok": True, "skipped": "cooldown",
+                            "since": round(time.time() - self._last_relayout, 3)}
                 return self._relayout_locked(hwnd, ctypes, wt, u)
             finally:
                 self._relock.release()
@@ -2921,7 +2930,8 @@ class _WinApi:
             u.GetWindowRect(wt.HWND(hwnd), ctypes.byref(r))
             x, y = int(r.left), int(r.top)
             w0, h0 = int(r.right - r.left), int(r.bottom - r.top)
-            away = 0x0002 | 0x0004 | 0x0010          # NOMOVE|NOZORDER|NOACTIVATE
+            # SWP_NOREDRAW(0x0008)：这一下是「暗改尺寸」，不让它重画，否则那 1px 会上屏闪一下
+            away = 0x0002 | 0x0004 | 0x0010 | 0x0008   # NOMOVE|NOZORDER|NOACTIVATE|NOREDRAW
             u.SetWindowPos(wt.HWND(hwnd), None, x, y, w0, h0 + 1, away)
             time.sleep(0.05)
             u.SetWindowPos(wt.HWND(hwnd), None, x, y, w0, h0, away)
@@ -2930,6 +2940,7 @@ class _WinApi:
             u.SetWindowPos(wt.HWND(hwnd), None, x, y, w0, h0, away)
             # RDW_INVALIDATE|RDW_ALLCHILDREN|RDW_UPDATENOW|RDW_FRAME
             u.RedrawWindow(wt.HWND(hwnd), None, None, 0x0001 | 0x0080 | 0x0100 | 0x0400)
+            self._last_relayout = time.time()
             return {"ok": True, "children": len(n)}
         except Exception as e:  # noqa: BLE001
             _log_error("relayout", e)

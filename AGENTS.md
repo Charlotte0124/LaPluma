@@ -118,9 +118,11 @@
 6. **翻译就两个框**（2026-11-22 用户口述）：上面一个框输入（`#trSrc`，唯一可输入的地方），中间 `↑↓`（`#trSwap`）交换方向，下面出译文（`#trOut`）；只有出了译文，下面才出现「引用翻译记成笔记」。
 7. **拖选自己接管**（2026-11-22 用户：「只有选中没有确认…一松手就没有选择了」「选择的是中间，却变成开始到中间」）：文字层是绝对定位 + scaleX 的 span，浏览器自带的拖选在这种层上不可靠（anchor 会落到文档开头）。现在 `pointerdown` 用 `caretRangeFromPoint` 记 anchor、`pointermove` 用 `setBaseAndExtent` 扩展、`pointerup` **保留选区**；起点永远是按下的地方。
 8. **滚动条槽固定**：`body.win #appScroll` 必须 `scrollbar-gutter:stable`——内容是「刚好高过一屏」时，滚动条出现/消失会让内容宽度来回变，界面上下抖、底边闪白条（用户 2026-11-22 图1）。
+9. **relayout 不许自激**（2026-11-23 用户：「依旧一直闪烁，无法选中，我电脑指针都在闪」）：`relayout()` 靠「窗口 +1px 再改回」逼 WebView2 收一次 `WM_SIZE`，页面因此收到 `resize`；如果页面在 `resize` 里又调 `relayout()`，就是每秒八九轮的自激循环——窗口一直在改尺寸，整页反复重排、PDF 反复重画，指针也跟着闪（反例实测：2 秒 16 次 resize，且一直不停）。现在两道闸：① 页面记 `lastNudge`，自己 nudge 之后 2 秒内、变化 ≤2px 的 resize 直接吞掉；② Python 侧 `REL_COOLDOWN = 0.45` 秒冷却，重复调用返回 `skipped: "cooldown"`（如实说跳过了，不假装做过）。判据见 `check-window-real.py` **W13**。
+10. **没有引用就不出灰框**（2026-11-23 用户：「如果正常记笔记（就是没有引用的情况下）就不用灰字」）：灰框只给「引用原文 / 引用译文」用。点「记笔记」时只引用**当前选中**（`currentSelText()`，限定在 `#pdftext` 内），选不到就是一条纯笔记——不再拿整页文字兜底当引用。灰框藏起来时输入框贴顶（`#noteCompose.no-quote textarea{margin-top:0}`）。判据见 `check-window-real.py` **W14** 与 `check-reading-tools.py` 第 8 条。
 6. **翻译历史最多 5 条**：存 `%USERPROFILE%\.pluma\translate-history.json`（`PLUMA_HOME` 可改），字段为时间 / 原文前 120 字 / 译文前 400 字；翻译页签顶部列最近 5 条，点一条回填 `#trSrc` 与译文。
 
-**怎么验证它被执行**：`python tools\check\check-reading-tools.py` 必须 **6/6**，且 `--selftest` 6/6（临时副本逐条造坏，证明判据会红）；提交钩子 `.githooks\pre-commit` 自动跑。
+**怎么验证它被执行**：`python tools\check\check-reading-tools.py` 必须 **8/8**，且 `--selftest` 7/7（临时副本逐条造坏，证明判据会红）；提交钩子 `.githooks\pre-commit` 自动跑。
 
 ## 十二、文字层 / 已成稿列表 / 干净启动器（2026-11-22 用户定）
 
@@ -131,7 +133,7 @@
 3. **启动器单独一个干净文件夹**：`F:\DSH\apps\羽毛笔\` 里只放一个纯 ASCII 的 `启动羽毛笔.cmd`（`%~dp0` + 通配符找 `..\LaPluma\*.ps1`，带 `-Windowed`）；桌面快捷方式指向它。目录里多一个文件、或启动器里出现一个非 ASCII 字节，都算红——936 代码页会把中文读成乱码，双击就没反应（§六.3 的同一个坑）。
 4. **自测一律跑临时数据根**：要造「原件 + 成品」这类数据，用 `tools\check\_win_launch.py` + `PLUMA_TEST_DATA=<临时目录>`（在 import 之前改 `paths.DATA_ROOT`），跑完删掉；不许往用户自己的课程目录里造样本。
 
-**怎么验证它被执行**：`python tools\check\check-window-layer.py` 必须 **3/3**，`--selftest` 6/6（逐条造坏都要变红）；提交钩子自动跑。只有真窗口量得出的（窗口矩形、选中框对位、拖动），跑 `python tools\check\check-window-real.py`（会弹一下软件窗口，约 40 秒；加 `--drag` 再做一次真实鼠标拖动）：W1 真窗口 / W2 全屏进出还原（±2px）/ W3 文字层与 pymupdf 词框对位（±4px）/ W4 成稿隐藏与重新生成 / W5 只有右键弹菜单 / W7 relayout 幂等 + 底色不透明 / W8 Esc 能退出全屏 / W9 记笔记（侧栏写作页：灰底只读引用 + 1 个输入、保存带引用）/ W10 翻译两框（↑↓ 可换向、没译文不出现「引用翻译记成笔记」）/ W11 拖选（起点在按下处、松手保留、反向也对）/ W6 拖动。
+**怎么验证它被执行**：`python tools\check\check-window-layer.py` 必须 **3/3**，`--selftest` 6/6（逐条造坏都要变红）；提交钩子自动跑。只有真窗口量得出的（窗口矩形、选中框对位、拖动），跑 `python tools\check\check-window-real.py`（会弹一下软件窗口，约 40 秒；加 `--drag` 再做一次真实鼠标拖动）：W1 真窗口 / W2 全屏进出还原（±2px）/ W3 文字层与 pymupdf 词框对位（±4px）/ W4 成稿隐藏与重新生成 / W5 只有右键弹菜单 / W7 relayout 幂等 + 底色不透明 / W8 Esc 能退出全屏 / W9 记笔记（侧栏写作页：灰底只读引用 + 1 个输入、保存带引用）/ W10 翻译两框（↑↓ 可换向、没译文不出现「引用翻译记成笔记」）/ W11 拖选（起点在按下处、松手保留、反向也对）/ W12 滚动条槽（出不出滚动条，内容宽度都不变）/ W13 relayout 不自激（之后 4 秒不再持续收到 resize）/ W14 无引用时不出灰框（有选中灰框回来）/ W6 拖动。
 
 ## 十四、产品仓只放能跑的代码（2026-11-22 用户定）
 
@@ -154,7 +156,7 @@
 | `check-ui-conflicts.py` | 提交钩子自动 |
 | `check-lecture-rules.py` | 提交钩子自动 |
 | `check-draft-json.py` | 提交钩子自动 |
-| `check-reading-tools.py` | 提交钩子自动（阅读页六条：拖动 / 全屏 / 移动 / 翻译笔记 / 整页笔记 / 历史） |
+| `check-reading-tools.py` | 提交钩子自动（阅读页八条：拖动 / 全屏 / 移动 / 翻译笔记 / 侧栏写作页 / 翻译历史 / 翻译两框 / 无引用不出灰框） |
 | `check-window-layer.py` | 提交钩子自动（文字层 / 成稿隐藏 / 干净启动器） |
 | `check-inline-js.py` | 提交钩子自动（ui/index.html 里每段内联脚本过 node --check；引号/反引号写错立刻红） |
 | `check-repo-clean.py` | 提交钩子自动（产品仓只放能跑的代码；courses.json 只留 DEMO） |
