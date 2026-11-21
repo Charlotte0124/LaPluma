@@ -2975,31 +2975,16 @@ document.addEventListener('keydown', e => {
     fetch('/api/bootstrap').then(r => r.json()).then(j => {
       if (ver && j && j.version) ver.textContent = 'v' + j.version;
     }).catch(() => {});
-    // 2026-11-19：不再在 init 时抓一次 pywebview.api（那时可能还没就绪，抓到的 null 会一直用）；
-    //   每个事件发生时现取。拖拽优先走原生 start_drag，失败才用旧 move_by 回退。
-    let drag = false, lx = 0, ly = 0, nativeUsed = false, nativeAt = 0;
-    function fallbackMove(e){
-      const a = api(); if(!a) return;
-      const dx = e.screenX - lx, dy = e.screenY - ly;
-      if(Math.abs(dx) < 2 && Math.abs(dy) < 2) return;
-      lx = e.screenX; ly = e.screenY;
-      try{ a.move_by(dx, dy); }catch(_){}
-    }
-    const stop = () => { drag = false; document.removeEventListener('pointermove', fallbackMove); };
-    bar.addEventListener('pointerdown', e => {
+    // 2026-11-22 用户：「标题条按住没有交给系统」——改成 mousedown 时请 Windows 自己接管：
+    //   _WinApi.drag_window() 先 ReleaseCapture，再 SendMessage(WM_NCLBUTTONDOWN, HTCAPTION)。
+    //   贴边 / 多屏 / 高 DPI / 双击标题栏最大化都归系统，不再用 pointermove 自己挪窗口。
+    bar.addEventListener('mousedown', e => {
+      if(e.button !== 0) return;
       if(e.target.closest('.tb-btn')) return;
       const a = api();
-      if(!a) return;
-      // 2026-11-19 实测：原生 start_drag 在 js_api 线程里 ReleaseCapture 拿不到捕获，
-      //   窗口不动；改回 move_by，但把 pointermove/up 挂到 document 上（原来挂 bar，
-      //   窗口一动指针就离开 36px 标题栏，事件断掉）。
-      drag = true; lx = e.screenX; ly = e.screenY;
-      document.addEventListener('pointermove', fallbackMove);
-      document.addEventListener('pointerup', stop, {once:true});
-      document.addEventListener('pointercancel', stop, {once:true});
-    });
-    bar.addEventListener('dblclick', () => {
-      const a = api(); if(a) a.toggle_max();
+      if(!a || !a.drag_window) return;
+      e.preventDefault();
+      try{ a.drag_window(); }catch(_){}
     });
     const bind = (id, fn) => { const el = document.getElementById(id); if(el) el.onclick = () => { const a = api(); if(a) fn(a); }; };
     bind('tbMin', a2 => a2.minimize());

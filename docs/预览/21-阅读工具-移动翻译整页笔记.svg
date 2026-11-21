@@ -1,0 +1,89 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="840" viewBox="0 0 1120 840" font-family="Microsoft YaHei, Segoe UI, sans-serif">
+  <defs>
+    <style>
+      .bg{fill:#F7F5EF}.card{fill:#FFFDF8;stroke:#E4E0D5}.ink{fill:#22221F}.sub{fill:#6B6961}.faint{fill:#9A978D}
+      .line{stroke:#E4E0D5}.accent{fill:#B8862B}.soft{fill:#F1EDE3}.btn{fill:#22221F}
+      .btnT{fill:#F7F5EF;font-size:12px}.tag{fill:#EFE7D4}
+    </style>
+  </defs>
+  <rect class="bg" width="1120" height="840"/>
+  <text x="40" y="46" font-size="22" font-weight="700" fill="#22221F">阅读页四件事 · 设计说明（2026-11-22）</text>
+  <text x="40" y="70" font-size="12.5" fill="#6B6961">① 原件行「移动」 ② 译文「记成笔记」 ③ 翻译历史最近 5 条 ④ 记笔记独立整页（左原文 / 右输入）· 仅示意，不是截图</text>
+
+  <!-- A 抽屉 -->
+  <rect class="card" x="40" y="96" width="360" height="332" rx="12"/>
+  <text x="62" y="126" font-size="13" font-weight="700" fill="#22221F">A · 课程抽屉：原件每行多一个「移动」</text>
+  <text x="62" y="147" font-size="11.5" fill="#6B6961">图1 的原件被导进错课程 → 直接搬到另一门（连同占位讲次）</text>
+  <rect x="62" y="164" width="316" height="40" rx="8" fill="#F1EDE3"/>
+  <text x="76" y="189" font-size="11.5" fill="#6B6961">原件 · 2　导入的源课件</text>
+  <rect x="62" y="214" width="316" height="56" rx="8" fill="#FFFDF8" stroke="#E4E0D5"/>
+  <text x="76" y="236" font-size="12" fill="#22221F">04. 散剂与颗粒剂.pdf</text>
+  <text x="76" y="255" font-size="10.5" fill="#9A978D">812 KB · 在软件里读 →</text>
+  <rect x="246" y="232" width="50" height="23" rx="6" fill="#FFFDF8" stroke="#6B6961"/>
+  <text x="258" y="248" font-size="11" fill="#22221F">移动</text>
+  <rect x="304" y="232" width="50" height="23" rx="6" fill="#FFFDF8" stroke="#E4E0D5"/>
+  <text x="316" y="248" font-size="11" fill="#9A978D">删除</text>
+  <rect x="62" y="278" width="316" height="56" rx="8" fill="#FFFDF8" stroke="#E4E0D5"/>
+  <text x="76" y="300" font-size="12" fill="#22221F">05. 液体制剂.pdf</text>
+  <text x="76" y="319" font-size="10.5" fill="#9A978D">654 KB · 在软件里读 →</text>
+  <rect x="246" y="296" width="50" height="23" rx="6" fill="#FFFDF8" stroke="#6B6961"/>
+  <text x="258" y="312" font-size="11" fill="#22221F">移动</text>
+  <rect x="304" y="296" width="50" height="23" rx="6" fill="#FFFDF8" stroke="#E4E0D5"/>
+  <text x="316" y="312" font-size="11" fill="#9A978D">删除</text>
+  <text x="62" y="366" font-size="11.5" fill="#B8862B">弹窗：选目标课程 → 调 /api/move-originals</text>
+  <text x="62" y="386" font-size="11.5" fill="#B8862B">搬完重取课程与讲次，列表里原件即时消失</text>
+  <text x="62" y="406" font-size="11" fill="#9A978D">原位仍可从 _trash 找回；不删原件内容。</text>
+
+  <!-- B 翻译 -->
+  <rect class="card" x="420" y="96" width="660" height="332" rx="12"/>
+  <text x="442" y="126" font-size="13" font-weight="700" fill="#22221F">B · 翻译页签：最近 5 条 + 译文「记成笔记」</text>
+  <rect x="442" y="146" width="278" height="252" rx="10" fill="#F1EDE3"/>
+  <text x="458" y="170" font-size="11.5" font-weight="600" fill="#22221F">翻译</text>
+  <rect x="458" y="182" width="246" height="24" rx="6" fill="#FFFDF8" stroke="#E4E0D5"/>
+  <text x="466" y="198" font-size="10" fill="#9A978D">最近 5 条</text>
+  <rect x="458" y="211" width="246" height="27" rx="6" fill="#FFFDF8" stroke="#E4E0D5"/>
+  <text x="466" y="228" font-size="10" fill="#9A978D">11-22 01:20　散剂是指…</text>
+  <rect x="458" y="243" width="246" height="27" rx="6" fill="#FFFDF8" stroke="#E4E0D5"/>
+  <text x="466" y="260" font-size="10" fill="#9A978D">11-21 23:40　颗粒剂…</text>
+  <rect x="458" y="279" width="246" height="27" rx="6" fill="#FFFDF8" stroke="#E4E0D5"/>
+  <text x="466" y="296" font-size="10" fill="#9A978D">11-21 22:05　液体制剂…</text>
+  <text x="458" y="325" font-size="10.5" fill="#9A978D">点一条 → 回填 #trSrc 与译文</text>
+  <text x="458" y="345" font-size="10.5" fill="#9A978D">本机 ~/.pluma/translate-history.json</text>
+  <text x="458" y="365" font-size="10.5" fill="#9A978D">最多 5 条：时间 / 原文前 120 字 / 译文前 400 字</text>
+  <rect x="738" y="146" width="320" height="252" rx="10" fill="#FFFDF8" stroke="#E4E0D5"/>
+  <text x="756" y="172" font-size="11.5" font-weight="600" fill="#22221F">译文</text>
+  <text x="756" y="196" font-size="11.5" fill="#22221F">Powder is a solid dosage form…</text>
+  <text x="756" y="216" font-size="11.5" fill="#22221F">prepared by mixing drugs with</text>
+  <text x="756" y="236" font-size="11.5" fill="#22221F">excipients and dividing into doses.</text>
+  <rect x="756" y="270" width="92" height="30" rx="8" fill="#FFFDF8" stroke="#6B6961"/>
+  <text x="770" y="290" font-size="11.5" fill="#22221F">复制译文</text>
+  <rect x="858" y="270" width="92" height="30" rx="8" class="btn"/>
+  <text x="872" y="290" class="btnT">记成笔记</text>
+  <text x="756" y="326" font-size="10.5" fill="#9A978D">点「记成笔记」→ 以【译文 p.N】前缀</text>
+  <text x="756" y="346" font-size="10.5" fill="#9A978D">追加到笔记草稿，并切到「笔记」页签</text>
+  <text x="756" y="366" font-size="10.5" fill="#9A978D">菜单只由右键打开；左键选完不弹。</text>
+
+  <!-- C 整页笔记 -->
+  <rect class="card" x="40" y="452" width="1040" height="340" rx="12"/>
+  <text x="62" y="482" font-size="13" font-weight="700" fill="#22221F">C · 记笔记独立整页：左原文引用 / 右输入框，保存后回侧栏列表</text>
+  <rect x="62" y="500" width="996" height="48" rx="10" fill="#F1EDE3"/>
+  <text x="78" y="529" font-size="13" font-weight="600" fill="#22221F">记笔记</text>
+  <text x="138" y="529" font-size="10.5" fill="#9A978D">04. 散剂与颗粒剂.pdf · 第 12 页 · DEMO</text>
+  <rect x="856" y="510" width="86" height="28" rx="8" fill="#FFFDF8" stroke="#6B6961"/>
+  <text x="870" y="529" font-size="11" fill="#22221F">返回列表</text>
+  <rect x="952" y="510" width="92" height="28" rx="8" class="btn"/>
+  <text x="966" y="529" class="btnT">保存到本页</text>
+  <rect x="62" y="560" width="480" height="210" rx="10" fill="#F1EDE3"/>
+  <text x="80" y="586" font-size="11.5" font-weight="600" fill="#6B6961">原文引用　p.12</text>
+  <text x="80" y="614" font-size="11.5" fill="#22221F">散剂（powders）是药物与辅料混合后</text>
+  <text x="80" y="636" font-size="11.5" fill="#22221F">制成的干燥粉末状制剂，供内服或外用。</text>
+  <text x="80" y="658" font-size="11.5" fill="#22221F">按组成分为单散剂与复方散剂。</text>
+  <text x="80" y="700" font-size="10.5" fill="#9A978D">左边只作引用，不改动原件。</text>
+  <rect x="554" y="560" width="504" height="210" rx="10" fill="#FFFDF8" stroke="#E4E0D5"/>
+  <text x="572" y="586" font-size="11.5" font-weight="600" fill="#6B6961">我的笔记</text>
+  <text x="572" y="616" font-size="11.5" fill="#22221F">散剂 = 粉末 + 均匀混合；注意吸湿性。</text>
+  <text x="572" y="640" font-size="11.5" fill="#22221F">复方散剂要写清各组分比例。</text>
+  <rect x="572" y="676" width="468" height="1" fill="#E4E0D5"/>
+  <text x="572" y="702" font-size="10.5" fill="#9A978D">保存 → /api/notes，回侧栏「笔记」列表；#nDraft 仍是快速记一笔。</text>
+  <text x="40" y="820" font-size="11" fill="#9A978D">说明：本轮按用户要求禁开浏览器、禁起可见窗口，所以这里用 SVG 手绘说明图代替 Edge 截图；真实界面截图待后续补拍。</text>
+</svg>

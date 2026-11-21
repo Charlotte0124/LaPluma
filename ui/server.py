@@ -2772,16 +2772,13 @@ class _WinApi:
             w.destroy()
         return {"ok": bool(w)}
 
-    def start_drag(self):
-        """拖标题栏：交给 Windows 原生拖拽（WM_NCLBUTTONDOWN + HTCAPTION）。
+    def drag_window(self):
+        """标题条按住：ReleaseCapture + WM_NCLBUTTONDOWN(HTCAPTION)，把拖动交给系统。
 
-        2026-11-19 用户实测「视窗拖不动」：原来的 pointermove + move_by 方案
-        依赖指针捕获，窗口一动指针就离开标题栏，move 事件断掉；改用系统拖拽循环，
-        高 DPI / 多屏 / 贴边都由 Windows 自己处理，也顺带恢复双击标题栏最大化。
+        2026-11-22 用户：「标题条按住没有交给系统」——界面上原来用 pointermove + move_by
+        自己挪窗口，指针一动就丢事件，也没有双击最大化。这里在 mousedown 时直接请 Windows
+        进标题栏拖动循环：贴边、多屏、高 DPI、双击最大化（最大化/还原）都由系统处理。
         """
-        w = self._win()
-        if not w or self.maxed:
-            return {"ok": False}
         try:
             import ctypes
             import ctypes.wintypes as wt
@@ -2789,14 +2786,20 @@ class _WinApi:
             hwnd = _find_hwnd()
             if not hwnd:
                 return {"ok": False, "error": "找不到窗口句柄"}
+            # 先释放 JS / WebView 这边的鼠标捕获，再让系统把这次按下当成标题栏拖动。
             u.ReleaseCapture()
             # WM_NCLBUTTONDOWN = 0x00A1，HTCAPTION = 2
             u.SendMessageW.argtypes = [wt.HWND, ctypes.c_uint, ctypes.c_void_p, ctypes.c_void_p]
             u.SendMessageW.restype = ctypes.c_ssize_t
-            u.SendMessageW(hwnd, 0x00A1, 2, 0)
+            u.SendMessageW(wt.HWND(hwnd), 0x00A1, 2, 0)
             return {"ok": True}
         except Exception as e:  # noqa: BLE001
+            _log_error("drag_window", e)
             return {"ok": False, "error": str(e)}
+
+    def start_drag(self):
+        """旧名保留（老页面可能还在调）；行为与 drag_window 相同。"""
+        return self.drag_window()
 
     def get_box(self):
         """窗口位置与大小（拉边缩放用）。"""
