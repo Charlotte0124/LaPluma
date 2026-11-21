@@ -108,3 +108,4 @@
 - ② 退出全屏 restore_bounds 带 SWP_FRAMECHANGED，260ms 后再补一次
 - ③ 原件行「移动」→ /api/move-originals，搬完重取课程与讲次
 - ④ 译文「记成笔记」→【译文 p.N】追加到 #nDraft 并切笔记页签；菜单只由右键触发
+- ⑤ 记笔记独立整页：左原文引用 / 右输入框；#nDraft 保留为快速记一笔

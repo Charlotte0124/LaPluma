@@ -390,6 +390,18 @@ nav a.on{background:var(--ink);color:var(--bg)}
 .side-tabs .stab{border:1px solid var(--line);background:transparent;color:var(--faint);
   border-radius:8px;padding:5px 11px;font:inherit;font-size:12px;cursor:pointer}
 .side-tabs .stab.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.nhead{display:flex;align-items:center;gap:8px;margin:0 0 10px}
+.nhead h5{margin:0;font-size:12.5px;font-weight:600}
+.nhead .btn{margin-left:auto;padding:4px 12px;font-size:11.5px}
+/* 2026-11-22 用户：翻译页签顶部列最近 5 条，点一条回填原文与译文 */
+.tr-hist{margin:0 0 9px}
+.tr-hist .th-h{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);margin:0 0 5px}
+.tr-hist .th{display:flex;gap:8px;align-items:baseline;width:100%;text-align:left;border:1px solid var(--line2);
+  background:var(--card2);border-radius:7px;padding:5px 8px;margin:0 0 5px;font:inherit;cursor:pointer;color:var(--ink)}
+.tr-hist .th:hover{border-color:var(--sub);background:var(--card)}
+.tr-hist .th b{flex:none;font-family:Consolas,monospace;font-size:10px;color:var(--faint);font-weight:400}
+.tr-hist .th span{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:11.5px}
+.tr-hist .th-empty{font-size:11.5px;color:var(--faint);border:0;padding:0}
 #sideTrans .trans{white-space:pre-wrap;font-size:13px;line-height:1.65;
   background:var(--card2);border-radius:9px;padding:10px 12px;margin-top:10px;max-height:none}
 #readerBox{cursor:grab}
@@ -490,6 +502,23 @@ nav a.on{background:var(--ink);color:var(--bg)}
 .gen-note .row span{color:var(--faint);font-family:Consolas,monospace;flex:none}
 .trans{white-space:pre-wrap;font-size:13px;line-height:1.8;max-height:55vh;overflow:auto;
   background:var(--card2);border:1px solid var(--line2);border-radius:9px;padding:12px 14px;margin:10px 0}
+/* 2026-11-22 用户：记笔记改成独立整页（左原文引用、右输入框），保存后回侧栏列表 */
+.note-page{max-width:1080px;margin:0 auto;overflow:hidden}
+.note-h{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--line2);flex-wrap:wrap}
+.note-h .t{font-weight:600;font-size:13.5px}
+.note-h .p{font-size:11.5px;color:var(--faint);font-family:Consolas,monospace}
+.note-h .acts{margin-left:auto}
+.note-body{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.05fr);align-items:stretch}
+.note-quote{padding:18px 20px;border-right:1px solid var(--line2);background:var(--card2)}
+.note-quote h5,.note-write h5{margin:0 0 9px;font-size:12px;color:var(--sub);font-weight:600}
+.note-quote h5 span{font-family:Consolas,monospace;color:var(--faint);font-weight:400}
+.note-quote blockquote{margin:0;padding:0 0 0 12px;border-left:2px solid var(--line);font-size:13px;line-height:1.8;
+  color:var(--ink);white-space:pre-wrap;max-height:56vh;overflow:auto}
+.note-write{padding:18px 20px;display:flex;flex-direction:column;min-height:340px}
+.note-write textarea{flex:1;min-height:300px;border:1px solid var(--line);background:var(--card2);border-radius:10px;
+  padding:11px 13px;font:inherit;font-size:13px;line-height:1.75;resize:vertical;outline:none}
+.note-write textarea:focus{border-color:var(--ink);background:var(--card)}
+@media (max-width:980px){ .note-body{grid-template-columns:1fr} .note-quote{border-right:0;border-bottom:1px solid var(--line2)} }
 .toast button{background:transparent;border:1px solid currentColor;border-radius:7px;padding:3px 10px;font-size:11.5px;color:inherit;opacity:.9}
 footer{max-width:1080px;margin:26px auto 0;padding:0 16px;display:flex;align-items:center;gap:14px;
   font-size:11.5px;color:var(--faint);border-top:1px solid var(--line);padding-top:14px;flex-wrap:wrap}
@@ -802,7 +831,10 @@ footer{max-width:1080px;margin:26px auto 0;padding:0 16px;display:flex;align-ite
           </div>
           <div id="sideNotes">
             <div>
-              <h5 style="margin:0 0 10px;font-size:12.5px;font-weight:600">第 <span id="curP">p.1</span> 页</h5>
+              <div class="nhead">
+                <h5>第 <span id="curP">p.1</span> 页</h5>
+                <button class="btn ghost" id="btnNotePage" title="打开整页笔记：左边原文引用，右边写笔记">记笔记</button>
+              </div>
               <div class="nlist" id="nlist"></div>
             </div>
             <div class="narea">
@@ -827,6 +859,34 @@ footer{max-width:1080px;margin:26px auto 0;padding:0 16px;display:flex;align-ite
             <textarea id="trSrc" placeholder="要翻译的文字（留空则翻这一页）" style="width:100%;min-height:86px;margin-top:10px;padding:9px 11px;border:1px solid var(--line);border-radius:9px;background:var(--card2);color:var(--ink);font:inherit;font-size:12.5px;resize:vertical"></textarea>
             <div class="hint" style="border:0;margin:6px 0 0">也可以只译页面上的某一段：填在这里再点上面的按钮。</div>
           </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 记笔记（整页）：2026-11-22 用户定——侧栏只留笔记列表，点「记笔记」开整页，
+       左边原文引用、右边输入框，保存后回侧栏列表。 -->
+  <div class="page" id="page-note">
+    <div class="card note-page">
+      <div class="note-h">
+        <div>
+          <div class="t">记笔记</div>
+          <div class="p" id="npMeta">—</div>
+        </div>
+        <div class="acts" style="margin:0">
+          <button class="btn ghost" id="npBack">返回列表</button>
+          <button class="btn" id="npSave">保存到本页</button>
+        </div>
+      </div>
+      <div class="note-body">
+        <div class="note-quote">
+          <h5>原文引用 <span id="npPage">p.1</span></h5>
+          <blockquote id="npQuote">—</blockquote>
+          <p class="fine">左边只作引用，不改动原件；右边写的内容保存到本机笔记。</p>
+        </div>
+        <div class="note-write">
+          <h5>我的笔记</h5>
+          <textarea id="npText" placeholder="写下这一页的要点…（保存在本机，不写回 PDF）"></textarea>
         </div>
       </div>
     </div>
@@ -2403,15 +2463,9 @@ function openTextMenu(x, y, sel){
   const bNote = document.createElement('button');
   bNote.textContent = '记笔记（引用这段原文）';
   bNote.onclick = () => {
-    const ta = $('#nDraft');
-    if(ta){
-      ta.value = '【原文 p.' + RD.page + '】' + quote + '\n' + (ta.value || '');
-      if(typeof showSide === 'function') showSide();
-      if(typeof sideTab === 'function') sideTab('notes');
-      ta.focus();
-      ta.scrollIntoView({block:'center'});
-    }
     closeNoteMenu(true);
+    // 2026-11-22：有选中文字就进整页笔记，左边带着这段原文；#nDraft 仍是快速记一笔。
+    openNotePage(quote);
   };
   noteMenu.appendChild(bTr);
   noteMenu.appendChild(bNote);
@@ -2610,6 +2664,45 @@ async function loadNotes(){
   }catch(e){ RD.notes = []; }
   renderNotes();
 }
+/* 2026-11-22 用户：记笔记改成独立整页（左原文引用、右输入框），保存后回侧栏列表。
+   #nDraft 保留为「快速记一笔」，不删。 */
+function currentPageQuote(){
+  const box = document.getElementById('pdftext');
+  if(!box) return '';
+  return Array.from(box.querySelectorAll('span')).map(s=>s.textContent).join('\n')
+    .replace(/[ \t]+\n/g,'\n').trim().slice(0, 4000);
+}
+function openNotePage(quote){
+  if(!RD.doc){ toast('先打开一份讲义'); return; }
+  const q = String(quote || currentPageQuote() || '').trim();
+  if($('#npMeta')) $('#npMeta').textContent = RD.name + ' · 第 ' + RD.page + ' 页 · ' + RD.code;
+  if($('#npPage')) $('#npPage').textContent = 'p.' + RD.page;
+  if($('#npQuote')) $('#npQuote').textContent = q || '（这一页没有选中文字，也没有可读的文字层）';
+  const ta = $('#npText'); if(ta) ta.value = '';
+  showPage('note');
+  sideTab('notes');
+  setTimeout(() => { const t = $('#npText'); if(t) t.focus(); }, 80);
+}
+async function saveNotePage(){
+  const ta = $('#npText');
+  const v = (ta ? ta.value : '').trim();
+  if(!RD.doc){ toast('先打开一份讲义'); return; }
+  if(!v){ toast('先写点内容'); if(ta) ta.focus(); return; }
+  const j = await postJson('/api/notes', {code:RD.code, doc:RD.rel, action:'add', note:{p:RD.page, text:v}});
+  if(!j.ok){ toast('没记上：' + (j.error || '未知原因')); return; }
+  RD.notes = j.notes || [];
+  renderNotes();
+  if(ta) ta.value = '';
+  showPage('read');
+  sideTab('notes');
+  toast('已记在 p.' + RD.page);
+}
+if($('#btnNotePage')) $('#btnNotePage').onclick = () => openNotePage('');
+if($('#npBack')) $('#npBack').onclick = () => { showPage('read'); sideTab('notes'); };
+if($('#npSave')) $('#npSave').onclick = saveNotePage;
+if($('#npText')) $('#npText').addEventListener('keydown', e => {
+  if(e.key === 'Enter' && (e.ctrlKey || e.metaKey)){ e.preventDefault(); saveNotePage(); }
+});
 function renderNotes(){
   $('#nCount').textContent = RD.notes.length;
   const box = $('#nlist');
