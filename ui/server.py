@@ -524,6 +524,16 @@ def load_cfg():
                 out["model"] = c.get("model", out["model"])
         except Exception:  # noqa: BLE001
             pass
+    # 2026-11-21 用户：「保存目录预设是软件的那个文件夹」——默认值 `out` 就是**软件目录下的 out**，
+    #   但界面上只看到两个字「out」，看不出它落在哪儿（截图里显示成 F:/test 那种更是莫名其妙）。
+    #   这里把解析出来的绝对路径一起给界面，「当前指向」那一行就能直接写成
+    #   `out（相对软件目录）→ F:\…\dist\out`，用户一眼知道预设就是软件自己的文件夹。
+    try:
+        _abs = out["save_dir"]
+        out["save_dir_abs"] = _abs if os.path.isabs(_abs) else os.path.abspath(
+            os.path.join(paths.DATA_ROOT, _abs))
+    except Exception:  # noqa: BLE001
+        out["save_dir_abs"] = out["save_dir"]
     return out
 
 

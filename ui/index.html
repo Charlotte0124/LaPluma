@@ -2563,11 +2563,12 @@ function dirAbs(v){
 }
 /* 界面上只给「人能看懂且不泄露本机路径」的写法：相对路径就写相对（用户 2026-11-17：
    「默认不要用真实地址」）。要看真实位置时点「选择文件夹」，对话框会从软件目录打开。 */
-function dirText(v){
+function dirText(v, abs){
   v = (v||'').trim();
   if(!v) return '（未设置）';
   if(isAbsPath(v)) return v;
-  return v.replace(/\//g, '\\') + '（相对软件目录）';
+  const tail = abs ? (' → ' + String(abs).replace(/\//g, '\\')) : '';
+  return v.replace(/\//g, '\\') + '（相对软件目录）' + tail;
 }
 async function pickDirInto(inpSel, btnSel, fineSel){
   const inp = $(inpSel), btn = $(btnSel), fine = fineSel ? $(fineSel) : null;
@@ -2626,7 +2627,7 @@ function wizard(step){
       <p class="note-s">生成的讲义会复制到此目录。相对路径以软件目录为根，也可直接填绝对路径。</p>
       <div class="dirline"><input type="text" id="wDir" value="${esc(B.save_dir||'')}">
         <button class="pickbtn" id="wPick">📁 选择文件夹…</button></div>
-      <p class="pickfine" id="wFine">当前指向：<code>${esc(dirText(B.save_dir))}</code></p>`;
+      <p class="pickfine" id="wFine">当前指向：<code>${esc(dirText(B.save_dir, B.save_dir_abs))}</code></p>`;
   }else{
     body = `<h4>可以开始了</h4>
       <div class="kv"><span>模型</span><b>${esc(W.model?mname(W.model):mname(MODEL))}</b></div>
@@ -2672,7 +2673,7 @@ $('#btnSet').onclick = () => {
     <div class="lbl">保存目录</div>
     <div class="dirline"><input type="text" id="sDir" value="${esc(B.save_dir||'')}">
       <button class="pickbtn" id="sPick">📁 选择文件夹…</button></div>
-    <p class="pickfine" id="sFine">当前指向：<code>${esc(dirText(B.save_dir))}</code></p>
+    <p class="pickfine" id="sFine">当前指向：<code>${esc(dirText(B.save_dir, B.save_dir_abs))}</code></p>
     <div class="kv"><span>账户余额</span><b id="sBal">读取中…</b></div>
     <div class="kv"><span>累计消耗（估）</span><b id="sCost">—</b></div>
     <div class="kv"><span>版本</span><b id="sVer">读取中…</b></div>
