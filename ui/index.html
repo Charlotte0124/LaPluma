@@ -2382,12 +2382,8 @@ document.addEventListener('contextmenu', e => {
   e.preventDefault();
   openTextMenu(e.clientX, e.clientY, sel);
 });
-document.addEventListener('mouseup', e => {
-  if(e.button !== 0 || !e.target.closest('#pdftext')) return;
-  const sel = String(window.getSelection ? window.getSelection().toString() : '').trim();
-  if(!sel) return;
-  setTimeout(() => openTextMenu(e.clientX, e.clientY, sel), 10);
-});
+/* 2026-11-22 用户：「左键选完就直接弹菜单了，少了一个步骤，应该右键才出」——
+   选完松手不弹，只有右键才弹。 */
 /* 全屏（2026-11-17 用户：「全屏模式不见了」）：只把阅读卡全屏，顶栏与笔记栏一起进去；
    按下后重新排版一次（可视宽度变了，按旧的 fit 算会留白）。键盘 F 同效，Esc 由浏览器退出。 */
 function readCard(){ return document.querySelector('#page-read .read-card'); }
