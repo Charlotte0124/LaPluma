@@ -33,7 +33,10 @@ def wait_up(secs=25.0) -> bool:
 
 def main() -> int:
     py = subprocess.Popen([sys.executable, "-X", "utf8", os.path.join(ROOT, "ui", "server.py"),
-                           "--no-window", "--port", str(PORT)],
+                           # 2026-11-21 用户：「可以不要一直弹出浏览器吗」。--no-window 只是不起
+                           #   自绘窗口，服务端仍会 webbrowser.open 叫系统浏览器 —— 每跑一次这条判据
+                           #   就在用户浏览器里多一个标签页。必须同时给 --no-browser。
+                           "--no-window", "--no-browser", "--port", str(PORT)],
                           cwd=ROOT, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     rows = []
     try:
