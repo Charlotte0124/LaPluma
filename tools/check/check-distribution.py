@@ -26,12 +26,23 @@ def main() -> int:
         if (ROOT / rel).exists():
             fails.append("红 B: 打包脚本又回来了 " + rel)
     launcher = ROOT / "启动羽毛笔.cmd"
+    boot = ROOT / "一键启动.ps1"
     if not launcher.exists():
         fails.append("红 C: 缺启动入口 启动羽毛笔.cmd")
     else:
-        text = launcher.read_bytes().decode("gbk", "replace")
-        if "pythonw" not in text.lower() or "ui\\server.py" not in text:
-            fails.append("红 C: 启动入口没指向 pythonw + ui\\server.py")
+        raw = launcher.read_bytes()
+        try:
+            text = raw.decode("utf-8")
+        except UnicodeDecodeError:
+            text = raw.decode("gbk", "replace")
+        if "一键启动.ps1" not in text:
+            fails.append("红 C: 启动入口没调用 一键启动.ps1")
+    if not boot.exists():
+        fails.append("红 C: 缺 一键启动.ps1（环境检查 + pymupdf 弹窗）")
+    else:
+        bt = boot.read_bytes().decode("utf-8-sig", "replace")
+        if "pythonw" not in bt.lower() or "pymupdf" not in bt:
+            fails.append("红 C: 一键启动.ps1 缺 pythonw 启动或 pymupdf 检查")
     if fails:
         for f in fails:
             print(f)

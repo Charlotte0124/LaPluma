@@ -79,6 +79,7 @@ HOST, PORT = "127.0.0.1", 8765
 #   index.html 必须仍走 no-store（改完界面要能立刻看到新版）。
 _STATIC_ETAG = {}
 VERSION = "1.9.15"
+# v1.9.15 起分发只走文件夹（仓库目录 + 启动羽毛笔.cmd）；单文件 exe 已退役，见 AGENTS.md 六。
 APP_NAME = "羽毛笔 La Pluma"
 
 # 2026-11-19：生成进度（一个进程同时只跑一讲；前端轮询 /api/progress）
