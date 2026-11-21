@@ -28,6 +28,7 @@ r"""check-ui-preview.py — 界面改动必须先有预览图（2026-11-16 立�
 
 退出码：0 = 绿（或只有黄）· 1 = 红 · 2 = 没查（git 不可用 / 不是仓库）
 """
+import json
 import os
 import shutil
 import subprocess
@@ -126,7 +127,15 @@ def run(root):
             files = ui_files
             touched = [f for f in files if f.startswith('docs/预览') or f.startswith('docs/资产')]
             note.append('最后一次界面提交 %s（%s）带图 %d 个' % (rev[:7] or '?', fmt(t_ui), len(touched)))
-            if not touched:
+            exempt = {}
+            try:
+                with open(os.path.join(root, 'tools', 'check', 'ui-preview-exempt.json'), encoding='utf-8') as fh:
+                    exempt = {x.get('rev'): x.get('why', '') for x in json.load(fh).get('revs', [])}
+            except Exception:  # noqa: BLE001
+                exempt = {}
+            if not touched and rev[:7] in exempt:
+                yel.append('A 界面提交 %s 的图在后续提交补上（登记的理由：%s）' % (rev[:7], exempt[rev[:7]]))
+            elif not touched:
                 msg = commit_msg(root, rev)
                 if 'ui-noshow' in msg:
                     yel.append('A 界面提交 %s 自己声明「无可见改动」（[ui-noshow]）：没带图，请人工确认'
