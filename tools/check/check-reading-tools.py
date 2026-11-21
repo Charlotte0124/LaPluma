@@ -132,19 +132,24 @@ def check(root):
     tr = block(idx, "function transNote(text, page)", "function renderTransResult")
     rt = block(idx, "function renderTransResult", "function renderTransHistory")
     add(4, "译文记成笔记", (
-        "【译文 p." in tr and "#nDraft" in tr and "sideTab('notes')" in tr
+        "openNotePage('【译文 p." in tr
+        and 'id="nDraft"' not in idx          # 侧栏那个写入框已经删了（2026-11-22 用户）
         and "id=\"trNote\"" in rt and "transNote(" in rt
         and idx.count("openTextMenu(") == 2
         and "document.addEventListener('contextmenu'" in idx
-    ), "译文「记成笔记」→【译文 p.N】进 #nDraft 并切笔记页签；菜单只在 contextmenu 里打开")
+    ), "译文「记成笔记」→ 打开记笔记框，引用句是【译文 p.N】；菜单只在 contextmenu 里打开")
 
     np = block(idx, "function openNotePage(quote)", "function renderNotes")
-    add(5, "整页笔记", (
+    qcss = block(idx, ".note-quote blockquote", ".note-write{")
+    add(5, "记笔记单框", (
         "id=\"page-note\"" in idx and "id=\"npText\"" in idx and "id=\"npQuote\"" in idx
         and "id=\"btnNotePage\"" in idx and "function openNotePage(quote)" in idx
+        and 'id="nDraft"' not in idx and 'id="nAdd"' not in idx      # 写入框只在那个框里
+        and ".note-body{display:block}" in idx
+        and "NP_QUOTE" in np and "q:NP_QUOTE" in idx
+        and "color:var(--faint)" in qcss and "user-select:text" in qcss
         and "action:'add'" in np and "showPage('read')" in np
-        and "id=\"nDraft\"" in idx
-    ), "整页笔记左原文右输入，保存走 /api/notes；#nDraft 仍保留")
+    ), "记笔记 = 一个框（灰底只读引用 + 1 个输入）；侧栏只剩列表；引用跟着笔记存（q）")
 
     hist = block(idx, "function renderTransHistory(items)", "async function transPage")
     ok_hist, detail = behavior_history(root)

@@ -113,8 +113,8 @@
    - 不许回到 `ReleaseCapture()` + `SendMessageW(0x00A1, HTCAPTION)`：**2026-11-22 真窗口实测无效**——本窗口是 pywebview 的无边框 WinForms 窗口，WinForms 的 WndProc 不把这消息交给 DefWindowProc，系统拖动循环根本不启动，`SendMessage` 立刻返回 0、窗口纹丝不动（`check-window-real.py --drag` 量到位移 0px）。
 2. **退出全屏必须还尺寸**：`restore_bounds()` 先 `SW_RESTORE` 掉最大化，再用 `SWP_SHOWWINDOW|SWP_FRAMECHANGED`（`0x0040|0x0020`）连设两次；页面在 `exitFullscreen` 后立刻调一次、260ms 再补一次。
 3. **原件能搬走**：抽屉原件行必须有「移动」，弹窗选目标课程后调 `/api/move-originals`（原件 + 占位讲次一起搬）；成功后 `await boot()` 重取课程与讲次，再重画列表。
-4. **译文能记成笔记**：译文结果必须有「记成笔记」，把 `【译文 p.N】…` 追加到 `#nDraft` 并切到「笔记」页签。选中文字菜单**只能**由 `contextmenu` 打开，不许在 mouseup / pointerup 里再弹。
-5. **笔记分两层**：侧栏只留笔记列表 + `#nDraft` 快速记一笔；「记笔记」打开整页视图（左原文引用 / 右输入框），保存走 `/api/notes` 后回列表。
+4. **译文能记成笔记**：译文结果必须有「记成笔记」，点了打开记笔记框、引用句是 `【译文 p.N】…`（2026-11-22 用户改：原来往 `#nDraft` 追加，现在不这么干）。选中文字菜单**只能**由 `contextmenu` 打开，不许在 mouseup / pointerup 里再弹。
+5. **记笔记就是「一个框」**（2026-11-22 用户：「像图示那样 只有一个框在 然后有引用的功能 引用的字是灰色的 不可以被删改」）：框的上面是灰底只读引用（`#npQuote`，不可编辑），下面一个输入框（`#npText`）；保存走 `/api/notes`，引用随笔记一起存（`q` 字段），侧栏列表里带出来。「笔记」页签**只留列表**（点 `p.N` 跳页、可删除），没有写入框（`#nDraft` / `#nAdd` 已删）。
 6. **翻译历史最多 5 条**：存 `%USERPROFILE%\.pluma\translate-history.json`（`PLUMA_HOME` 可改），字段为时间 / 原文前 120 字 / 译文前 400 字；翻译页签顶部列最近 5 条，点一条回填 `#trSrc` 与译文。
 
 **怎么验证它被执行**：`python tools\check\check-reading-tools.py` 必须 **6/6**，且 `--selftest` 6/6（临时副本逐条造坏，证明判据会红）；提交钩子 `.githooks\pre-commit` 自动跑。
@@ -128,7 +128,7 @@
 3. **启动器单独一个干净文件夹**：`F:\DSH\apps\羽毛笔\` 里只放一个纯 ASCII 的 `启动羽毛笔.cmd`（`%~dp0` + 通配符找 `..\LaPluma\*.ps1`，带 `-Windowed`）；桌面快捷方式指向它。目录里多一个文件、或启动器里出现一个非 ASCII 字节，都算红——936 代码页会把中文读成乱码，双击就没反应（§六.3 的同一个坑）。
 4. **自测一律跑临时数据根**：要造「原件 + 成品」这类数据，用 `tools\check\_win_launch.py` + `PLUMA_TEST_DATA=<临时目录>`（在 import 之前改 `paths.DATA_ROOT`），跑完删掉；不许往用户自己的课程目录里造样本。
 
-**怎么验证它被执行**：`python tools\check\check-window-layer.py` 必须 **3/3**，`--selftest` 6/6（逐条造坏都要变红）；提交钩子自动跑。只有真窗口量得出的（窗口矩形、选中框对位、拖动），跑 `python tools\check\check-window-real.py`（会弹一下软件窗口，约 40 秒；加 `--drag` 再做一次真实鼠标拖动）：W1 真窗口 / W2 全屏进出还原（±2px）/ W3 文字层与 pymupdf 词框对位（±4px）/ W4 成稿隐藏与重新生成 / W5 只有右键弹菜单 / W6 拖动。
+**怎么验证它被执行**：`python tools\check\check-window-layer.py` 必须 **3/3**，`--selftest` 6/6（逐条造坏都要变红）；提交钩子自动跑。只有真窗口量得出的（窗口矩形、选中框对位、拖动），跑 `python tools\check\check-window-real.py`（会弹一下软件窗口，约 40 秒；加 `--drag` 再做一次真实鼠标拖动）：W1 真窗口 / W2 全屏进出还原（±2px）/ W3 文字层与 pymupdf 词框对位（±4px）/ W4 成稿隐藏与重新生成 / W5 只有右键弹菜单 / W7 relayout 幂等 + 底色不透明 / W8 Esc 能退出全屏 / W9 记笔记单框（灰底只读引用 + 1 个输入、侧栏无写入框、保存带引用）/ W6 拖动。
 
 ## 十三、判据清单（谁是自动跑、谁要手动跑）
 
@@ -142,6 +142,7 @@
 | `check-draft-json.py` | 提交钩子自动 |
 | `check-reading-tools.py` | 提交钩子自动（阅读页六条：拖动 / 全屏 / 移动 / 翻译笔记 / 整页笔记 / 历史） |
 | `check-window-layer.py` | 提交钩子自动（文字层 / 成稿隐藏 / 干净启动器） |
+| `check-inline-js.py` | 提交钩子自动（ui/index.html 里每段内联脚本过 node --check；引号/反引号写错立刻红） |
 | `check-rules-wired.py` | 提交钩子自动（本文件与 tools/check 对账） |
 | `check-error-guard.py` | 手动：`python tools\check\check-error-guard.py`（打 14 条坏请求验错误兜底） |
 | `check-fresh-install.py` | 手动：全新配置跑一遍首启流程 |

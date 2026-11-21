@@ -1617,6 +1617,9 @@ class Handler(BaseHTTPRequestHandler):
                     if not text:
                         return self._json({"ok": False, "error": "空笔记"}, 400)
                     cur.append({"p": int(note.get("p") or 1), "text": text[:2000],
+                                # 2026-11-22 用户：记笔记的框里要带一段「引用的原文」（灰、不可改）。
+                                #   引用跟着笔记一起存，列表里也能看出这条是拿哪段话起的。
+                                "q": str(note.get("q") or "")[:600],
                                 "at": time.strftime("%Y-%m-%d %H:%M"),
                                 "hhmm": time.strftime("%H:%M")})
                 elif act == "del":
@@ -2761,6 +2764,9 @@ class _WinApi:
     def __init__(self):
         self.maxed = False
         self._bounds = None
+        # relayout 会「把窗口加 1px 再改回来」逼 WebView2 重算表面；两个线程同时做会互相
+        # 踩出 1~2px 的漂移（真窗口量测见过 842 → 844），所以串起来。
+        self._relock = threading.Lock()
 
     def keep_bounds(self):
         """记下进入全屏前的窗口矩形。
@@ -2810,6 +2816,8 @@ class _WinApi:
                 time.sleep(0.08)
             r = wt.RECT()
             u.GetWindowRect(wt.HWND(h), ctypes.byref(r))
+            # 尺寸变完让 WebView2 的子窗口跟上（否则窗口下半截是黑的，见 relayout 的注释）
+            self._relayout_later(0.16)
             return {"ok": True, "rect": list(b),
                     "after": [int(r.left), int(r.top), int(r.right - r.left), int(r.bottom - r.top)]}
         except Exception as e:  # noqa: BLE001
@@ -2829,19 +2837,108 @@ class _WinApi:
             w.minimize()
         return {"ok": bool(w)}
 
-    def toggle_max(self):
-        w = self._win()
-        if not w:
-            return {"ok": False}
+    def relayout(self):
+        """窗口尺寸变过之后，逼 WebView2 重算一次绘制表面。
+
+        2026-11-22 用户：「全屏打开记笔记 → 回课程 → 打开课程文件夹 → 再在软件里读，
+        变成一大片黑」。**诚实地说：这个现象在本机没能复现**（同样的路径跑了三遍，画面都正常），
+        所以这里是按已知的 WebView2 失效模式做的兜底，不是「已定位的修复」：
+          ① 窗口模式下 WebView2 的宿主是个子窗口，父窗口变大它不会自己跟上——有子窗口就按
+             父客户区重设一次（EnumChildWindows；这台机器上只有一个 0×0 的 Chrome_WidgetWin_0，
+             说明是**无窗口/合成模式**，这一步走了个空）。
+          ② 合成模式下没有可改的子窗口，只能「把窗口高度 +1px 再改回来」逼它收一次 WM_SIZE，
+             这是 WebView2 合成表面没跟上时的常规解法。
+          ③ RedrawWindow 强制重画一遍。
+        另外界面底色铺成不透明（html/body 背景），就算表面还是没跟上，露出来的也是界面底色
+        而不是纯黑。能钉住的部分见 tools/check/check-window-real.py 的 W7/W8。
+        """
         try:
-            if self.maxed:
-                w.restore()
+            import ctypes
+            import ctypes.wintypes as wt
+            u = ctypes.windll.user32
+            hwnd = _find_hwnd()
+            if not hwnd:
+                return {"ok": False, "error": "找不到窗口句柄"}
+            if not self._relock.acquire(blocking=False):
+                return {"ok": True, "busy": True}      # 另一个 relayout 正在做，跳过就好
+            try:
+                return self._relayout_locked(hwnd, ctypes, wt, u)
+            finally:
+                self._relock.release()
+        except Exception as e:  # noqa: BLE001
+            _log_error("relayout", e)
+            return {"ok": False, "error": str(e)}
+
+    def _relayout_locked(self, hwnd, ctypes, wt, u):
+        try:
+            u.SetWindowPos.argtypes = [wt.HWND, wt.HWND, ctypes.c_int, ctypes.c_int,
+                                       ctypes.c_int, ctypes.c_int, ctypes.c_uint]
+            flags = 0x0002 | 0x0004 | 0x0010 | 0x0020   # NOMOVE|NOZORDER|NOACTIVATE|FRAMECHANGED
+            n = []
+
+            def cb(child, _l):
+                parent = u.GetParent(child) or hwnd
+                pr = wt.RECT()
+                u.GetClientRect(wt.HWND(parent), ctypes.byref(pr))
+                if pr.right > 0 and pr.bottom > 0:
+                    u.SetWindowPos(wt.HWND(child), None, 0, 0, pr.right, pr.bottom, flags)
+                    n.append((pr.right, pr.bottom))
+                return True
+
+            CB = ctypes.WINFUNCTYPE(ctypes.c_bool, wt.HWND, wt.LPARAM)
+            u.EnumChildWindows(wt.HWND(hwnd), CB(cb), 0)
+            # 实测这台机器上 WebView2 是**无窗口（合成）模式**：EnumChildWindows 只有一个
+            # 0×0 的 Chrome_WidgetWin_0，没有可重设尺寸的子窗口。合成表面没跟上时，
+            # 只能靠「把窗口高度改 1px 再改回来」逼它收一次 WM_SIZE 重算表面。
+            r = wt.RECT()
+            u.GetWindowRect(wt.HWND(hwnd), ctypes.byref(r))
+            x, y = int(r.left), int(r.top)
+            w0, h0 = int(r.right - r.left), int(r.bottom - r.top)
+            away = 0x0002 | 0x0004 | 0x0010          # NOMOVE|NOZORDER|NOACTIVATE
+            u.SetWindowPos(wt.HWND(hwnd), None, x, y, w0, h0 + 1, away)
+            time.sleep(0.05)
+            u.SetWindowPos(wt.HWND(hwnd), None, x, y, w0, h0, away)
+            # 收尾再设一次原矩形并等它落地：不留 1px 的漂移（真窗口量测要求 ±2px 内）
+            time.sleep(0.06)
+            u.SetWindowPos(wt.HWND(hwnd), None, x, y, w0, h0, away)
+            # RDW_INVALIDATE|RDW_ALLCHILDREN|RDW_UPDATENOW|RDW_FRAME
+            u.RedrawWindow(wt.HWND(hwnd), None, None, 0x0001 | 0x0080 | 0x0100 | 0x0400)
+            return {"ok": True, "children": len(n)}
+        except Exception as e:  # noqa: BLE001
+            _log_error("relayout", e)
+            return {"ok": False, "error": str(e)}
+
+    def _relayout_later(self, delay: float = 0.12) -> None:
+        """窗口尺寸刚变完别立刻抢着改子窗口（系统还在跑那套动画）。"""
+        def run():
+            time.sleep(delay)
+            self.relayout()
+        threading.Thread(target=run, daemon=True).start()
+
+    def toggle_max(self):
+        """最大化 / 还原：状态以窗口真实状态（IsZoomed）为准，不靠自己的布尔变量。
+
+        2026-11-22 实测：窗口先被系统最大化（双击标题条 / Aero Snap）之后，这里记的
+        maxed 还是 False，于是点一次「最大化」只会再最大化一次，永远还原不了。
+        """
+        try:
+            import ctypes
+            import ctypes.wintypes as wt
+            u = ctypes.windll.user32
+            hwnd = _find_hwnd()
+            if not hwnd:
+                return {"ok": False}
+            h = wt.HWND(hwnd)
+            if u.IsZoomed(h):
+                u.ShowWindow(h, 9)      # SW_RESTORE
+                maxed = False
             else:
-                w.maximize()
-            self.maxed = not self.maxed
+                u.ShowWindow(h, 3)      # SW_MAXIMIZE
+                maxed = True
+            self._relayout_later()
+            return {"ok": True, "maxed": maxed}
         except Exception as e:  # noqa: BLE001
             return {"ok": False, "error": str(e)}
-        return {"ok": True, "maxed": self.maxed}
 
     def close(self):
         w = self._win()
@@ -2858,7 +2955,7 @@ class _WinApi:
           ② 改成 ReleaseCapture + SendMessage(WM_NCLBUTTONDOWN, HTCAPTION) 交给系统：
              实测**无效**（本窗口是 pywebview 的无边框 WinForms 窗口，WinForms 的 WndProc
              不把 WM_NCLBUTTONDOWN 交给 DefWindowProc，所以系统拖动循环根本不启动；
-             SendMessage 立刻返回 0，窗口纹丝不动，见 tools\check\check-window-real.py --drag）。
+             SendMessage 立刻返回 0，窗口纹丝不动，见 tools/check/check-window-real.py --drag）。
           现在：在本线程里跑一个拖动循环——一直读系统光标位置（GetCursorPos，不依赖浏览器
           事件，所以指针甩出窗口也不丢），窗口左上角 = 按下时的左上角 + 光标位移，
           鼠标键松开（GetAsyncKeyState）就退出。这是自己实现，但用的是系统光标，跟手。
@@ -2897,6 +2994,7 @@ class _WinApi:
                 if dx or dy:
                     u.SetWindowPos(h, None, x0 + dx, y0 + dy, 0, 0, flags)
                     moved += 1
+            self._relayout_later()
             return {"ok": True, "moved": moved}
         except Exception as e:  # noqa: BLE001
             _log_error("drag_window", e)
@@ -2935,6 +3033,7 @@ class _WinApi:
             w = max(640, int(w)); h = max(480, int(h))
             # SWP_NOZORDER(0x4) | SWP_NOACTIVATE(0x10)
             u.SetWindowPos(hwnd, 0, int(x), int(y), w, h, 0x0014)
+            self._relayout_later()
             return {"ok": True, "x": int(x), "y": int(y), "w": w, "h": h}
         except Exception as e:  # noqa: BLE001
             return {"ok": False, "error": str(e)}

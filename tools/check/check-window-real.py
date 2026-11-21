@@ -14,6 +14,9 @@ r"""真窗口自测：在羽毛笔**自己的 WebView2 窗口**里量窗口矩�
   W3 文字层是 pdf.js 官方 TextLayer（dataset.tl=official），且选中词的框与 pymupdf 词框对齐（±6px）
   W4 已成稿的讲次不在生成列表；抽屉成品行有「重新生成」，点了能放回并勾上
   W5 选完松手不弹菜单；右键才弹，且两项都在（翻译这段 / 记笔记）
+  W7 黑框兜底：relayout() 幂等（不改窗口、不改画面），html 背景不透明（不会露纯黑）
+  W8 Esc 退出全屏：全屏里按 Esc，全屏元素清掉、标题条回来（WebView2 自己不收这个键）
+  W9 记笔记单框：点「记笔记」进一个框（灰底只读引用 + 1 个输入框），侧栏没有写入框，保存后列表带引用
 
 注意：主脚本是 <script type="module">，函数不在 window 上——所以这里只点界面元素，
       不调页面函数；页面里只读 DOM、设选区。
@@ -201,6 +204,76 @@ def clear_overlay(page):
         return not page.evaluate("!!document.querySelector('#veil.on')")
     except Exception:  # noqa: BLE001
         return False
+
+
+def snap(hwnd):
+    """PrintWindow 抓真窗口（跟给人看的那套一样，不依赖浏览器截图）。"""
+    from PIL import Image
+    u = ctypes.windll.user32
+    r = rect_of(hwnd)
+    w, h = r[2], r[3]
+    hdc = u.GetWindowDC(wt.HWND(hwnd))
+    mdc = ctypes.windll.gdi32.CreateCompatibleDC(hdc)
+    bmp = ctypes.windll.gdi32.CreateCompatibleBitmap(hdc, w, h)
+    ctypes.windll.gdi32.SelectObject(mdc, bmp)
+    u.PrintWindow(wt.HWND(hwnd), mdc, 2)
+
+    class BMI(ctypes.Structure):
+        _fields_ = [("biSize", ctypes.c_uint32), ("biWidth", ctypes.c_int32),
+                    ("biHeight", ctypes.c_int32), ("biPlanes", ctypes.c_uint16),
+                    ("biBitCount", ctypes.c_uint16), ("biCompression", ctypes.c_uint32),
+                    ("biSizeImage", ctypes.c_uint32), ("biXPelsPerMeter", ctypes.c_int32),
+                    ("biYPelsPerMeter", ctypes.c_int32), ("biClrUsed", ctypes.c_uint32),
+                    ("biClrImportant", ctypes.c_uint32)]
+
+    bi = BMI()
+    bi.biSize = ctypes.sizeof(BMI)
+    bi.biWidth = w
+    bi.biHeight = -h
+    bi.biPlanes = 1
+    bi.biBitCount = 32
+    buf = ctypes.create_string_buffer(w * h * 4)
+    ctypes.windll.gdi32.GetDIBits(mdc, bmp, 0, h, buf, ctypes.byref(bi), 0)
+    img = Image.frombuffer("RGBA", (w, h), buf, "raw", "BGRA", 0, 1).convert("RGB")
+    ctypes.windll.gdi32.DeleteObject(bmp)
+    ctypes.windll.gdi32.DeleteDC(mdc)
+    u.ReleaseDC(wt.HWND(hwnd), hdc)
+    return img
+
+
+def diff_ratio(a, b, top_skip=0.5):
+    """两张同尺寸图在下半部分有多少像素明显不同（0~1）。"""
+    if a.size != b.size:
+        return 1.0
+    w, h = a.size
+    y0 = int(h * top_skip)
+    pa, pb = a.load(), b.load()
+    n = bad = 0
+    for y in range(y0, h, 3):
+        for x in range(0, w, 3):
+            n += 1
+            r1, g1, b1 = pa[x, y]
+            r2, g2, b2 = pb[x, y]
+            if abs(r1 - r2) + abs(g1 - g2) + abs(b1 - b2) > 36:
+                bad += 1
+    return bad / float(n or 1)
+
+
+def main_child(hwnd):
+    """父窗口里面积最大的那个直接子窗口（WebView2 的宿主）。"""
+    u = ctypes.windll.user32
+    hits = []
+    CB = ctypes.WINFUNCTYPE(ctypes.c_bool, wt.HWND, wt.LPARAM)
+
+    def cb(ch, _l):
+        r = wt.RECT()
+        u.GetWindowRect(wt.HWND(ch), ctypes.byref(r))
+        hits.append((int(ch), (r.right - r.left) * (r.bottom - r.top)))
+        return True
+
+    u.EnumChildWindows(wt.HWND(hwnd), CB(cb), 0)
+    hits.sort(key=lambda x: -x[1])
+    return hits[0][0] if hits else 0
 
 
 def open_drawer(page, code):
@@ -461,25 +534,55 @@ def main():
                         "document.querySelectorAll('#pdftext span').length > 3", timeout=30000)
                     box = page.evaluate("""() => {
                         const sp = [...document.querySelectorAll('#pdftext span')]
+                          .filter(s => s.getBoundingClientRect().width > 80)
                           .sort((a,b)=>b.textContent.length-a.textContent.length)[0];
+                        if(!sp) return null;
+                        sp.scrollIntoView({block:'center'});
                         const r = sp.getBoundingClientRect();
                         return {x:r.left, y:r.top, w:r.width, h:r.height, t:sp.textContent.slice(0,8)};
                     }""")
-                    x0 = box["x"] + 3
-                    y0 = box["y"] + box["h"] / 2
-                    page.mouse.move(x0, y0)
-                    page.mouse.down()
-                    page.mouse.move(x0 + min(140, box["w"] - 6), y0, steps=10)
-                    page.mouse.up()
-                    time.sleep(0.4)
-                    sel_text = (page.evaluate("window.getSelection().toString()") or "").strip()
+                    # 判的是「菜单只由右键打开」这条规矩，不判「鼠标拖选能不能选上」
+                    #   （拖选在 CDP 发真鼠标事件时偶发选不上，跟规矩无关；选区这里用 Range 造，
+                    #   右键仍然是真的右键）。
+                    sel_text = page.evaluate("""() => {
+                      const sp = [...document.querySelectorAll('#pdftext span')]
+                        .filter(s => s.getBoundingClientRect().width > 80)
+                        .sort((a,b)=>b.textContent.length-a.textContent.length)[0];
+                      if(!sp) return '';
+                      sp.scrollIntoView({block:'center'});
+                      const rg = document.createRange(); rg.selectNodeContents(sp);
+                      const s = window.getSelection(); s.removeAllRanges(); s.addRange(rg);
+                      const r = sp.getBoundingClientRect();
+                      window.__w5 = {x: r.left + 20, y: r.top + r.height / 2};
+                      return s.toString().trim();
+                    }""")
+                    x0 = page.evaluate("window.__w5 && window.__w5.x") if sel_text else None
+                    y0 = page.evaluate("window.__w5 && window.__w5.y") if sel_text else None
+                    menu = []
+                    if x0 is not None:
+                        clear_overlay(page)
+                        # 先真右键（选区还在）：菜单必须弹出来
+                        page.mouse.click(x0, y0, button="right")
+                        time.sleep(0.5)
+                        menu = page.evaluate(
+                            "[...document.querySelectorAll('.note-menu button')].map(b=>b.textContent)")
+                        # 关掉菜单，重新造一次选区，再「只松手」：不许弹
+                        page.evaluate("document.querySelectorAll('.note-menu').forEach(e=>e.remove())")
+                        page.evaluate("""() => {
+                          const sp = [...document.querySelectorAll('#pdftext span')]
+                            .filter(s => s.getBoundingClientRect().width > 80)
+                            .sort((a,b)=>b.textContent.length-a.textContent.length)[0];
+                          const rg = document.createRange(); rg.selectNodeContents(sp);
+                          const s = window.getSelection(); s.removeAllRanges(); s.addRange(rg);
+                        }""")
+                        page.dispatch_event("#pdftext", "mouseup",
+                                            {"clientX": x0, "clientY": y0, "button": 0, "bubbles": True})
+                        time.sleep(0.4)
                     after_up = page.evaluate("document.querySelectorAll('.note-menu').length")
-                    page.mouse.click(x0 + 30, y0, button="right")
-                    time.sleep(0.5)
-                    menu = page.evaluate(
-                        "[...document.querySelectorAll('.note-menu button')].map(b=>b.textContent)")
-                    if not sel_text:
-                        skip("W5 右键菜单", "拖选没选中字（%r），菜单没法判" % (box,))
+                    if x0 is None:
+                        skip("W5 右键菜单", "页面上没有足够宽的文字段，菜单没法判")
+                    elif not sel_text:
+                        skip("W5 右键菜单", "没造出选区，菜单没法判")
                     elif after_up:
                         bad("W5 右键菜单", "只松手就弹了 %d 个菜单" % after_up)
                     elif len(menu) >= 2 and any("翻译" in m for m in menu) and any("记" in m for m in menu):
@@ -488,6 +591,128 @@ def main():
                         bad("W5 右键菜单", "右键后菜单不对：%r" % (menu,))
                 except Exception as e:  # noqa: BLE001
                     bad("W5 右键菜单", "没验成：%r" % (e,))
+
+            # ---- W7 黑框兜底：relayout 不改变窗口、背景不透明 ----
+            # 说明（2026-11-22）：用户那块「下半截黑」在本机复现不出来——这台机器的 WebView2 是
+            #   无窗口（合成）模式，EnumChildWindows 只有一个 0×0 的 Chrome_WidgetWin_0，
+            #   没有可重设尺寸的子窗口（缩它画面一点不变）。所以 W7 只钉住两条能钉的事实：
+            #   ① relayout() 是幂等的（调用前后窗口矩形不变、画面不变），不会把界面整坏；
+            #   ② html/body 背景不透明——合成表面就算没跟上，露出来的也是界面底色而不是纯黑。
+            if opened:
+                try:
+                    page.click("a[data-page='read']")
+                    page.wait_for_function(
+                        "document.querySelectorAll('#pdftext span').length > 3", timeout=30000)
+                    time.sleep(0.8)
+                    img0 = snap(hwnd)
+                    r0 = rect_of(hwnd)
+                    res = page.evaluate("window.pywebview.api.relayout()")
+                    time.sleep(1.0)
+                    img1 = snap(hwnd)
+                    r1 = rect_of(hwnd)
+                    bg = page.evaluate(
+                        "getComputedStyle(document.documentElement).backgroundColor")
+                    drift = max(abs(r1[i] - r0[i]) for i in range(4))
+                    vis = diff_ratio(img0, img1)
+                    opaque = bool(bg) and bg not in ("transparent", "rgba(0, 0, 0, 0)")
+                    if not (res or {}).get("ok"):
+                        bad("W7 黑框兜底", "relayout() 返回 %r" % (res,))
+                    elif drift > 1 or vis > 0.02:
+                        bad("W7 黑框兜底", "relayout() 动了窗口/画面：矩形漂 %dpx、画面差 %.0f%%"
+                            % (drift, vis * 100))
+                    elif not opaque:
+                        bad("W7 黑框兜底", "html 背景是 %r：合成表面没跟上时会露出纯黑" % (bg,))
+                    else:
+                        ok("W7 黑框兜底", "relayout() 幂等（矩形漂 %dpx、画面差 %.1f%%），html 底色 %s"
+                           % (drift, vis * 100, bg))
+                except Exception as e:  # noqa: BLE001
+                    bad("W7 黑框兜底", "没验成：%r" % (e,))
+
+            # ---- W8 全屏后按 Esc 能退出 ----
+            if opened:
+                try:
+                    page.click("#btnFs")
+                    time.sleep(1.0)
+                    was = page.evaluate("!!document.fullscreenElement")
+                    page.keyboard.press("Escape")
+                    time.sleep(1.2)
+                    now_fs = page.evaluate("!!document.fullscreenElement")
+                    card_fs = page.evaluate(
+                        "!!document.querySelector('#page-read .read-card.fs')")
+                    tbar = page.evaluate(
+                        "!!(document.querySelector('#tbar')||{}).offsetParent")
+                    if not was:
+                        skip("W8 Esc 退出全屏", "全屏没进去（requestFullscreen 被拒），没敢判")
+                    elif now_fs or card_fs or not tbar:
+                        bad("W8 Esc 退出全屏", "按 Esc 后 fullscreenElement=%r 卡片fs=%r 标题条=%r"
+                            % (now_fs, card_fs, tbar))
+                    else:
+                        ok("W8 Esc 退出全屏", "Esc 之后全屏元素清掉、标题条回来")
+                except Exception as e:  # noqa: BLE001
+                    bad("W8 Esc 退出全屏", "没验成：%r" % (e,))
+
+            # ---- W9 记笔记：一个框（灰底只读引用 + 输入），侧栏只留列表 ----
+            if opened:
+                try:
+                    page.click("a[data-page='read']")
+                    page.wait_for_function(
+                        "document.querySelectorAll('#pdftext span').length > 3", timeout=30000)
+                    page.evaluate("""() => {
+                      const sp = [...document.querySelectorAll('#pdftext span')]
+                        .filter(s => s.getBoundingClientRect().width > 80)[0];
+                      sp.scrollIntoView({block:'center'});
+                      const rg = document.createRange(); rg.selectNodeContents(sp);
+                      const s = window.getSelection(); s.removeAllRanges(); s.addRange(rg);
+                      const r = sp.getBoundingClientRect();
+                      window.__w9 = {x: r.left + 20, y: r.top + r.height / 2};
+                    }""")
+                    pt = page.evaluate("window.__w9")
+                    page.mouse.click(pt["x"], pt["y"], button="right")
+                    time.sleep(0.5)
+                    page.click(".note-menu button:nth-child(2)")   # 记笔记（引用这段原文）
+                    time.sleep(0.8)
+                    info = page.evaluate("""() => {
+                      const np = document.querySelector('#page-note');
+                      const q = document.querySelector('#npQuote');
+                      const ta = document.querySelector('#npText');
+                      const side = document.querySelector('#sideNotes');
+                      const cs = q ? getComputedStyle(q) : null;
+                      return {onPage: !!document.querySelector('.page.on#page-note'),
+                              textareas: np ? np.querySelectorAll('textarea').length : -1,
+                              quoteLen: q ? q.textContent.trim().length : -1,
+                              quoteColor: cs ? cs.color : '',
+                              editable: q ? (q.isContentEditable || q.tagName === 'TEXTAREA' || q.tagName === 'INPUT') : true,
+                              hasDraft: !!document.querySelector('#nDraft'),
+                              hasAdd: !!document.querySelector('#nAdd'),
+                              sideHasTextarea: side ? side.querySelectorAll('textarea').length : -1};
+                    }""")
+                    page.fill("#npText", "W9 由自测写入的一条笔记")
+                    page.click("#npSave")
+                    time.sleep(1.2)
+                    after = page.evaluate("""() => ({
+                      back: !!document.querySelector('.page.on#page-read'),
+                      count: document.querySelector('#nCount').textContent,
+                      items: document.querySelectorAll('#nlist .nitem').length,
+                      quotes: document.querySelectorAll('#nlist .nq').length
+                    })""")
+                    if not info["onPage"]:
+                        bad("W9 记笔记单框", "点「记笔记」没进笔记页：%r" % (info,))
+                    elif info["textareas"] != 1:
+                        bad("W9 记笔记单框", "笔记页里有 %d 个输入框（应该只有 1 个）" % (info["textareas"],))
+                    elif info["quoteLen"] < 4:
+                        bad("W9 记笔记单框", "引用区是空的")
+                    elif info["editable"]:
+                        bad("W9 记笔记单框", "引用区可编辑（必须只读）")
+                    elif info["hasDraft"] or info["hasAdd"] or info["sideHasTextarea"] != 0:
+                        bad("W9 记笔记单框", "侧栏还留着写入框：nDraft=%r nAdd=%r 文本框=%d"
+                            % (info["hasDraft"], info["hasAdd"], info["sideHasTextarea"]))
+                    elif not after["back"] or after["items"] < 1 or after["quotes"] < 1:
+                        bad("W9 记笔记单框", "保存后没回到阅读页 / 列表没出现带引用的笔记：%r" % (after,))
+                    else:
+                        ok("W9 记笔记单框", "引用 %d 字、颜色 %s、只读；侧栏无写入框；保存后列表 %s 条（带引用 %s 条）"
+                           % (info["quoteLen"], info["quoteColor"], after["count"], after["quotes"]))
+                except Exception as e:  # noqa: BLE001
+                    bad("W9 记笔记单框", "没验成：%r" % (e,))
 
             # ---- W6 真拖动（可选，会动鼠标）----
             if args.drag:
