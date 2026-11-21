@@ -103,7 +103,20 @@
 1. 全屏前必须 `keep_bounds()` 记下矩形，退出时 `restore_bounds()` 设回去——用户实测「退出全屏后占满屏幕、缩不回去」。
 2. 窗口层（无边框拖动 / 缩放 / 全屏）改动只能用软件窗口验（PrintWindow），不许用浏览器页代替。
 
-## 十一、判据清单（谁是自动跑、谁要手动跑）
+## 十一、阅读页的移动 / 翻译 / 笔记（2026-11-22 用户定）
+
+**为什么有这条**：用户按六条实测提了「标题条拖不动 / 全屏退出缩不回去 / 原件放错课程搬不走 / 右键翻译后没法记账 / 笔记只能挤在侧栏 / 译文翻完就丢」。这些都在 WebView2 的窗口层与阅读侧栏里，光看代码「好像接上了」不算，必须逐条有判据。
+
+1. **标题条只走系统拖动**：`ui\index.html` 的标题条 mousedown 必须调 `window.pywebview.api.drag_window()`；`_WinApi.drag_window()` 用 `_find_hwnd()` 拿句柄，`ReleaseCapture()` 后 `SendMessageW(WM_NCLBUTTONDOWN=0x00A1, HTCAPTION=2)`。不许再用 pointermove + move_by 自己挪窗口（会丢事件、没有双击最大化）。
+2. **退出全屏必须还尺寸**：`restore_bounds()` 先 `SW_RESTORE` 掉最大化，再用 `SWP_SHOWWINDOW|SWP_FRAMECHANGED`（`0x0040|0x0020`）连设两次；页面在 `exitFullscreen` 后立刻调一次、260ms 再补一次。
+3. **原件能搬走**：抽屉原件行必须有「移动」，弹窗选目标课程后调 `/api/move-originals`（原件 + 占位讲次一起搬）；成功后 `await boot()` 重取课程与讲次，再重画列表。
+4. **译文能记成笔记**：译文结果必须有「记成笔记」，把 `【译文 p.N】…` 追加到 `#nDraft` 并切到「笔记」页签。选中文字菜单**只能**由 `contextmenu` 打开，不许在 mouseup / pointerup 里再弹。
+5. **笔记分两层**：侧栏只留笔记列表 + `#nDraft` 快速记一笔；「记笔记」打开整页视图（左原文引用 / 右输入框），保存走 `/api/notes` 后回列表。
+6. **翻译历史最多 5 条**：存 `%USERPROFILE%\.pluma\translate-history.json`（`PLUMA_HOME` 可改），字段为时间 / 原文前 120 字 / 译文前 400 字；翻译页签顶部列最近 5 条，点一条回填 `#trSrc` 与译文。
+
+**怎么验证它被执行**：`python tools\check\check-reading-tools.py` 必须 **6/6**，且 `--selftest` 6/6（临时副本逐条造坏，证明判据会红）；提交钩子 `.githooks\pre-commit` 自动跑。
+
+## 十二、判据清单（谁是自动跑、谁要手动跑）
 
 | 判据 | 跑法 |
 |:--|:--|
@@ -113,6 +126,7 @@
 | `check-ui-conflicts.py` | 提交钩子自动 |
 | `check-lecture-rules.py` | 提交钩子自动 |
 | `check-draft-json.py` | 提交钩子自动 |
+| `check-reading-tools.py` | 提交钩子自动（阅读页六条：拖动 / 全屏 / 移动 / 翻译笔记 / 整页笔记 / 历史） |
 | `check-rules-wired.py` | 提交钩子自动（本文件与 tools/check 对账） |
 | `check-error-guard.py` | 手动：`python tools\check\check-error-guard.py`（打 14 条坏请求验错误兜底） |
 | `check-fresh-install.py` | 手动：全新配置跑一遍首启流程 |
