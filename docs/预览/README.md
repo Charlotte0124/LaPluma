@@ -106,3 +106,4 @@
 
 - ① 标题条 mousedown → _WinApi.drag_window（ReleaseCapture + WM_NCLBUTTONDOWN/HTCAPTION）
 - ② 退出全屏 restore_bounds 带 SWP_FRAMECHANGED，260ms 后再补一次
+- ③ 原件行「移动」→ /api/move-originals，搬完重取课程与讲次

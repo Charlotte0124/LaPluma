@@ -178,7 +178,7 @@ nav a.on{background:var(--ink);color:var(--bg)}
 .dr-find input{flex:1;min-width:0;border:1px solid var(--line);background:var(--card);border-radius:8px;padding:7px 10px;font-size:12.5px;outline:none}
 .dr-find input:focus{border-color:var(--ink)}
 .dr-find .n{font-family:Consolas,monospace;font-size:11px;color:var(--faint);white-space:nowrap}
-.f{display:grid;grid-template-columns:1fr 52px 76px 44px;gap:10px;align-items:center;padding:11px 22px;border-bottom:1px solid var(--line2);
+.f{display:grid;grid-template-columns:1fr 52px 76px 118px;gap:10px;align-items:center;padding:11px 22px;border-bottom:1px solid var(--line2);
    font-size:12.5px;cursor:pointer;transition:.14s}
 .f:hover{background:var(--card2)}
 /* 2026-11-17：每行原来还印一遍完整相对路径（课程/01_讲义/同名.pdf），120 份时纯噪音；改成单行截断、完整路径进 title */
@@ -192,6 +192,12 @@ nav a.on{background:var(--ink);color:var(--bg)}
   font-size:11.5px;padding:2px 0;opacity:0;transition:.14s}
 .f:hover .fdel{opacity:1}
 .f .fdel:hover{color:var(--red);border-color:var(--red)}
+/* 2026-11-22 用户：原件放错课程要能搬走——每行加「移动」（与删除同排，hover 才显形） */
+.f .fops{display:flex;gap:8px;justify-content:flex-end;align-items:center}
+.f .fmove{border:1px solid transparent;background:transparent;border-radius:6px;color:var(--faint);
+  font-size:11.5px;padding:2px 0;opacity:0;transition:.14s}
+.f:hover .fmove{opacity:1}
+.f .fmove:hover{color:var(--ink);border-color:var(--line)}
 .dr-f{padding:9px 22px;border-top:1px solid var(--line);font-family:Consolas,monospace;font-size:10.5px;color:var(--faint)}
 .dr-ask{padding:13px 22px;border-top:1px solid var(--line);display:flex;align-items:center;gap:12px;background:var(--card2)}
 .dr-ask .note{font-size:11px;color:var(--faint);line-height:1.5}
@@ -1283,19 +1289,19 @@ function renderFiles(){
     <div class="f" data-pdf="${esc(f.rel)}" data-name="${esc(f.name)}" title="${esc(f.rel)}">
       <div class="n">${esc(f.name)}</div>
       <div class="pg">${f.pages} p</div><div class="op">在软件里读 →</div>
-      <button class="fdel" data-fdel="${esc(f.rel)}" data-fname="${esc(f.name)}" title="删除这份成品">删除</button>
+      <div class="fops"><button class="fdel" data-fdel="${esc(f.rel)}" data-fname="${esc(f.name)}" title="删除这份成品">删除</button></div>
     </div>`).join('') : '<div class="empty">'+(kw?'无匹配成品':'本课程暂无成品。')+'</div>';
   html += `<div class="dr-files-grp">原件 · ${org.length}<span>导入的源课件</span></div>`;
   html += origs.length ? origs.map(f=>`
     <div class="f" data-pdf="${esc(f.rel)}" data-name="${esc(f.name)}" title="${esc(f.rel)}">
       <div class="n">${esc(f.name)}</div>
       <div class="pg">${f.size_kb} KB</div><div class="op">在软件里读 →</div>
-      <button class="fdel" data-fdel="${esc(f.rel)}" data-fname="${esc(f.name)}" title="删除这份原件">删除</button>
+      <div class="fops"><button class="fmove" data-fmove="${esc(f.name)}" title="把这门课的原件（连同占位讲次）移到别的课程">移动</button><button class="fdel" data-fdel="${esc(f.rel)}" data-fname="${esc(f.name)}" title="删除这份原件">删除</button></div>
     </div>`).join('')
     : '<div class="empty">'+(kw?'无匹配原件':'暂无原件。可在「生成」页点「＋ 导入课件」，或将 PDF 拖入窗口。')+'</div>';
   $('#drFiles').innerHTML = html;
   $('#drFiles').querySelectorAll('[data-pdf]').forEach(el=>el.onclick = e => {
-    if(e.target.classList.contains('fdel')) return;
+    if(e.target.classList.contains('fdel') || e.target.classList.contains('fmove')) return;
     closeDrawer();
     openReader(el.dataset.pdf, el.dataset.name, c.code);
   });
@@ -1303,6 +1309,45 @@ function renderFiles(){
     e.stopPropagation();
     askDeleteFile(b.dataset.fdel, b.dataset.fname, c.code);
   });
+  $('#drFiles').querySelectorAll('[data-fmove]').forEach(b=>b.onclick = e => {
+    e.stopPropagation();
+    askMoveOriginal(b.dataset.fmove, c.code);
+  });
+}
+/* 2026-11-22 用户：「图1 的放错文件夹」——在文件列表每行给「移动」，目标课程自己选；
+   后端 /api/move-originals 会把原件与对应占位讲次一起搬（不改内容、不删原件）。 */
+function askMoveOriginal(name, from){
+  const others = (B.courses||[]).filter(c => c.code !== from);
+  if(!others.length){ toast('只有这一门课程，先新建一门再移动'); return; }
+  $('#dlg').innerHTML =
+    '<div class="eb">Move original</div><h4>移动原件：' + esc(name) + '</h4>' +
+    '<p class="desc">原件与它对应的占位讲次会一起搬到目标课程；不改内容，也不删除原件。</p>' +
+    '<label class="chk" style="display:block;margin:10px 0 6px">目标课程</label>' +
+    '<select id="mvTo" style="width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:9px;background:var(--card2);color:var(--ink)">' +
+      others.map(c => '<option value="' + esc(c.code) + '">' + esc(c.title) + '（' + esc(c.code) + '）</option>').join('') +
+    '</select>' +
+    '<div class="acts"><button class="btn ghost" id="mvNo">取消</button>' +
+      '<button class="btn" id="mvGo">移动到这门</button></div>';
+  openVeil();
+  $('#mvNo').onclick = closeVeil;
+  $('#mvGo').onclick = async () => {
+    const to = $('#mvTo').value;
+    if(!to) return;
+    $('#mvGo').disabled = true;
+    const j = await postJson('/api/move-originals', {from:from, to:to, files:[name]});
+    if(!j.ok){
+      $('#mvGo').disabled = false;
+      toast('没移动：' + (j.error || (j.skipped||[]).join('；') || '未知原因'));
+      return;
+    }
+    closeVeil();
+    await boot();                                  // 重取课程与讲次（fillSelects → syncLessons）
+    const fresh = (B.courses||[]).find(x=>x.code===from);
+    if(fresh) DRAGGED = fresh;                     // 抽屉里是打开时的快照，换成新的这一门
+    if(DRAGGED) renderFiles();
+    const dst = (B.courses||[]).find(x=>x.code===to) || {};
+    toast('已移动 ' + (j.moved||[]).length + ' 份到「' + (dst.title || to) + '」');
+  };
 }
 function openDrawer(c){
   DRAGGED = c;
