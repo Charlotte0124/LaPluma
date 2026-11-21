@@ -15,6 +15,12 @@
     python tools\\print\\audit_lesson.py --file "<某个.pdf>"     # 强制只测这几份
     python tools\\print\\audit_lesson.py --json                # 机器可读（JSONL，每行一个对象；给 doccheck / lesson.ps1 用）
     python tools\\print\\audit_lesson.py --light               # 按浅色版验收（白底不扣分）
+    python tools\\print\\audit_lesson.py --cite-verify         # 「课件 p.N」核验：页码与内容对不对（只报告，不改退出码）
+
+「课件 p.N」核验（2026-11-23 用户提的优化项 C）：上面第 5 条只问「这一节有没有定位标注」，
+标了就能过——页码标错（那一页根本没讲这个内容）也判绿。现在拿原件 PDF 那一页的文字来对：
+引文所在那一行的用词落在那一页的比例太低、而另一页明显更高，就报「疑似标错」并给出那一页。
+它只报告不拦（与版式门「只报不改退出码」同一口径），默认跟着 --content 一起跑。
 
 验收口径来自 docs\\01-讲义生产方案.md §6：
     1 四角为底色（深色版无白边）
@@ -29,6 +35,7 @@ from __future__ import annotations
 import argparse
 import glob
 import json
+import math
 import os
 import re
 import sys
@@ -78,6 +85,34 @@ LOC_RE = re.compile(
     r"|\d{1,2}:\d{2}\b|\b[\w./\\-]+\.(?:py|js|ts|md|ps1|html|css):\d+|https?://\S+", re.I)
 # 术语表里的页码只写「p.1」也认（正文里不认，否则随便一个 p.1 就能冒充定位）
 GLOSS_LOC_RE = re.compile(LOC_RE.pattern + r"|p\.\s*\d+", re.I)
+
+# 「课件 p.N」核验（2026-11-23 用户提的优化项 C：「让标注可核」）。
+# 上面的内容门只问「有没有定位标注」，标错页也判绿；这里补一条只报告不拦的核验。
+CITE_PAGE_RE = re.compile(r"课件\s*p\.?\s*(\d+)", re.I)
+# 一处标注可能带多个页码（列表 / 区间），见 _page_groups
+_CITE_MARK_RE = re.compile(
+    r"课件\s*p\.?\s*(\d+)((?:\s*[–—\-~至]\s*(?:p\.?\s*)?\d+|\s*[、,，]\s*(?:p\.?\s*)?\d+)*)", re.I)
+_CJK_RUN = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff]+")
+_EN_WORD = re.compile(r"[a-z][a-z0-9_'\-]{2,}")
+# 停用词只用来「去噪」，不影响判据：中文按 2-gram，必然是碎词，不去掉「的是」「我们」这类，
+# 任意两页都会被拉出几个点的重合；英文同理（the / and / of 到处都是）。
+_STOP_ZH = frozenset("我们 你们 它们 这是 就是 可以 一个 一种 这个 那个 不是 没有 什么 因为 所以 "
+                     "如果 这样 这些 需要 已经 以及 或者 但是 而且 然后 这里 那里 上面 下面 前面 "
+                     "后面 时候 问题 东西 方法".split())
+_STOP_EN = frozenset("the and for with that this from are was were will can may not you your our "
+                     "their its has have which what when how why who use used using one two also "
+                     "more most than then there these those into out all any but".split())
+# 块结束标签 → 换行：这样「引文所在的那一行」就是它所在的段落 / 表行 / 引文块 / 图注
+_BLOCK_END = re.compile(r"</(?:p|li|tr|blockquote|figcaption|h[1-6]|div|table|section|pre)>", re.I)
+
+# 核验阈值（改这里 = 改「疑似标错」的松紧，改完同步 docs\使用\03-三道门.md）
+CITE_TH = {
+    "cover_min": 0.10,     # 与所标页的文字重合低于它 → 起疑
+    "best_min": 0.30,      # 最高分那一页要够高，才敢说「应该引它」（否则只是词太少，不是标错）
+    "gap": 0.20,           # 所标页与最高分页至少差这么多，才算「明显对不上」
+    "tokens_min": 5,       # 这一行可比词少于它（短引文）→ 没查，不当疑似
+    "max_report": 12,      # 一份讲义最多逐条打印几处疑似（其余给条数）
+}
 # 这些节不强求定位标注（目录 / 导读 / 自测 / 术语表 本身不是「知识点」）
 LOC_SKIP = ("目录", "本讲导读", "术语表", "自测", "练习", "小结")
 # 这些节不强求「讲法」段（都是固定件或纯工具页；2026-11-16 用户要求概念节必须有讲法）
@@ -98,9 +133,301 @@ except Exception:          # 工具目录被挪走时退回空实现，判据明
     def first_standalone(flat, term, pairs):
         return -1
 
+# 核验要按「生成时同一套口径」找原件，所以复用 engine\_draft.py 的 source_of()
+# （它认 stub-from / 「源课件」/ 唯一 PDF 三条路，见那边的 docstring）。
+for _p in (paths.res("engine"), paths.res("tools", "print")):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
+try:
+    import _draft as _draft_mod
+    _HAVE_DRAFT, _DRAFT_ERR = True, ""
+except Exception as _e:    # 引擎被挪走 / 缺依赖：核验明确说「没查」，不静默当通过
+    _draft_mod, _HAVE_DRAFT, _DRAFT_ERR = None, False, repr(_e)
+
 
 def strip_tags(s: str) -> str:
     return _unescape(re.sub(r"<[^>]+>", "", s))
+
+
+# ---------------------------------------------------------------------------
+# 「课件 p.N」核验（2026-11-23 用户提的优化项 C：让标注可核 · 只报告不拦）
+# ---------------------------------------------------------------------------
+
+def _script_counts(text: str) -> tuple:
+    """(汉字数, 拉丁字母数)。判「这一页有没有中文 / 有没有英文」，跨语言时决定拿哪一半词去比。"""
+    text = text or ""
+    cjk = sum(len(m) for m in _CJK_RUN.findall(text))
+    lat = sum(len(m) for m in re.findall(r"[A-Za-z]+", text))
+    return cjk, lat
+
+
+def _tokens(text: str) -> set:
+    """词袋：中文取 2-gram、英文取词（≥3 字母、小写、去停用词）。页码标注本身不算内容。"""
+    t = CITE_PAGE_RE.sub(" ", text or "")
+    t = re.sub(r"\bp\.\s*\d+", " ", t, flags=re.I)
+    t = t.lower()
+    out = set()
+    for run in _CJK_RUN.findall(t):
+        for i in range(len(run) - 1):
+            g = run[i:i + 2]
+            if g not in _STOP_ZH:
+                out.add(g)
+    for w in _EN_WORD.findall(t):
+        if w in _STOP_EN:
+            continue
+        # 英文学术名词复数是常态（lysosomes / organelles / cells）：两边都去掉一个尾 s 再比，
+        # 否则「引文写单数、课件写复数」会被当成两个不同的词（2026-11-23 实测 p.46 那条就是这样）。
+        out.add(w[:-1] if (len(w) > 4 and w.endswith("s") and not w.endswith("ss")) else w)
+    return out
+
+
+def _cite_units(html: str) -> list:
+    """把每一处「课件 p.N」收集成可核验的单位：{节标题, 节英文名, 所在那一句, 页码组}。
+
+    2026-11-23 为什么按「哪一句」而不是按「哪一节」：先按整节（节标题 + 节内全部正文）试过，
+    实测 生物学 T01（57 页 / 100+ 处标注）里节内正文比一页多得多，正确页的重合也只有 1–2 成；
+    而「本讲小结」「术语表」这种一节引十几页的，按节算全是误导。按句算才对应
+    「这一条引文标的是哪一页」这件事。一句里标了两个页码时两处共用这一句的词——
+    不假装能还原句内对应关系，写在这里免得后人误会。
+    """
+    units = []
+    for sec in re.split(r"(?=<h2)", html)[1:]:
+        # 标题只从 <h2> 里面取：正文里「术语首次附英」也写成 <span class="en">，
+        # 不限定范围就会把某个术语当成小节标题的英文名，词袋被无关词污染（2026-11-23 实测：
+        # 「细胞器（二）」那节的英文名被认成了 Golgi / organelle 这些术语，害得 p.46 那条被判疑似）。
+        h2 = re.search(r"<h2[^>]*>(.*?)</h2>", sec, re.S)
+        h2html = h2.group(1) if h2 else ""
+        m = re.search(r'<span class="zh">(.*?)</span>', h2html, re.S)
+        title = strip_tags(m.group(1)).strip() if m else ""
+        men = re.search(r'<span class="en">(.*?)</span>', h2html, re.S)
+        title_en = strip_tags(men.group(1)).strip() if men else ""
+        body = re.sub(r"<svg.*?</svg>", " ", sec, flags=re.S)    # 结构图里的字是画出来的，不是正文
+        body = re.sub(r"<h2.*?</h2>", " ", body, flags=re.S)     # 标题单独当线索，不混进行内
+        body = _BLOCK_END.sub("\n", body)
+        body = re.sub(r"<br\s*/?>", "\n", body, flags=re.I)
+        for line in strip_tags(body).splitlines():
+            line = re.sub(r"[ \t\u00a0]+", " ", line).strip()
+            # 一行里常有两三处标注（一句话一处）：按句切开，每处标注只跟它自己那句话比。
+            # 不切的话，同一行另一句的用词会当噪声（2026-11-23 实测：一句讲 Biome 标 p.26、
+            # 紧接一句讲 Gut Microbiome 标 p.27，合成一行后两边互相拉低，标对的被报成疑似）。
+            for seg in re.split(r"(?<=[。；;！？])", line):
+                seg = seg.strip()
+                groups = _page_groups(seg)
+                if groups:
+                    units.append({"sec": title, "sec_en": title_en, "line": seg, "groups": groups})
+    return units
+
+
+def _page_groups(text: str) -> list:
+    """一处标注带的页码，成组返回：[[页码…], …]。
+
+    一处标注可能是好几个页码（「课件 p.27、p.28、p.31」「课件 p.33—p.36」）。这类要成组判：
+    它们说的是「这段内容在这几页上」，逐页单独比会把「内容其实在后一页」的标注全报成疑似
+    （2026-11-23 实测 T02-2「肌动蛋白和肌球蛋白参与运动（课件 p.27…p.31）」——内容在 p.31）。
+    """
+    out = []
+    for m in _CITE_MARK_RE.finditer(text):
+        pages = [int(m.group(1))]
+        for x in re.findall(r"[–—\-~至、,，]\s*(?:p\.?\s*)?(\d+)", m.group(2) or ""):
+            pages.append(int(x))
+        out.append(pages)
+    return out
+
+
+def _page_texts(pdf: str) -> list:
+    """原件每页的文字（空白归一化）。扫描件会有整页空串，交给调用方判「没查」。"""
+    doc = pymupdf.open(pdf)
+    try:
+        return [re.sub(r"\s+", " ", p.get_text("text") or "") for p in doc]
+    finally:
+        doc.close()
+
+
+def _original_of(src: str, course: str = "") -> tuple:
+    """这一份讲义源对应的原件 PDF：返回 (路径, 说明)。找不到时路径为空、说明写清为什么「没查」。"""
+    if not course:
+        parent = os.path.dirname(os.path.abspath(src))
+        if os.path.basename(parent) != "06_笔记":
+            return "", "源文件不在 <课程>\\06_笔记 下，认不出是哪一讲（没查）"
+        course = os.path.basename(os.path.dirname(parent))
+    name = os.path.basename(src)
+    # 生成器写的是 <讲号>_零基础_讲义_源.html；手写的 <讲号>_讲义_源.html 也认
+    m = re.match(r"(.+?)_零基础_讲义_源\.html$", name) or re.match(r"(.+?)_讲义_源\.html$", name)
+    no = m.group(1) if m else ""
+    if not _HAVE_DRAFT:
+        return "", "取不到 engine\\_draft.py（%s），没查" % (_DRAFT_ERR,)
+    try:
+        return _draft_mod.source_of(course, no)[0], ""
+    except Exception as e:  # noqa: BLE001
+        return "", "找不到这一讲的原件（%s），没查" % (e,)
+
+
+def cite_verify(src: str, pdf: str = "", course: str = "", th: dict = None) -> dict:
+    """「课件 p.N」核验：引文所在那一行与原件页文字的重合。只报告，不拦。
+
+    返回 {src, pdf, pages, checked, suspects, skipped, notes}：
+      suspects 每条 {sec, page, pages, cover, best, best_cover, why, line}；
+      skipped 是 {原因: 处数}（跨语言且可比词不足 / 引文太短 / 原件该页没有文字 / …）。
+    口径（阈值见 CITE_TH）：
+      · 词按「这个词在这份课件里有多稀罕」加权（IDF），分母只算课件里真出现过的词
+        ——模型自己加的讲法用词本来就不在课件里，算进分母会让每一页都低分；
+      · 所标页重合 < cover_min 且最高分页 ≥ best_min 且两者差 ≥ gap → 疑似标错，建议核对最高分页；
+      · 引文与那一页语言不同时，只用引文里保留的原语言词（术语首次附英那几个词）比；
+        连这几个词都不够 → 记「没查」，不冒充查过；
+      · 短引文（可比词 < tokens_min）→ 记「没查」。
+    只报告：结果不进 fails、不改退出码（与版式门「只报不改退出码」同一口径）。
+    """
+    th = dict(CITE_TH, **(th or {}))
+    res = {"src": _rel(src), "pdf": "", "pages": 0, "checked": 0,
+           "suspects": [], "skipped": {}, "notes": []}
+    try:
+        html = open(src, encoding="utf-8", errors="replace").read()
+    except OSError as e:
+        res["notes"].append("读不到讲义源（%s），没查" % (e,))
+        return res
+    units = _cite_units(html)
+    if not units:
+        res["notes"].append("这一讲没有任何「课件 p.N」标注（没查）")
+        return res
+    if not pdf:
+        pdf, why = _original_of(src, course)
+        if not pdf:
+            res["notes"].append(why)
+            return res
+    if not os.path.isfile(pdf):
+        res["notes"].append("原件不在（%s），没查" % _rel(pdf))
+        return res
+    pages = _page_texts(pdf)
+    if not any(t.strip() for t in pages):
+        res["notes"].append("原件没有文字层（像扫描件），没查")
+        return res
+    res["pdf"], res["pages"] = _rel(pdf), len(pages)
+
+    ptok = [_tokens(t) for t in pages]
+    df = {}
+    for ts in ptok:
+        for t in ts:
+            df[t] = df.get(t, 0) + 1
+    n = len(pages)
+    idf = {t: math.log((n + 1) / (d + 0.5)) for t, d in df.items()}
+    have = set(df)
+
+    def _skip(why: str, k: int = 1) -> None:
+        res["skipped"][why] = res["skipped"].get(why, 0) + k
+
+    for u in units:
+        K_all = _tokens(u["line"]) | _tokens(u["sec"] + " " + u["sec_en"])
+        K_all &= have                   # 课件里没有的词不算分母（见 docstring）
+        # 拆成「中文 2-gram」与「英文词」两半：中文讲义引英文课件时，能对的只剩引文里
+        # 保留的那几个英文术语（讲义规矩要求术语首次附英，这几个词就是可比信号）；
+        # 另一半（中文 2-gram）对英文页面纯属噪声，不参与比对。
+        K_en = {t for t in K_all if _EN_WORD.fullmatch(t)}
+        K_zh = K_all - K_en
+        scored = {}
+        for name, K in (("all", K_all), ("en", K_en), ("zh", K_zh)):
+            if len(K) < th["tokens_min"]:
+                scored[name] = None
+                continue
+            denom = sum(idf[t] for t in K)
+            covers = [sum(idf[t] for t in (K & ts)) / denom for ts in ptok]
+            scored[name] = (covers, max(range(n), key=lambda i: covers[i]))
+        for group in u["groups"]:
+            judged = []          # [(页码, 这一页的重合, covers, best)]
+            for pg in group:
+                if not (1 <= pg <= n):
+                    res["suspects"].append({"sec": u["sec"], "page": pg, "pages": [pg],
+                                            "cover": 0.0, "best": 0, "best_cover": 0.0,
+                                            "why": "原件只有 %d 页，没有第 %d 页" % (n, pg),
+                                            "line": u["line"][:120]})
+                    continue
+                if not pages[pg - 1].strip():
+                    _skip("原件该页没有文字")
+                    continue
+                # 这一页有中文 → 中文 2-gram 与英文词都能比；这一页没有中文（纯英文页）→ 只比
+                # 引文里保留的英文术语——中文 2-gram 打在英文页上必然 0%，用它判就是错判。
+                # 2026-11-23 实测：按「汉字占比」硬切语言，会把「英文为主但带中文对译」的页
+                # 误当英文页（生物学 T01 p.26「Biome and Biosphere」就是），标对的被报成疑似。
+                cjk_n, lat_n = _script_counts(pages[pg - 1])
+                tot = cjk_n + lat_n
+                has_cn = cjk_n >= max(10, 0.15 * tot)
+                has_en = lat_n >= max(10, 0.15 * tot)
+                order = (["all", "zh"] if has_cn else
+                         ["en"] if has_en else [])
+                if not order:
+                    _skip("原件该页只有数字/符号")
+                    continue
+                pick = None
+                for name in order:
+                    cand = scored[name]
+                    if cand is not None and (pick is None or cand[0][pg - 1] > pick[0][pg - 1]):
+                        pick = cand
+                if pick is None:
+                    _skip("跨语言且可比词不足")
+                    continue
+                judged.append((pg, pick[0][pg - 1], pick[0], pick[1]))
+            if not judged:
+                continue
+            res["checked"] += len(judged)
+            # 多页标注只要有一页对得上就算这对（那句「这段在这几页上」），
+            # 只有一页都对不上、且有明显更该引的页，才记疑似。
+            top = max(judged, key=lambda x: x[1])
+            if top[1] >= th["cover_min"]:
+                continue
+            covers, best = top[2], top[3]
+            best_cover, best_pg = covers[best], best + 1
+            if (best_pg not in group and best_cover >= th["best_min"]
+                    and best_cover - top[1] >= th["gap"]):
+                res["suspects"].append({"sec": u["sec"], "page": top[0],
+                                        "pages": sorted(set(group)), "cover": top[1],
+                                        "best": best_pg, "best_cover": best_cover, "why": "",
+                                        "line": u["line"][:120]})
+    return res
+
+
+def report_cite(res: dict, out=print, indent: str = "", th: dict = None) -> None:
+    """把 cite_verify 的结果打印成人能读的报告。只报告——调用方不许拿它改退出码。"""
+    th = dict(CITE_TH, **(th or {}))
+    head = indent + "[出处核验] " + res["src"]
+    if res["notes"]:
+        out(head + " → " + "；".join(res["notes"]))
+        return
+    n_skip = sum(res["skipped"].values())
+    tail = ("（" + " / ".join("%s %d" % (k, v) for k, v in res["skipped"].items()) + "）"
+            if res["skipped"] else "")
+    out(head + " → 原件 " + res["pdf"] + "（%d 页）" % res["pages"])
+    out(indent + "    判定 %d 处 · 疑似标错 %d 处 · 没查 %d 处%s"
+        % (res["checked"], len(res["suspects"]), n_skip, tail))
+    # 同一节同一处常被标多次，合并成一条报，免得刷屏
+    merged = {}
+    for s in res["suspects"]:
+        key = (s["sec"], tuple(s.get("pages") or [s["page"]]), s["why"])
+        if key in merged:
+            merged[key][1] += 1
+        else:
+            merged[key] = [s, 1]
+    shown = 0
+    for (sec, pgs, why), (s, cnt) in merged.items():
+        if shown >= th["max_report"]:
+            out(indent + "    …另有 %d 处疑似未逐条列出（见 --json）" % (len(merged) - shown))
+            break
+        shown += 1
+        more = ("（另有 %d 处同样标法）" % (cnt - 1)) if cnt > 1 else ""
+        cited = "、".join("p.%d" % p for p in pgs)
+        if why:
+            out(indent + "    [疑似标错] %s · 标了 %s · %s%s" % (sec or "?", cited, why, more))
+        elif len(pgs) > 1:
+            out(indent + "    [疑似标错] %s · 标了 %s · 与这几页文字重合最高 %d%%（第 %d 页）· "
+                         "建议核对 p.%d（该页重合 %d%%）%s"
+                % (sec or "?", cited, round(s["cover"] * 100), s["page"], s["best"],
+                   round(s["best_cover"] * 100), more))
+        else:
+            out(indent + "    [疑似标错] %s · 标了 p.%d · 与第 %d 页文字重合 %d%% · "
+                         "建议核对 p.%d（该页重合 %d%%）%s"
+                % (sec or "?", s["page"], s["page"], round(s["cover"] * 100), s["best"],
+                   round(s["best_cover"] * 100), more))
+    if res["suspects"]:
+        out(indent + "    （只报告，不改退出码：页码对不对要人去核；重合 = 这一行的用词落在该页的比例，"
+                     "中文按 2-gram、英文按词）")
 
 
 def content_audit(path: str, draft: bool = False) -> dict:
@@ -492,7 +819,22 @@ def main(argv: list | None = None) -> int:
     ap.add_argument("--light", action="store_true", help="按浅色版验收")
     ap.add_argument("--content", action="store_true", help="内容门：扫讲义源 HTML（公式符号表/裸术语/定位/固定件/主题色/读者口径）")
     ap.add_argument("--draft", action="store_true", help="配 --content：预览稿模式，不判固定件/术语表/自测")
+    # 2026-11-23 优化项 C：只报告不拦。默认跟着 --content 一起跑（生成日志里就能看到），
+    # 也可以单独跑这一条。疑似标错不进 fails、不改退出码——要当硬门是口径变更，得单独定。
+    ap.add_argument("--cite-verify", action="store_true",
+                    help="「课件 p.N」核验：引文所在行与原件那一页的文字重合（只报告，不改退出码）")
     a = ap.parse_args(argv)
+
+    if a.cite_verify and not a.content:
+        srcs = ([os.path.abspath(f) for f in a.file] if a.file else
+                sorted(glob.glob(os.path.join(ROOT, "*", "06_笔记", "*_讲义_源.html"))))
+        if not srcs:
+            print("没有可核验的讲义源（*\\06_笔记\\*_讲义_源.html）。这是「没查」，不是「通过」。",
+                  file=sys.stderr)
+            return 2
+        for s in srcs:
+            report_cite(cite_verify(s))
+        return 0        # 只报告：有疑似的也返回 0
 
     if a.content:
         srcs = ([os.path.abspath(f) for f in a.file] if a.file else
@@ -502,11 +844,15 @@ def main(argv: list | None = None) -> int:
                   file=sys.stderr)
             return 2
         rows = [content_audit(s, a.draft) for s in srcs]
+        # 2026-11-23 优化项 C：出处核验跟着内容门一起跑，但它只报告（不改 status / 退出码）。
+        # 找不到原件、跨语言、短引文都记「没查」，写在报告里，不冒充查过。
+        cites = [cite_verify(s) for s in srcs]
         if a.json:
-            for r in rows:
+            for r, c in zip(rows, cites):
+                r["cite"] = c
                 print(json.dumps(r, ensure_ascii=False))
         else:
-            for r in rows:
+            for r, c in zip(rows, cites):
                 print(f"\n{r['status']:>4}  {r['file']}")
                 print(f"      {r['eq']} 条公式（缺符号表 {r['eq_bad']}） · {r['terms']} 个术语 · "
                       f"自测 {r['quiz']} 题" + (" · 预览稿模式" if r["draft"] else ""))
@@ -514,6 +860,8 @@ def main(argv: list | None = None) -> int:
                     print(f"      ✗ {f}")
                 for w in r["warns"]:
                     print(f"      ! {w}")
+                if c is not None:
+                    report_cite(c, indent="      ")
             bad = sum(1 for r in rows if r["status"] == "FAIL")
             warn = sum(1 for r in rows if r["status"] == "WARN")
             print(f"\n{len(rows)} 份讲义源：OK {len(rows) - bad - warn} · WARN {warn} · FAIL {bad}")
