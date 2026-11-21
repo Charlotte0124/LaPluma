@@ -124,12 +124,40 @@ class Fresh:
 
     def stop(self) -> None:
         if self.proc and self.proc.poll() is None:
+            # 2026-11-21：pid 是启动器，真窗口是它的子进程；只 terminate 父进程会留下子窗口
+            # （用户实测：自检跑一次多一个窗口）。用 taskkill /T 连子进程一起收，再兜底扫一遍
+            # 可执行文件路径在本轮临时目录下的进程。
             try:
-                self.proc.terminate()
-                self.proc.wait(timeout=8)
+                subprocess.run(
+                    ["taskkill", "/PID", str(self.proc.pid), "/T", "/F"],
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=10,
+                )
             except Exception:  # noqa: BLE001
                 try:
                     self.proc.kill()
+                except Exception:  # noqa: BLE001
+                    pass
+        self._kill_leftovers()
+
+    def _kill_leftovers(self) -> None:
+        """按临时目录路径兜底：凡是 exe 在本轮 base 下的进程都收掉。"""
+        try:
+            out = subprocess.run(
+                ["wmic", "process", "where", "name='LaPluma.exe'", "get", "ProcessId,ExecutablePath", "/format:csv"],
+                capture_output=True, text=True, timeout=15,
+            ).stdout
+        except Exception:  # noqa: BLE001
+            return
+        base = str(self.base).lower()
+        for line in out.splitlines():
+            parts = [p.strip() for p in line.split(",")]
+            if len(parts) < 3:
+                continue
+            exe, pid = parts[1].lower(), parts[-1]
+            if base in exe or "pluma-fresh-" in exe:
+                try:
+                    subprocess.run(["taskkill", "/PID", pid, "/T", "/F"],
+                                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=10)
                 except Exception:  # noqa: BLE001
                     pass
 
