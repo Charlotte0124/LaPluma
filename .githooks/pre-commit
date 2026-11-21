@@ -22,6 +22,9 @@ python -X utf8 tools/check/check-draft-json.py || { echo "[hook] 模型 JSON 解
 # 2026-11-22 用户六条：标题条拖动 / 退出全屏 / 原件移动 / 译文记笔记 / 整页笔记 / 翻译历史
 echo "[hook] 阅读页六件 check-reading-tools ..."
 python -X utf8 tools/check/check-reading-tools.py || { echo "[hook] 阅读页六件未过：提交已拦下"; exit 1; }
+# 2026-11-22 文字层对位 / 已成稿隐藏 / 干净启动器（AGENTS.md §十二）
+echo "[hook] 窗口与列表层 check-window-layer ..."
+python -X utf8 tools/check/check-window-layer.py || { echo "[hook] 文字层/成稿隐藏/启动器未过：提交已拦下"; exit 1; }
 echo "[hook] 规矩接线 check-rules-wired ..."
 python -X utf8 tools/check/check-rules-wired.py || { echo "[hook] 规矩与判据没对上：提交已拦下"; exit 1; }
 echo "[hook] 通过"

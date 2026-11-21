@@ -5,7 +5,8 @@ r"""check-reading-tools.py — 阅读页六件事的判据（2026-11-22）
 搬不走 / 右键翻译后没法记账 / 笔记只能挤在侧栏 / 译文翻完就丢」。界面改动很容易
 「改完看着对了」但实际没接上，所以这里把每条的可执行判据钉住：
 
-  1 标题条 mousedown 调 _WinApi.drag_window（ReleaseCapture + WM_NCLBUTTONDOWN/HTCAPTION）
+  1 标题条 mousedown 调 _WinApi.drag_window（自己跑拖动循环：GetCursorPos + GetAsyncKeyState，
+     不再用 JS pointermove，也不用 WM_NCLBUTTONDOWN——实测对无边框 WinForms 窗口无效）
   2 退出全屏 restore_bounds 带 SWP_FRAMECHANGED，并在 260ms 后再补一次
   3 文件列表原件行有「移动」，走 /api/move-originals，搬完重取课程与讲次
   4 译文有「记成笔记」，以【译文 p.N】进 #nDraft 并切笔记页签；菜单只由右键打开
@@ -95,17 +96,21 @@ def check(root):
         rows.append((no, name, bool(ok), detail))
 
     bar = block(idx, "function initBar()", "function initResize()")
+    drag = block(srv, "def drag_window(", "def start_drag(")
     add(1, "标题条拖动", (
         "bar.addEventListener('mousedown'" in bar
         and "a.drag_window()" in bar
+        and "bar.addEventListener('dblclick'" in bar
+        and "toggle_max" in bar
         and "move_by" not in bar
         and "pointerdown" not in bar
         and "def drag_window(" in srv
-        and "_find_hwnd()" in block(srv, "def drag_window(", "def start_drag(")
-        and "ReleaseCapture()" in block(srv, "def drag_window(", "def start_drag(")
-        and "SendMessageW" in block(srv, "def drag_window(", "def start_drag(")
-        and "0x00A1" in block(srv, "def drag_window(", "def start_drag(")
-    ), "mousedown → drag_window；服务端 ReleaseCapture + WM_NCLBUTTONDOWN")
+        and "_find_hwnd()" in drag
+        and "GetCursorPos" in drag and "GetAsyncKeyState" in drag and "SetWindowPos" in drag
+        # 2026-11-22 实测：无边框 WinForms 窗口不吃 WM_NCLBUTTONDOWN，别再回到那条路
+        #（注释里可以提那两次弯路，但代码里不许真的再发这条消息/再调 ReleaseCapture）
+        and "0x00A1" not in drag and "u.ReleaseCapture()" not in drag
+    ), "mousedown → drag_window（GetCursorPos + GetAsyncKeyState + SetWindowPos）；双击标题条最大化")
 
     rb = block(srv, "def restore_bounds(self):", "def _win(self):")
     fs = block(idx, "async function setFullscreen(on)", "$('#btnFs').onclick")

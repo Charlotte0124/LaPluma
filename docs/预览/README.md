@@ -104,9 +104,19 @@
 
 ## 2026-11-22 阅读页工具（六条）· 实现进度
 
-- ① 标题条 mousedown → _WinApi.drag_window（ReleaseCapture + WM_NCLBUTTONDOWN/HTCAPTION）
+- ① 标题条 mousedown → _WinApi.drag_window（**2026-11-22 二次修正**：ReleaseCapture + WM_NCLBUTTONDOWN/HTCAPTION 在无边框 WinForms 窗口上实测无效，改成 Python 侧自己跑拖动循环——GetCursorPos 读系统光标、GetAsyncKeyState 判松手、SetWindowPos 跟着挪；双击标题条 toggle_max）
 - ② 退出全屏 restore_bounds 带 SWP_FRAMECHANGED，260ms 后再补一次
 - ③ 原件行「移动」→ /api/move-originals，搬完重取课程与讲次
 - ④ 译文「记成笔记」→【译文 p.N】追加到 #nDraft 并切笔记页签；菜单只由右键触发
 - ⑤ 记笔记独立整页：左原文引用 / 右输入框；#nDraft 保留为快速记一笔
 - ⑥ 翻译历史 ~/.pluma/translate-history.json（最多 5 条），页签顶部可回填
+
+## 2026-11-22 文字层 / 已成稿列表 / 干净启动器
+
+| 改了什么 | 用户原话 | 图 |
+|:--|:--|:--|
+| 文字层改用 pdf.js 官方 TextLayer（每段一个 div + `--scale-factor`），选中框与字重合 | 「选中的位置跟实际的字不完全重合」 | 无静态图（真窗口量测：23 段、18/18 段与 pymupdf 词框对位 ≤4px，见 `check-window-real.py`） |
+| 已成稿（原件 + 成品都在）的讲次从生成列表隐藏，并提示「另有 N 讲已成稿」 | 「A1 生成完了之后 应该要在列表里面消失掉（虽然他还在那个课件里面），除非在课件里面选择重新生成」 | `../资产/界面-成稿隐藏-20261122.png`（真窗口：只剩 D02，下面一行写明「另有 1 讲已成稿」） |
+| 课程抽屉的成品行加「重新生成」，点它把这一讲放回列表并勾上 | 同上 | 无静态图（行为：点击 → 回生成页、chip 出现且已勾） |
+| 启动器单独放干净文件夹（F:/DSH/apps/羽毛笔 只一个纯 ASCII 的 .cmd），桌面快捷方式指过去 | 「把启动器单独放一个干净的文件夹」 | 无图（实测：目录只有 1 个文件、1013 B、纯 ASCII；双击起真窗口，关窗后进程退干净） |
+

@@ -107,7 +107,9 @@
 
 **为什么有这条**：用户按六条实测提了「标题条拖不动 / 全屏退出缩不回去 / 原件放错课程搬不走 / 右键翻译后没法记账 / 笔记只能挤在侧栏 / 译文翻完就丢」。这些都在 WebView2 的窗口层与阅读侧栏里，光看代码「好像接上了」不算，必须逐条有判据。
 
-1. **标题条只走系统拖动**：`ui\index.html` 的标题条 mousedown 必须调 `window.pywebview.api.drag_window()`；`_WinApi.drag_window()` 用 `_find_hwnd()` 拿句柄，`ReleaseCapture()` 后 `SendMessageW(WM_NCLBUTTONDOWN=0x00A1, HTCAPTION=2)`。不许再用 pointermove + move_by 自己挪窗口（会丢事件、没有双击最大化）。
+1. **标题条拖动的唯一实现**：`ui\index.html` 的标题条 mousedown 只调 `window.pywebview.api.drag_window()`；`_WinApi.drag_window()` 在 Python 侧跑拖动循环——`GetWindowRect` 记左上角、`GetCursorPos` 读系统光标、`GetAsyncKeyState(VK_LBUTTON)` 判松手、`SetWindowPos` 跟着挪。双击标题条走 `toggle_max()`。
+   - 不许回到 JS pointermove + move_by（每步过一次桥，卡；指针离开标题条就丢事件）。
+   - 不许回到 `ReleaseCapture()` + `SendMessageW(0x00A1, HTCAPTION)`：**2026-11-22 真窗口实测无效**——本窗口是 pywebview 的无边框 WinForms 窗口，WinForms 的 WndProc 不把这消息交给 DefWindowProc，系统拖动循环根本不启动，`SendMessage` 立刻返回 0、窗口纹丝不动（`check-window-real.py --drag` 量到位移 0px）。
 2. **退出全屏必须还尺寸**：`restore_bounds()` 先 `SW_RESTORE` 掉最大化，再用 `SWP_SHOWWINDOW|SWP_FRAMECHANGED`（`0x0040|0x0020`）连设两次；页面在 `exitFullscreen` 后立刻调一次、260ms 再补一次。
 3. **原件能搬走**：抽屉原件行必须有「移动」，弹窗选目标课程后调 `/api/move-originals`（原件 + 占位讲次一起搬）；成功后 `await boot()` 重取课程与讲次，再重画列表。
 4. **译文能记成笔记**：译文结果必须有「记成笔记」，把 `【译文 p.N】…` 追加到 `#nDraft` 并切到「笔记」页签。选中文字菜单**只能**由 `contextmenu` 打开，不许在 mouseup / pointerup 里再弹。
@@ -116,7 +118,18 @@
 
 **怎么验证它被执行**：`python tools\check\check-reading-tools.py` 必须 **6/6**，且 `--selftest` 6/6（临时副本逐条造坏，证明判据会红）；提交钩子 `.githooks\pre-commit` 自动跑。
 
-## 十二、判据清单（谁是自动跑、谁要手动跑）
+## 十二、文字层 / 已成稿列表 / 干净启动器（2026-11-22 用户定）
+
+**为什么有这条**：用户按实测提了「选中的位置跟实际的字不完全重合」「生成完了之后 应该要在列表里面消失掉（虽然他还在那个课件里面），除非在课件里面选择重新生成」，并要求启动器单独放一个干净文件夹。三件都属于「代码看着对、真用起来错」，各配一条会失败的判据。
+
+1. **文字层用 pdf.js 官方 TextLayer**：`renderTextLayer()` 必须 `new lib.TextLayer({textContentSource, container, viewport})`——每段一个 div，left/top 是整页百分比、宽度靠 scaleX。容器必须先 `box.style.setProperty('--scale-factor', String(vp.scale))`（官方层的字号是 `calc(Npx * var(--scale-factor))`；缺这个变量字号就错，选中框跟着偏）。不许回到「按行合并成一个 span」（只有整行的 left/top，逐段宽度还原不了）。官方层不可用时才退回按行合并，并把走的路记在 `#pdftext.dataset.tl`（official / official-fail / fallback）。
+2. **已成稿的讲次不出现在生成列表**：后端 `lesson_meta()` 按磁盘事实算 `done`——原件目录里还有它那份源课件（`orig` 与文件名主干对上）**且** `01_讲义` 里有 `<讲号>_…pdf`；两条都成立才算成稿（只导入没生成的占位不算，出厂示例课程没原件也不算）。界面 `syncLessons()` 过滤掉 done 的讲并提示「另有 N 讲已成稿」。重做入口只有一个：课程抽屉的成品行「重新生成」（`data-fregen`）——点了把它放回列表并勾上（`REGEN` 集合），生成成功后自动移出、又回到隐藏。
+3. **启动器单独一个干净文件夹**：`F:\DSH\apps\羽毛笔\` 里只放一个纯 ASCII 的 `启动羽毛笔.cmd`（`%~dp0` + 通配符找 `..\LaPluma\*.ps1`，带 `-Windowed`）；桌面快捷方式指向它。目录里多一个文件、或启动器里出现一个非 ASCII 字节，都算红——936 代码页会把中文读成乱码，双击就没反应（§六.3 的同一个坑）。
+4. **自测一律跑临时数据根**：要造「原件 + 成品」这类数据，用 `tools\check\_win_launch.py` + `PLUMA_TEST_DATA=<临时目录>`（在 import 之前改 `paths.DATA_ROOT`），跑完删掉；不许往用户自己的课程目录里造样本。
+
+**怎么验证它被执行**：`python tools\check\check-window-layer.py` 必须 **3/3**，`--selftest` 6/6（逐条造坏都要变红）；提交钩子自动跑。只有真窗口量得出的（窗口矩形、选中框对位、拖动），跑 `python tools\check\check-window-real.py`（会弹一下软件窗口，约 40 秒；加 `--drag` 再做一次真实鼠标拖动）：W1 真窗口 / W2 全屏进出还原（±2px）/ W3 文字层与 pymupdf 词框对位（±4px）/ W4 成稿隐藏与重新生成 / W5 只有右键弹菜单 / W6 拖动。
+
+## 十三、判据清单（谁是自动跑、谁要手动跑）
 
 | 判据 | 跑法 |
 |:--|:--|
@@ -127,6 +140,7 @@
 | `check-lecture-rules.py` | 提交钩子自动 |
 | `check-draft-json.py` | 提交钩子自动 |
 | `check-reading-tools.py` | 提交钩子自动（阅读页六条：拖动 / 全屏 / 移动 / 翻译笔记 / 整页笔记 / 历史） |
+| `check-window-layer.py` | 提交钩子自动（文字层 / 成稿隐藏 / 干净启动器） |
 | `check-rules-wired.py` | 提交钩子自动（本文件与 tools/check 对账） |
 | `check-error-guard.py` | 手动：`python tools\check\check-error-guard.py`（打 14 条坏请求验错误兜底） |
 | `check-fresh-install.py` | 手动：全新配置跑一遍首启流程 |
@@ -135,3 +149,5 @@
 | `check-pdf-brand.py` | 手动：成品 PDF 的固定文案与品牌 |
 | `check-startup-guard.py` | 手动：启动期自保（遮蔽目录 / stdout） |
 | `check-update.py` | 手动：应用内更新逻辑 |
+| `check-window-real.py` | 手动：真窗口量测（全屏矩形 / 选中框对位 / 成稿隐藏 / 右键菜单），`--drag` 含真实鼠标拖动；约 40 秒 |
+| `_win_launch.py` | 不是判据：自测启动器（`PLUMA_TEST_DATA` 指临时数据根），只给 `check-window-real.py` 用 |

@@ -319,6 +319,19 @@ def lesson_meta(course: str) -> dict:
     界面以前只显示讲号。这里把数据文件里的 zh 标题读出来给界面，讲号仍做内部编号。
     """
     out = {}
+    # 2026-11-22 用户：「A1 生成完了之后 应该要在列表里面消失掉（虽然他还在那个课件里面），
+    #   除非在课件里面选择重新生成」——判断全用磁盘事实，不另存状态：
+    #   ①原件目录里还有它那份源课件 ②01_讲义 里有 <讲号>_…pdf 的成品。
+    #   两条都成立才算「已成稿」。只导入未生成（占位）不算，出厂示例课程（没原件）也不算。
+    pdf_names = []
+    for _root in (paths.DATA_ROOT, paths.RES_ROOT):
+        _d = os.path.join(_root, course, "01_讲义")
+        if os.path.isdir(_d):
+            pdf_names.extend(os.listdir(_d))
+    _od = originals_dir(course)
+    orig_stems = set()
+    if os.path.isdir(_od):
+        orig_stems = {os.path.splitext(fn)[0].lower() for fn in os.listdir(_od)}
     for no in find_lesson(course):
         path = paths.data_or_res(course, "_lessons", no + ".py")
         text = ""
@@ -332,12 +345,19 @@ def lesson_meta(course: str) -> dict:
         m_orig = re.search(r'"orig":\s*"([^"]*)"', text)
         m_lang = re.search(r'"lang":\s*"([^"]*)"', text)
         en_path = paths.data_or_res(course, "_lessons", no + ".en.py")
+        _orig = (m_orig.group(1) if m_orig else "")
+        _stub = ("stub-from:" in text or "原件导入占位" in text)
+        _stem = os.path.splitext(os.path.basename(_orig))[0].lower() if _orig else ""
+        _haspdf = any(fn.startswith(no + "_") and fn.lower().endswith(".pdf")
+                      for fn in pdf_names)
         # 2026-11-18：导入的讲显示原件名（02.散剂a），不是讲号 T02；AI 标题放 subtitle
         out[no] = {"title": ((m_orig.group(1) if m_orig else "") or (m_zh.group(1) if m_zh else no)),
                    "subtitle": (m_zh.group(1) if m_zh else ""),
                    "en": (m_en.group(1) if m_en else ""),
                    "lang": (m_lang.group(1) if m_lang else "zh"),
-                   "stub": ("stub-from:" in text or "原件导入占位" in text),
+                   "stub": _stub,
+                   # 已成稿：原件还在 + 成品已出（两条都要，见函数头注释）
+                   "done": bool(_stem and not _stub and _stem in orig_stems and _haspdf),
                    "has_en": os.path.isfile(en_path)}
     return out
 
@@ -2830,11 +2850,18 @@ class _WinApi:
         return {"ok": bool(w)}
 
     def drag_window(self):
-        """标题条按住：ReleaseCapture + WM_NCLBUTTONDOWN(HTCAPTION)，把拖动交给系统。
+        """标题条按住 → 跟着鼠标挪窗口（自己实现拖动循环）。
 
-        2026-11-22 用户：「标题条按住没有交给系统」——界面上原来用 pointermove + move_by
-        自己挪窗口，指针一动就丢事件，也没有双击最大化。这里在 mousedown 时直接请 Windows
-        进标题栏拖动循环：贴边、多屏、高 DPI、双击最大化（最大化/还原）都由系统处理。
+        2026-11-22 的两次弯路都记在这里，免得再走回去：
+          ① 最早是 JS pointermove + move_by：每一小步都过一次 JS→Python 桥，动一下就卡，
+             指针离开标题条还丢事件，用户看到的是「拖不动」。
+          ② 改成 ReleaseCapture + SendMessage(WM_NCLBUTTONDOWN, HTCAPTION) 交给系统：
+             实测**无效**（本窗口是 pywebview 的无边框 WinForms 窗口，WinForms 的 WndProc
+             不把 WM_NCLBUTTONDOWN 交给 DefWindowProc，所以系统拖动循环根本不启动；
+             SendMessage 立刻返回 0，窗口纹丝不动，见 tools\check\check-window-real.py --drag）。
+          现在：在本线程里跑一个拖动循环——一直读系统光标位置（GetCursorPos，不依赖浏览器
+          事件，所以指针甩出窗口也不丢），窗口左上角 = 按下时的左上角 + 光标位移，
+          鼠标键松开（GetAsyncKeyState）就退出。这是自己实现，但用的是系统光标，跟手。
         """
         try:
             import ctypes
@@ -2843,13 +2870,34 @@ class _WinApi:
             hwnd = _find_hwnd()
             if not hwnd:
                 return {"ok": False, "error": "找不到窗口句柄"}
-            # 先释放 JS / WebView 这边的鼠标捕获，再让系统把这次按下当成标题栏拖动。
-            u.ReleaseCapture()
-            # WM_NCLBUTTONDOWN = 0x00A1，HTCAPTION = 2
-            u.SendMessageW.argtypes = [wt.HWND, ctypes.c_uint, ctypes.c_void_p, ctypes.c_void_p]
-            u.SendMessageW.restype = ctypes.c_ssize_t
-            u.SendMessageW(wt.HWND(hwnd), 0x00A1, 2, 0)
-            return {"ok": True}
+            h = wt.HWND(hwnd)
+            if u.IsZoomed(h):
+                # 最大化的窗口先还原（与系统行为一致：拖一个最大化窗口 = 还原）
+                u.ShowWindow(h, 9)          # SW_RESTORE
+                return {"ok": True, "restored": True}
+            # 12.2：SetWindowPos 参数类型显式写清，64 位下不写会按 int 截断句柄
+            u.SetWindowPos.argtypes = [wt.HWND, wt.HWND, ctypes.c_int, ctypes.c_int,
+                                       ctypes.c_int, ctypes.c_int, ctypes.c_uint]
+            r = wt.RECT()
+            u.GetWindowRect(h, ctypes.byref(r))
+            x0, y0 = int(r.left), int(r.top)
+            p = wt.POINT()
+            u.GetCursorPos(ctypes.byref(p))
+            cx0, cy0 = int(p.x), int(p.y)
+            # SWP_NOSIZE(0x1) | SWP_NOZORDER(0x4) | SWP_NOACTIVATE(0x10)
+            flags = 0x0001 | 0x0004 | 0x0010
+            moved = 0
+            deadline = time.time() + 60.0
+            while time.time() < deadline:
+                time.sleep(0.008)
+                if not (u.GetAsyncKeyState(0x01) & 0x8000):   # VK_LBUTTON 已松开
+                    break
+                u.GetCursorPos(ctypes.byref(p))
+                dx, dy = int(p.x) - cx0, int(p.y) - cy0
+                if dx or dy:
+                    u.SetWindowPos(h, None, x0 + dx, y0 + dy, 0, 0, flags)
+                    moved += 1
+            return {"ok": True, "moved": moved}
         except Exception as e:  # noqa: BLE001
             _log_error("drag_window", e)
             return {"ok": False, "error": str(e)}

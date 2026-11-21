@@ -198,6 +198,12 @@ nav a.on{background:var(--ink);color:var(--bg)}
   font-size:11.5px;padding:2px 0;opacity:0;transition:.14s}
 .f:hover .fmove{opacity:1}
 .f .fmove:hover{color:var(--ink);border-color:var(--line)}
+/* 2026-11-22 用户：「除非在课件里面选择重新生成」——成品行的「重新生成」与删除同排，
+   同样 hover 才显形。之前没给这条样式，按钮是浏览器默认的灰框，看着不像按钮。 */
+.f .fregen{border:1px solid transparent;background:transparent;border-radius:6px;color:var(--faint);
+  font-size:11.5px;padding:2px 0;opacity:0;transition:.14s}
+.f:hover .fregen{opacity:1}
+.f .fregen:hover{color:var(--ink);border-color:var(--line)}
 .dr-f{padding:9px 22px;border-top:1px solid var(--line);font-family:Consolas,monospace;font-size:10.5px;color:var(--faint)}
 .dr-ask{padding:13px 22px;border-top:1px solid var(--line);display:flex;align-items:center;gap:12px;background:var(--card2)}
 .dr-ask .note{font-size:11px;color:var(--faint);line-height:1.5}
@@ -726,6 +732,7 @@ footer{max-width:1080px;margin:26px auto 0;padding:0 16px;display:flex;align-ite
         </div>
         <div class="lens lsn" id="lessonPick"></div>
         <p class="hint" id="lsnOrig" style="display:none;border:0;padding:0;margin:8px 0 0"></p>
+        <p class="hint" id="lsnDone" style="display:none;border:0;padding:0;margin:8px 0 0"></p>
         <div class="tools" style="margin-top:12px">
           <button class="btn" id="btnGen">开始生成</button>
           <span class="hint" id="genHint" style="border:0;margin:0;padding:0;align-self:center">单本模式需勾选至少一讲；合订本模式包含全部讲次。</span>
@@ -1346,12 +1353,19 @@ function renderFiles(){
   let html = '';
   // 2026-11-19 用户：成品与原件的位置互换——成品在上，原件在下
   html += `<div class="dr-files-grp">成品 · ${all.length}<span>已生成的讲义</span></div>`;
-  html += list.length ? list.map(f=>`
+  // 2026-11-22 用户：生成完就从列表里消失，「除非在课件里面选择重新生成」——
+  //   成品名的格式是 <讲号>_<标题>_讲义.pdf，按前缀认回讲号，给这一行挂「重新生成」。
+  const lsns = c.lessons || [];
+  const lsnOf = nm => lsns.find(no => String(nm).startsWith(no + '_')) || '';
+  html += list.length ? list.map(f=>{
+    const no = lsnOf(f.name);
+    return `
     <div class="f" data-pdf="${esc(f.rel)}" data-name="${esc(f.name)}" title="${esc(f.rel)}">
       <div class="n">${esc(f.name)}</div>
       <div class="pg">${f.pages} p</div><div class="op">在软件里读 →</div>
-      <div class="fops"><button class="fdel" data-fdel="${esc(f.rel)}" data-fname="${esc(f.name)}" title="删除这份成品">删除</button></div>
-    </div>`).join('') : '<div class="empty">'+(kw?'无匹配成品':'本课程暂无成品。')+'</div>';
+      <div class="fops">${no?'<button class="fregen" data-fregen="'+esc(no)+'" title="把这一讲放回生成列表，重做会覆盖同名成品">重新生成</button>':''}<button class="fdel" data-fdel="${esc(f.rel)}" data-fname="${esc(f.name)}" title="删除这份成品">删除</button></div>
+    </div>`;
+  }).join('') : '<div class="empty">'+(kw?'无匹配成品':'本课程暂无成品。')+'</div>';
   html += `<div class="dr-files-grp">原件 · ${org.length}<span>导入的源课件</span></div>`;
   html += origs.length ? origs.map(f=>`
     <div class="f" data-pdf="${esc(f.rel)}" data-name="${esc(f.name)}" title="${esc(f.rel)}">
@@ -1362,7 +1376,8 @@ function renderFiles(){
     : '<div class="empty">'+(kw?'无匹配原件':'暂无原件。可在「生成」页点「＋ 导入课件」，或将 PDF 拖入窗口。')+'</div>';
   $('#drFiles').innerHTML = html;
   $('#drFiles').querySelectorAll('[data-pdf]').forEach(el=>el.onclick = e => {
-    if(e.target.classList.contains('fdel') || e.target.classList.contains('fmove')) return;
+    if(e.target.classList.contains('fdel') || e.target.classList.contains('fmove')
+       || e.target.classList.contains('fregen')) return;
     closeDrawer();
     openReader(el.dataset.pdf, el.dataset.name, c.code);
   });
@@ -1374,6 +1389,25 @@ function renderFiles(){
     e.stopPropagation();
     askMoveOriginal(b.dataset.fmove, c.code);
   });
+  $('#drFiles').querySelectorAll('[data-fregen]').forEach(b=>b.onclick = e => {
+    e.stopPropagation();
+    regenLesson(b.dataset.fregen, c.code);
+  });
+}
+/* 2026-11-22 用户：「除非在课件里面选择重新生成」——从成品行把这一讲放回生成列表并勾上，
+   用户自己点「开始生成」（不自动花钱）。生成成功后 REGEN 里移除，它又回到隐藏状态。 */
+function regenLesson(no, code){
+  if(!no) return;
+  REGEN.add(no);
+  showPage('make');
+  const cs = $('#courseSel');
+  if(cs && code && [...cs.options].some(o => o.value === code)) cs.value = code;
+  syncLessons();
+  LESSON_SEL.add(no);
+  const chip = document.querySelector('#lessonPick [data-lsn="' + CSS.escape(no) + '"]');
+  if(chip){ chip.classList.add('on'); chip.scrollIntoView({block:'nearest'}); }
+  syncLsnCnt();
+  toast('已放回生成列表：' + no + '（勾好后点「开始生成」；重做会覆盖同名成品）');
 }
 /* 2026-11-22 用户：「图1 的放错文件夹」——在文件列表每行给「移动」，目标课程自己选；
    后端 /api/move-originals 会把原件与对应占位讲次一起搬（不改内容、不删原件）。 */
@@ -1649,6 +1683,10 @@ function fillSelects(){
 /* 2026-11-17：生成页讲次改多选（用户：「开始生成也是可以多选生成哪几个的」）。
    LESSON_SEL 存勾中的讲号；换课程就清空，合订本模式下整块置灰（合订本 = 全部讲）。 */
 let LESSON_SEL = new Set();
+/* 2026-11-22 用户：「生成完了应该在列表里消失掉，除非在课件里面选择重新生成」——
+   REGEN 存「从课件行点了重新生成」的讲号：只要在里面就照旧显示，生成成功后自动移出
+   （又回到隐藏状态）。只在本次会话有效：要重做本来就要立刻去点生成。 */
+let REGEN = new Set();
 /* 2026-11-17 用户要求：全选旁加一个「删除」，点了之后每个讲号右上角出现红×。
    删除模式下点芯片本体不改选中（否则「想删结果改了生成范围」）；只认右上角那个 ×。 */
 let DEL_MODE = false;
@@ -1657,7 +1695,13 @@ function syncLessons(){
   const les = (c ? c.lessons : []) || [];
   LESSON_SEL = new Set();
   const lmeta = (c && c.lesson_meta) || {};
-  $('#lessonPick').innerHTML = les.map(n=>{
+  // 2026-11-22 用户：「生成完了之后 应该要在列表里面消失掉（虽然他还在那个课件里面），
+  //   除非在课件里面选择重新生成」——done 由后端按磁盘算（原件 + 成品都在）；
+  //   从课件行点了「重新生成」的讲号记在 REGEN 里，先照样显示。
+  const isDone = n => !!((lmeta[n] || {}).done) && !REGEN.has(n);
+  const hidden = les.filter(isDone);
+  const shown = les.filter(n => !isDone(n));
+  $('#lessonPick').innerHTML = shown.map(n=>{
     const m = lmeta[n] || {};
     const t = m.title || n;
     const code = (t !== n) ? `<span class="no">${esc(n)}</span>` : '';
@@ -1665,7 +1709,16 @@ function syncLessons(){
     const tip = m.subtitle && m.subtitle !== t ? (m.subtitle + ' · ' + n) : n;
     return `<button data-lsn="${esc(n)}" title="${esc(tip)}"><span class="ttl">${esc(t)}</span>${stub}${code}<span class="kill" data-kill="${esc(n)}" title="删除这一讲">×</span></button>`;
   }).join('')
-    || '<span class="hint" style="border:0;padding:0;margin:0">本课程没有可生成的讲次数据（缺少 _lessons 目录）</span>';
+    || (hidden.length
+      ? '<span class="hint" style="border:0;padding:0;margin:0">本课程 ' + hidden.length + ' 讲都已成稿（成品在课件里，点开课程抽屉就能读）。要重做：在抽屉里成品那行点「重新生成」。</span>'
+      : '<span class="hint" style="border:0;padding:0;margin:0">本课程没有可生成的讲次数据（缺少 _lessons 目录）</span>');
+  const de = $('#lsnDone');
+  if(de){
+    if(hidden.length){
+      de.style.display = '';
+      de.textContent = '另有 ' + hidden.length + ' 讲已成稿，已从列表隐藏；要重做在抽屉的成品行点「重新生成」。';
+    } else { de.style.display = 'none'; de.textContent = ''; }
+  }
   // 2026-11-17 用户：「拖进去之后要生成的批次那并没有更新」——导入的是原件，不是讲次；
   //   讲次只能来自 <课程>\_lessons\*.py。这里把差异当场写清，免得以为导入坏了。
   const ogN = ((c && c.originals) || []).length;
@@ -1945,8 +1998,8 @@ async function runGenerate(course, no, form, preset){
       gb.style.width = '100%'; gs.textContent = '完成';
       // 生成成功后从「要生成的批次」里移除这一讲（用户：课件生成完了并没有消失）
       LESSON_SEL.delete(no);
-      const chip = document.querySelector('#lessonPick [data-lsn="' + CSS.escape(no) + '"]');
-      if(chip) chip.classList.remove('on');
+      REGEN.delete(no);            // 重做完成：这一讲重新回到「已成稿、不显示」
+      syncLessons();               // 重新算隐藏集（B 已是新的 bootstrap）
       syncLsnCnt();
       const c = (B.courses||[]).find(x => x.code === course);
       if(c) openDrawer(c);
@@ -2273,6 +2326,22 @@ async function renderTextLayer(page, vp, lib){
   box.innerHTML = '';
   try{
     const tc = await page.getTextContent();
+    // 2026-11-22 用户：「选中的位置跟实际的字不完全重合」。以前是自己按行合并成一个 span，
+    //   只给了整行的 left/top 与一个字号，逐段宽度、字距、旋转都没还原，所以选中框会偏。
+    //   现在优先用 pdf.js 官方 TextLayer：每段一个 div，left/top 用整页百分比、宽度用 scaleX、
+    //   字号用 calc(Npx * var(--scale-factor))——这个变量必须由容器提供。
+    //   官方层不可用（老包/异常）就退回下面的按行合并，宁可粗一点也不能没有文字层。
+    box.style.setProperty('--scale-factor', String(vp.scale));
+    if(lib && typeof lib.TextLayer === 'function'){
+      try{
+        const layer = new lib.TextLayer({ textContentSource: tc, container: box, viewport: vp });
+        const p = layer.render();
+        if(p && p.then) await p;
+        box.dataset.tl = 'official';
+        return;
+      }catch(e){ box.dataset.tl = 'official-fail'; }
+    }
+    box.dataset.tl = 'fallback';
     const frag = document.createDocumentFragment();
     // 按行合并：pdf.js 的 items 常是单字，逐字建 span 会让选中文本变成「D E M O」。
     let line = '', first = null, fh = 0;
@@ -3178,7 +3247,15 @@ document.addEventListener('keydown', e => {
       const a = api();
       if(!a || !a.drag_window) return;
       e.preventDefault();
+      // 2026-11-22：drag_window 在 Python 侧跑拖动循环（读系统光标），
+      //   这次调用要等鼠标松开才返回——不要 await，否则标题条按钮会被卡住。
       try{ a.drag_window(); }catch(_){}
+    });
+    // 双击标题条 = 最大化 / 还原（与系统窗口一致）
+    bar.addEventListener('dblclick', e => {
+      if(e.target.closest('.tb-btn')) return;
+      const a = api();
+      if(a && a.toggle_max){ try{ a.toggle_max(); }catch(_){ } }
     });
     const bind = (id, fn) => { const el = document.getElementById(id); if(el) el.onclick = () => { const a = api(); if(a) fn(a); }; };
     bind('tbMin', a2 => a2.minimize());

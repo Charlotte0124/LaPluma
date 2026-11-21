@@ -1,0 +1,533 @@
+# -*- coding: utf-8 -*-
+r"""真窗口自测：在羽毛笔**自己的 WebView2 窗口**里量窗口矩形、选中位置与生成列表。
+
+为什么要有这一条（用户 2026-11-22）：
+  「标题条按住没有交给系统」「从全屏退出之后会占据整个屏幕，没办法缩小」
+  「选中的位置跟实际的字不完全重合」「生成完了应该要在列表里面消失掉」
+  这四件事全是**窗口层/排版层**的行为：接口能返回 ok、静态判据也能绿，
+  但真窗口里一拖就错。所以这里起真窗口，用 WebView2 的 CDP 端口驱动页面点击，
+  再用 Win32 去量窗口矩形、用 pymupdf 的词框去校文字层——两把不同的尺子对同一页。
+
+判据：
+  W1 真窗口起来了（win 样式 + 自绘标题条 + 版本号）
+  W2 阅读页点全屏 → 再退出，窗口矩形回到原样（±2px），且不是最大化
+  W3 文字层是 pdf.js 官方 TextLayer（dataset.tl=official），且选中词的框与 pymupdf 词框对齐（±6px）
+  W4 已成稿的讲次不在生成列表；抽屉成品行有「重新生成」，点了能放回并勾上
+  W5 选完松手不弹菜单；右键才弹，且两项都在（翻译这段 / 记笔记）
+
+注意：主脚本是 <script type="module">，函数不在 window 上——所以这里只点界面元素，
+      不调页面函数；页面里只读 DOM、设选区。
+
+用法：
+    python tools/check/check-window-real.py            # 起真窗口跑一遍，跑完自己关
+    python tools/check/check-window-real.py --keep     # 留下临时数据根与窗口（排查用）
+    python tools/check/check-window-real.py --drag     # 额外做一次真实鼠标拖动（会动一下鼠标）
+
+退出码：0 全绿；1 有红；2 没查（缺 playwright / 起不来窗口）
+"""
+from __future__ import annotations
+
+import argparse
+import ctypes
+import ctypes.wintypes as wt
+import json
+import os
+import re
+import shutil
+import socket
+import subprocess
+import sys
+import tempfile
+import time
+import urllib.request
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+ROOT = HERE.parent.parent
+GREEN, RED, YELLOW = [], [], []
+
+
+def ok(name, detail):
+    GREEN.append("%s %s" % (name, detail))
+
+
+def bad(name, detail):
+    RED.append("%s %s" % (name, detail))
+
+
+def skip(name, detail):
+    YELLOW.append("%s %s" % (name, detail))
+
+
+def free_port():
+    s = socket.socket()
+    s.bind(("127.0.0.1", 0))
+    p = s.getsockname()[1]
+    s.close()
+    return p
+
+
+def wait_http(url, timeout):
+    end = time.time() + timeout
+    while time.time() < end:
+        try:
+            with urllib.request.urlopen(url, timeout=2) as r:
+                if r.status == 200:
+                    return True
+        except Exception:  # noqa: BLE001
+            pass
+        time.sleep(0.4)
+    return False
+
+
+def make_home():
+    """临时数据根：拷一份 DEMO，再造一个「原件 + 成品」都齐的讲次（D01）。
+
+    要验「已成稿就隐藏」就必须有成对的数据，所以自己造一份；只在 tempfile 里，
+    不碰用户真正的课程目录（启动时把 paths.DATA_ROOT 指过来，见 _win_launch.py），
+    跑完删掉。
+    """
+    home = Path(tempfile.mkdtemp(prefix="pluma-win-"))
+    course = home / "TDEMO"
+    shutil.copytree(ROOT / "DEMO", course)
+    (course / "00_原件").mkdir(exist_ok=True)
+    import pymupdf
+    doc = pymupdf.open()
+    page = doc.new_page(width=420, height=595)
+    page.insert_text((60, 90), "Sample 01 original source", fontsize=14)
+    doc.save(str(course / "00_原件" / "Sample 01.pdf"))
+    doc.close()
+    # 首次运行向导会盖住整个界面：先写一份「已配置」的 api.json（不含 key），
+    # 这样窗口起来就是正常界面——自测要测的是窗口与生成列表，不是向导。
+    import json as _json
+    (home / "api.json").write_text(_json.dumps(
+        {"wizard_done": True, "model": "deepseek-flash", "save_dir": "out"}), encoding="utf-8")
+    py = course / "_lessons" / "D01.py"
+    text = py.read_text(encoding="utf-8")
+    text2 = re.sub(r"(LESSON\s*=\s*\{)", r'\1\n    "orig": "Sample 01",', text, count=1)
+    if text2 == text:
+        text2 = text.replace('"lang"', '"orig": "Sample 01", "lang"', 1)
+    py.write_text(text2, encoding="utf-8")
+    return home
+
+
+def find_hwnd(pid):
+    u = ctypes.windll.user32
+    hits = []
+    CB = ctypes.WINFUNCTYPE(ctypes.c_bool, wt.HWND, wt.LPARAM)
+
+    def cb(hwnd, _l):
+        p = wt.DWORD()
+        u.GetWindowThreadProcessId(hwnd, ctypes.byref(p))
+        if p.value == pid:
+            n = u.GetWindowTextLengthW(hwnd)
+            if n > 0:
+                buf = ctypes.create_unicode_buffer(n + 1)
+                u.GetWindowTextW(hwnd, buf, n + 1)
+                if "羽毛笔" in buf.value or "La Pluma" in buf.value:
+                    hits.append(hwnd)
+        return True
+
+    u.EnumWindows(CB(cb), 0)
+    return int(hits[0]) if hits else 0
+
+
+def rect_of(hwnd):
+    r = wt.RECT()
+    ctypes.windll.user32.GetWindowRect(wt.HWND(hwnd), ctypes.byref(r))
+    return (int(r.left), int(r.top), int(r.right - r.left), int(r.bottom - r.top))
+
+
+def is_zoom(hwnd):
+    return bool(ctypes.windll.user32.IsZoomed(wt.HWND(hwnd)))
+
+
+def drag_test(hwnd):
+    """真的按住标题条拖 120px：SendInput 是系统级输入，不是页面里合成的事件。"""
+    u = ctypes.windll.user32
+    ULONG_PTR = ctypes.c_ulonglong if ctypes.sizeof(ctypes.c_void_p) == 8 else ctypes.c_ulong
+
+    class MOUSEINPUT(ctypes.Structure):
+        _fields_ = [("dx", ctypes.c_long), ("dy", ctypes.c_long),
+                    ("mouseData", ctypes.c_ulong), ("dwFlags", ctypes.c_ulong),
+                    ("time", ctypes.c_ulong), ("dwExtraInfo", ULONG_PTR)]
+
+    class INPUT(ctypes.Structure):
+        class _U(ctypes.Union):
+            _fields_ = [("mi", MOUSEINPUT)]
+        _anonymous_ = ("u",)
+        _fields_ = [("type", ctypes.c_ulong), ("u", _U)]
+
+    before = rect_of(hwnd)
+    cur = wt.POINT()
+    u.GetCursorPos(ctypes.byref(cur))
+    x0 = before[0] + before[2] // 2
+    y0 = before[1] + 18
+
+    def send(flags):
+        inp = INPUT(type=0)
+        inp.mi = MOUSEINPUT(0, 0, 0, flags, 0, 0)
+        u.SendInput(1, ctypes.byref(inp), ctypes.sizeof(INPUT))
+
+    u.SetForegroundWindow(hwnd)
+    time.sleep(0.3)
+    u.SetCursorPos(int(x0), int(y0))
+    time.sleep(0.25)
+    send(0x0002)                        # MOUSEEVENTF_LEFTDOWN
+    time.sleep(0.25)
+    for i in range(1, 13):
+        u.SetCursorPos(int(x0 + i * 10), int(y0))
+        time.sleep(0.02)
+    time.sleep(0.2)
+    send(0x0004)                        # MOUSEEVENTF_LEFTUP
+    time.sleep(0.5)
+    after = rect_of(hwnd)
+    u.SetCursorPos(int(cur.x), int(cur.y))
+    return before, after
+
+
+def clear_overlay(page):
+    """有弹窗盖着就先关掉（自测在真窗口里点，不要被遮罩挡住）。"""
+    try:
+        if not page.evaluate("!!document.querySelector('#veil.on')"):
+            return True
+        page.keyboard.press("Escape")
+        time.sleep(0.4)
+        if page.evaluate("!!document.querySelector('#veil.on')"):
+            ghost = page.locator("#dlg .btn.ghost").first
+            if ghost.count():
+                ghost.click(timeout=3000)
+                time.sleep(0.3)
+        return not page.evaluate("!!document.querySelector('#veil.on')")
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def open_drawer(page, code):
+    clear_overlay(page)
+    page.click("a[data-page='courses']")
+    page.wait_for_selector(".course", timeout=20000)
+    page.locator(".course").filter(has_text=code).first.click()
+    page.wait_for_selector("#drFiles .f", timeout=20000)
+
+
+def open_reader_from_drawer(page):
+    page.locator("#drFiles .f").first.click()
+    page.wait_for_function("document.querySelectorAll('#pdftext span').length > 3", timeout=40000)
+
+
+def span_probe(page, probes):
+    """在页面里量「选中这些字」得到的选择框，与 pymupdf 的期望框作差。"""
+    return page.evaluate("""(probes) => {
+      const spans = [...document.querySelectorAll('#pdftext span')];
+      const base = document.getElementById('pdftext').getBoundingClientRect();
+      const out = [];
+      for (const pr of probes) {
+        let hit = null;
+        for (const s of spans) {
+          if (s.textContent && s.textContent.indexOf(pr.t) >= 0) { hit = s; break; }
+        }
+        if (!hit) { out.push({t: pr.t, miss: true}); continue; }
+        const i = hit.textContent.indexOf(pr.t);
+        const node = hit.firstChild;
+        if (!node || node.nodeType !== 3) { out.push({t: pr.t, miss: true}); continue; }
+        const rg = document.createRange();
+        rg.setStart(node, i);
+        rg.setEnd(node, i + pr.t.length);
+        const r = rg.getBoundingClientRect();
+        out.push({t: pr.t, dx: (r.left - base.left) - pr.x0,
+                  dw: r.width - (pr.x1 - pr.x0),
+                  dy: (r.top - base.top) - pr.y0});
+      }
+      return out;
+    }""", probes)
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--keep", action="store_true")
+    ap.add_argument("--drag", action="store_true")
+    args = ap.parse_args()
+
+    try:
+        from playwright.sync_api import sync_playwright
+    except Exception as e:  # noqa: BLE001
+        print("[没查] 装不上 playwright：%r" % (e,))
+        return 2
+
+    home = make_home()
+    port, cdp = free_port(), free_port()
+    env = dict(os.environ)
+    env["PLUMA_HOME"] = str(home)
+    env["PLUMA_TEST_CDP"] = str(cdp)
+    env["PYTHONIOENCODING"] = "utf-8"
+    log = open(str(home / "app.log"), "wb")
+    env["PLUMA_TEST_DATA"] = str(home)
+    proc = subprocess.Popen([sys.executable, str(HERE / "_win_launch.py"),
+                             "--port", str(port), "--no-browser"],
+                            cwd=str(ROOT), env=env, stdout=log, stderr=subprocess.STDOUT)
+    try:
+        if not wait_http("http://127.0.0.1:%d/api/bootstrap" % port, 90):
+            print("[没查] 窗口起不来（看 %s）" % (home / "app.log"))
+            return 2
+        hwnd = 0
+        end = time.time() + 30
+        while time.time() < end and not hwnd:
+            hwnd = find_hwnd(proc.pid)
+            time.sleep(0.4)
+        if not hwnd:
+            print("[没查] 找不到窗口句柄")
+            return 2
+
+        if not wait_http("http://127.0.0.1:%d/json/version" % cdp, 60):
+            tail = ""
+            try:
+                tail = (home / "app.log").read_text(encoding="utf-8", errors="replace")[-1200:]
+            except Exception:  # noqa: BLE001
+                pass
+            print("[没查] CDP 端口没开（PLUMA_TEST_CDP=%d）；app.log 末尾：\n%s" % (cdp, tail))
+            print("临时数据根：%s" % home)
+            for _ in range(0):
+                pass
+            return 2
+
+        with sync_playwright() as p:
+            br = p.chromium.connect_over_cdp("http://127.0.0.1:%d" % cdp)
+            page = None
+            end = time.time() + 40
+            while time.time() < end and page is None:
+                for ctx in br.contexts:
+                    for pg in ctx.pages:
+                        if "win=1" in pg.url:
+                            page = pg
+                if page is None:
+                    time.sleep(0.4)
+            if page is None:
+                print("[没查] CDP 连上了但没有 win=1 页面")
+                return 2
+
+            # ---- W1 真窗口 ----
+            try:
+                page.wait_for_selector("#tbar:not([hidden])", timeout=25000)
+                page.wait_for_function(
+                    "!!(document.querySelector('#tbVer')||{}).textContent", timeout=25000)
+                ver = (page.evaluate("document.querySelector('#tbVer').textContent") or "").strip()
+                iswin = page.evaluate("document.body.classList.contains('win')")
+                if iswin and re.match(r"v\d", ver):
+                    ok("W1 真窗口", "自绘标题条可见，版本号 %s" % ver)
+                else:
+                    bad("W1 真窗口", "win=%r 版本号=%r" % (iswin, ver))
+            except Exception as e:  # noqa: BLE001
+                bad("W1 真窗口", "标题条没出来：%r" % (e,))
+
+            pdf_path = None
+            for f in sorted((home / "TDEMO" / "01_讲义").glob("*.pdf")):
+                pdf_path = f
+                break
+
+            # ---- 先打开阅读页（W2/W3/W5 都要它）----
+            opened = False
+            if pdf_path is not None:
+                try:
+                    open_drawer(page, "TDEMO")
+                    open_reader_from_drawer(page)
+                    opened = True
+                except Exception as e:  # noqa: BLE001
+                    bad("打开阅读页", "抽屉里点不成成品：%r" % (e,))
+            else:
+                bad("打开阅读页", "临时数据里没有成品 PDF")
+
+            # ---- W2 全屏进出还原 ----
+            if opened:
+                try:
+                    r0 = rect_of(hwnd)
+                    page.click("#btnFs")
+                    time.sleep(1.2)
+                    page.click("#btnFs")
+                    time.sleep(1.5)
+                    r1 = rect_of(hwnd)
+                    zoomed = is_zoom(hwnd)
+                    d = max(abs(r1[i] - r0[i]) for i in range(4))
+                    if zoomed:
+                        bad("W2 全屏还原", "退出后仍是最大化：%r → %r" % (r0, r1))
+                    elif d <= 2:
+                        ok("W2 全屏还原", "%r → %r（最大偏差 %dpx）" % (r0, r1, d))
+                    else:
+                        bad("W2 全屏还原", "窗口没回原样：%r → %r（偏差 %dpx）" % (r0, r1, d))
+                except Exception as e:  # noqa: BLE001
+                    bad("W2 全屏还原", "全屏进出失败：%r" % (e,))
+
+            # ---- W3 文字层与词框 ----
+            if opened:
+                try:
+                    mode = page.evaluate("document.querySelector('#pdftext').dataset.tl || ''")
+                    nspan = page.evaluate("document.querySelectorAll('#pdftext span').length")
+                    # 2026-11-22：尺子有两把——页面里 pdf.js 排出来的 span，与 pymupdf 从同一份 PDF
+                    #   独立解出的词框。逐段找「同一基线上最近的词」，左端偏差就是排版是否对位。
+                    spans = page.evaluate("""() => {
+                      const base = document.getElementById('pdftext').getBoundingClientRect();
+                      return [...document.querySelectorAll('#pdftext span')]
+                        .map(s => { const r = s.getBoundingClientRect();
+                          return {t: s.textContent || '', x: r.left - base.left,
+                                  y: r.top - base.top, w: r.width}; });
+                    }""")
+                    import pymupdf
+                    d = pymupdf.open(str(pdf_path))
+                    pg = d[0]
+                    page_w = pg.rect.width
+                    scale = page.evaluate(
+                        "document.getElementById('pdfcanvas').clientWidth") / page_w
+                    words = [(w[4].strip(), w[0] * scale, w[1] * scale, (w[2] - w[0]) * scale)
+                             for w in pg.get_text("words") if w[4].strip()]
+                    d.close()
+                    norm = lambda s: re.sub(r"\s+", "", s)
+                    by_text = {}
+                    for t, wx, wy, ww in words:
+                        by_text.setdefault(norm(t), ww)
+                    checked, hits, worst, wbad, wdiffs = 0, 0, 0.0, 0, []
+                    for sp in spans:
+                        if not norm(sp["t"]):
+                            continue
+                        checked += 1
+                        near = [(abs(sp["x"] - wx), wx, wy) for t, wx, wy, ww in words
+                                if abs(sp["y"] - wy) <= 14]
+                        if not near:
+                            continue
+                        dx = min(near)[0]
+                        worst = max(worst, dx)
+                        if dx <= 4:
+                            hits += 1
+                        key = norm(sp["t"])
+                        if key in by_text:
+                            wdiffs.append(abs(sp["w"] - by_text[key]))
+                    if mode != "official":
+                        bad("W3 文字层", "dataset.tl=%r（不是 pdf.js 官方 TextLayer）" % (mode,))
+                    elif checked == 0:
+                        skip("W3 文字层", "文字层是空的（%d 段），没敢判" % (nspan,))
+                    elif hits < 0.75 * checked:
+                        bad("W3 文字层", "只有 %d/%d 段落在 pymupdf 词框起点上（最差 %.1fpx，容差 4）"
+                            % (hits, checked, worst))
+                    elif wdiffs and max(wdiffs) > 8:
+                        bad("W3 文字层", "段宽对不上：最差 %.1fpx（%d 段比对，容差 8）"
+                            % (max(wdiffs), len(wdiffs)))
+                    else:
+                        ok("W3 文字层",
+                           "官方 TextLayer %d 段；%d/%d 段与词框对位（最差 %.1fpx）；%d 段宽度偏差 ≤%.1fpx"
+                           % (nspan, hits, checked, worst, len(wdiffs),
+                              max(wdiffs) if wdiffs else 0.0))
+                except Exception as e:  # noqa: BLE001
+                    bad("W3 文字层", "没量成：%r" % (e,))
+
+            # ---- W4 已成稿隐藏 / 重新生成 ----
+            try:
+                clear_overlay(page)
+                page.click("a[data-page='generate']")
+                page.wait_for_selector("#courseSel", timeout=15000)
+                page.select_option("#courseSel", "TDEMO")
+                time.sleep(0.5)
+                chips = page.evaluate(
+                    "[...document.querySelectorAll('#lessonPick [data-lsn]')].map(x=>x.dataset.lsn)")
+                hint = (page.evaluate(
+                    '(document.querySelector("#lsnDone")||{}).textContent || ""') or "").strip()
+                if "D01" in chips:
+                    bad("W4 隐藏成稿", "D01 已成稿却还在生成列表：%r" % (chips,))
+                else:
+                    open_drawer(page, "TDEMO")
+                    has_btn = page.evaluate(
+                        "!!document.querySelector('#drFiles [data-fregen=\"D01\"]')")
+                    if not has_btn:
+                        bad("W4 隐藏成稿", "D01 已隐藏，但抽屉成品行没有「重新生成」")
+                    else:
+                        page.click('#drFiles [data-fregen="D01"]')
+                        time.sleep(0.6)
+                        back = page.evaluate(
+                            "!!document.querySelector('#lessonPick [data-lsn=\"D01\"]')")
+                        sel = page.evaluate(
+                            "(document.querySelector('#lsnCnt')||{}).textContent || ''")
+                        if back and "1" in sel:
+                            ok("W4 隐藏成稿", "列表已隐藏 %r；抽屉「重新生成」放回并勾上（%s / 提示 %s）"
+                               % (chips, sel.strip(), hint[:20]))
+                        else:
+                            bad("W4 隐藏成稿", "点了重新生成但没放回：chip=%r 计数=%r"
+                                % (back, sel))
+            except Exception as e:  # noqa: BLE001
+                bad("W4 隐藏成稿", "没验成：%r" % (e,))
+
+            # ---- W5 只有右键弹菜单 ----
+            if opened:
+                try:
+                    page.click("a[data-page='read']")
+                    page.wait_for_function(
+                        "document.querySelectorAll('#pdftext span').length > 3", timeout=30000)
+                    box = page.evaluate("""() => {
+                        const sp = [...document.querySelectorAll('#pdftext span')]
+                          .sort((a,b)=>b.textContent.length-a.textContent.length)[0];
+                        const r = sp.getBoundingClientRect();
+                        return {x:r.left, y:r.top, w:r.width, h:r.height, t:sp.textContent.slice(0,8)};
+                    }""")
+                    x0 = box["x"] + 3
+                    y0 = box["y"] + box["h"] / 2
+                    page.mouse.move(x0, y0)
+                    page.mouse.down()
+                    page.mouse.move(x0 + min(140, box["w"] - 6), y0, steps=10)
+                    page.mouse.up()
+                    time.sleep(0.4)
+                    sel_text = (page.evaluate("window.getSelection().toString()") or "").strip()
+                    after_up = page.evaluate("document.querySelectorAll('.note-menu').length")
+                    page.mouse.click(x0 + 30, y0, button="right")
+                    time.sleep(0.5)
+                    menu = page.evaluate(
+                        "[...document.querySelectorAll('.note-menu button')].map(b=>b.textContent)")
+                    if not sel_text:
+                        skip("W5 右键菜单", "拖选没选中字（%r），菜单没法判" % (box,))
+                    elif after_up:
+                        bad("W5 右键菜单", "只松手就弹了 %d 个菜单" % after_up)
+                    elif len(menu) >= 2 and any("翻译" in m for m in menu) and any("记" in m for m in menu):
+                        ok("W5 右键菜单", "选完松手不弹；右键弹出 %r（选中 %r）" % (menu, sel_text[:10]))
+                    else:
+                        bad("W5 右键菜单", "右键后菜单不对：%r" % (menu,))
+                except Exception as e:  # noqa: BLE001
+                    bad("W5 右键菜单", "没验成：%r" % (e,))
+
+            # ---- W6 真拖动（可选，会动鼠标）----
+            if args.drag:
+                try:
+                    page.click("a[data-page='generate']")
+                    time.sleep(0.4)
+                    b, a = drag_test(hwnd)
+                    moved = abs(a[0] - b[0]) + abs(a[1] - b[1])
+                    if moved >= 40:
+                        ok("W6 窗口拖动", "%r → %r（位移 %dpx）" % (b, a, moved))
+                        ctypes.windll.user32.SetWindowPos(wt.HWND(hwnd), None, b[0], b[1],
+                                                          b[2], b[3], 0x0004 | 0x0010)
+                    else:
+                        bad("W6 窗口拖动", "拖了 120px，位移只有 %dpx：%r → %r" % (moved, b, a))
+                except Exception as e:  # noqa: BLE001
+                    bad("W6 窗口拖动", "没拖成：%r" % (e,))
+    finally:
+        try:
+            proc.terminate()
+            proc.wait(timeout=10)
+        except Exception:  # noqa: BLE001
+            try:
+                proc.kill()
+            except Exception:  # noqa: BLE001
+                pass
+        log.close()
+        if not args.keep:
+            shutil.rmtree(str(home), ignore_errors=True)
+        else:
+            print("临时数据根保留：%s" % home)
+
+    for line in GREEN:
+        print("[通过] " + line)
+    for line in YELLOW:
+        print("[未验] " + line)
+    for line in RED:
+        print("[红]   " + line)
+    print("结论：%d 绿 / %d 未验 / %d 红" % (len(GREEN), len(YELLOW), len(RED)))
+    return 0 if not RED else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())
