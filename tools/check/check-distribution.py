@@ -31,12 +31,19 @@ def main() -> int:
         fails.append("红 C: 缺启动入口 启动羽毛笔.cmd")
     else:
         raw = launcher.read_bytes()
+        # 2026-11-21 用户：「启动羽毛笔.cmd 也没有用 打不开」，而同样内容的 一键启动.bat 能用。
+        #   真因不是 pythonw，是码页：双击时 cmd.exe 按系统 ANSI 码页（本机 936）读文件，
+        #   .cmd 当时是 UTF-8、里面硬编码了中文脚本名 → 解成乱码 → powershell 找不到路径 →
+        #   控制台一闪即关。.bat 是 GBK 存的，所以一直好使。
+        #   现在启动器纯 ASCII，用 *.ps1 通配找脚本；这条判据顺手把「又混进非 ASCII」也判红。
+        if any(b > 127 for b in raw):
+            fails.append("红 C: 启动羽毛笔.cmd 里有非 ASCII 字节（双击按系统码页解码会乱码）")
         try:
             text = raw.decode("utf-8")
         except UnicodeDecodeError:
             text = raw.decode("gbk", "replace")
-        if "一键启动.ps1" not in text:
-            fails.append("红 C: 启动入口没调用 一键启动.ps1")
+        if "一键启动.ps1" not in text and "*.ps1" not in text:
+            fails.append("红 C: 启动入口没调用启动脚本（一键启动.ps1 或 *.ps1 通配）")
     if not boot.exists():
         fails.append("红 C: 缺 一键启动.ps1（环境检查 + pymupdf 弹窗）")
     else:

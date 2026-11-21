@@ -80,13 +80,14 @@ $parts = $verRaw -split "\."
 $major = [int]$parts[0]
 $minor = [int]$parts[1]
 if ($major -ne 3 -or $minor -lt 10) { Fail-Exit "Python 版本太低：要 3.12，现在是 $verRaw。" 2 }
-Log-Step ("python=" + $pyExe + " ver=" + $verRaw + " pymupdf=" + $hasPdf)
+Log-Step ("python=" + $pyExe + " ver=" + $verRaw)
 if (-not $Windowed) { Write-Host "Python $verRaw   ($pyExe)" }
 if ($minor -ne 12 -and -not $Windowed) { Write-Host "提示：本仓按 Python 3.12 开发与实测，你的是 $verRaw。" -ForegroundColor Yellow }
 
 # ---------- 2. pymupdf ----------
 & $pyExe @pyArgs -c "import pymupdf" 2>$null
 $hasPdf = ($LASTEXITCODE -eq 0)
+Log-Step ("pymupdf=" + $hasPdf)
 
 if (-not $hasPdf -and $CheckOnly) {
     Write-Host "pymupdf: 缺（需要装）"

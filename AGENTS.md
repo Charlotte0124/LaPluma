@@ -60,8 +60,9 @@
 
 **为什么有这条**：2026-11-21 用户在 `dist\LaPluma.exe` 上双击只看到 `Error / Could not create temporary directory!`——PyInstaller 单文件启动第一步要把 86 MB 解包到 `%TEMP%`，这台机器上建目录被拒，我们的代码一行都没执行。用户随后定：「以后直接是文件夹的那种形式吧，不打包了。」
 
-1. 分发形态只有一个：**仓库文件夹 + `启动羽毛笔.cmd`**（用 `pythonw` 起 `ui\server.py`，无控制台）。不再产出 `dist\LaPluma.exe`，不再维护单文件打包脚本与 spec。
+1. 分发形态只有一个：**仓库文件夹 + `启动羽毛笔.cmd`**（控制台可见地起 `ui\server.py`：起不来时原因就在屏幕上；要无控制台加 `-Windowed`）。不再产出 `dist\LaPluma.exe`，不再维护单文件打包脚本与 spec。
 2. 启动入口只有一个：`启动羽毛笔.cmd`。要 `-Lan` / `-NoWindow` 走 `一键启动.ps1`，不要另造入口。
-3. 环境要求写进 README：Python 3.12 + `pymupdf`。
+3. **启动器必须是纯 ASCII，用 `*.ps1` 通配找启动脚本**（2026-11-21）。双击时 cmd.exe 按系统 ANSI 码页（本机 936）读 `.cmd`，文件里硬编码中文名会被解成乱码，powershell 拿到不存在的路径、控制台一闪即关——用户看到的就是「双击没反应」。同样内容改成 GBK 存的 `.bat` 就一直能用，这正是当时「只有 一键启动.bat 打得开」的原因。改启动器时不要把中文写回去。
+4. 环境要求写进 README：Python 3.12 + `pymupdf`。
 
-**怎么验证它被执行**：`python tools\check\check-distribution.py`（红 = 又出现 exe / 打包脚本，或启动入口缺失）。
+**怎么验证它被执行**：`python tools\check\check-distribution.py`（红 = 又出现 exe / 打包脚本、启动入口缺失、或启动器里混进非 ASCII 字节）。
