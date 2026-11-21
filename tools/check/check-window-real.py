@@ -16,7 +16,9 @@ r"""真窗口自测：在羽毛笔**自己的 WebView2 窗口**里量窗口矩�
   W5 选完松手不弹菜单；右键才弹，且两项都在（翻译这段 / 记笔记）
   W7 黑框兜底：relayout() 幂等（不改窗口、不改画面），html 背景不透明（不会露纯黑）
   W8 Esc 退出全屏：全屏里按 Esc，全屏元素清掉、标题条回来（WebView2 自己不收这个键）
-  W9 记笔记单框：点「记笔记」进一个框（灰底只读引用 + 1 个输入框），侧栏没有写入框，保存后列表带引用
+  W9 记笔记单框：点「记笔记」把侧栏切到写作页（灰底只读引用 + 1 个输入框），保存后回列表并带引用
+  W10 翻译两框：上下两个框 + 中间 ↑↓ 可交换方向；上面能输入；没译文时不出「引用翻译记成笔记」
+  W11 拖选：起点在按下的地方（不是行首），松手后选区保留
 
 注意：主脚本是 <script type="module">，函数不在 window 上——所以这里只点界面元素，
       不调页面函数；页面里只读 DOM、设选区。
@@ -672,47 +674,144 @@ def main():
                     page.click(".note-menu button:nth-child(2)")   # 记笔记（引用这段原文）
                     time.sleep(0.8)
                     info = page.evaluate("""() => {
-                      const np = document.querySelector('#page-note');
+                      const comp = document.querySelector('#noteCompose');
+                      const list = document.querySelector('#noteList');
                       const q = document.querySelector('#npQuote');
-                      const ta = document.querySelector('#npText');
-                      const side = document.querySelector('#sideNotes');
                       const cs = q ? getComputedStyle(q) : null;
-                      return {onPage: !!document.querySelector('.page.on#page-note'),
-                              textareas: np ? np.querySelectorAll('textarea').length : -1,
+                      return {inSide: !!comp && !comp.hidden, listHidden: !!list && list.hidden,
+                              textareas: comp ? comp.querySelectorAll('textarea').length : -1,
                               quoteLen: q ? q.textContent.trim().length : -1,
                               quoteColor: cs ? cs.color : '',
                               editable: q ? (q.isContentEditable || q.tagName === 'TEXTAREA' || q.tagName === 'INPUT') : true,
                               hasDraft: !!document.querySelector('#nDraft'),
-                              hasAdd: !!document.querySelector('#nAdd'),
-                              sideHasTextarea: side ? side.querySelectorAll('textarea').length : -1};
+                              pageNote: !!document.querySelector('#page-note')};
                     }""")
                     page.fill("#npText", "W9 由自测写入的一条笔记")
                     page.click("#npSave")
                     time.sleep(1.2)
                     after = page.evaluate("""() => ({
-                      back: !!document.querySelector('.page.on#page-read'),
+                      backList: !document.querySelector('#noteList').hidden,
                       count: document.querySelector('#nCount').textContent,
                       items: document.querySelectorAll('#nlist .nitem').length,
-                      quotes: document.querySelectorAll('#nlist .nq').length
+                      quotes: document.querySelectorAll('#nlist .nq').length,
+                      self: document.querySelectorAll('#nlist .nitem.self').length,
+                      draft: !!document.querySelector('#nDraft')
                     })""")
-                    if not info["onPage"]:
-                        bad("W9 记笔记单框", "点「记笔记」没进笔记页：%r" % (info,))
+                    if not info["inSide"] or not info["listHidden"]:
+                        bad("W9 记笔记单框", "点「记笔记」没有把侧栏切到写作页：%r" % (info,))
+                    elif info["pageNote"]:
+                        bad("W9 记笔记单框", "还留着整页 #page-note（用户要求就在侧栏里）")
                     elif info["textareas"] != 1:
-                        bad("W9 记笔记单框", "笔记页里有 %d 个输入框（应该只有 1 个）" % (info["textareas"],))
+                        bad("W9 记笔记单框", "写作页里有 %d 个输入框（应该只有 1 个）" % (info["textareas"],))
                     elif info["quoteLen"] < 4:
                         bad("W9 记笔记单框", "引用区是空的")
                     elif info["editable"]:
                         bad("W9 记笔记单框", "引用区可编辑（必须只读）")
-                    elif info["hasDraft"] or info["hasAdd"] or info["sideHasTextarea"] != 0:
-                        bad("W9 记笔记单框", "侧栏还留着写入框：nDraft=%r nAdd=%r 文本框=%d"
-                            % (info["hasDraft"], info["hasAdd"], info["sideHasTextarea"]))
-                    elif not after["back"] or after["items"] < 1 or after["quotes"] < 1:
-                        bad("W9 记笔记单框", "保存后没回到阅读页 / 列表没出现带引用的笔记：%r" % (after,))
+                    elif info["hasDraft"]:
+                        bad("W9 记笔记单框", "侧栏还留着 #nDraft 写入框")
+                    elif not after["backList"] or after["items"] < 1 or after["quotes"] < 1:
+                        bad("W9 记笔记单框", "保存后没回列表 / 列表没出现带引用的笔记：%r" % (after,))
                     else:
-                        ok("W9 记笔记单框", "引用 %d 字、颜色 %s、只读；侧栏无写入框；保存后列表 %s 条（带引用 %s 条）"
-                           % (info["quoteLen"], info["quoteColor"], after["count"], after["quotes"]))
+                        ok("W9 记笔记单框", "侧栏写作页：引用 %d 字、颜色 %s、只读；保存后回列表 %s 条（带引用 %s 条，自写 %s 条）"
+                           % (info["quoteLen"], info["quoteColor"], after["count"], after["quotes"], after["self"]))
                 except Exception as e:  # noqa: BLE001
                     bad("W9 记笔记单框", "没验成：%r" % (e,))
+
+            # ---- W10 翻译：两个框 + 中间 ↑↓ ----
+            if opened:
+                try:
+                    page.click("a[data-page='read']")
+                    page.click("#tabTrans")
+                    time.sleep(0.5)
+                    t0 = page.evaluate("""() => ({
+                      from: (document.querySelector('#trFrom')||{}).textContent,
+                      to: (document.querySelector('#trTo')||{}).textContent,
+                      swap: !!document.querySelector('#trSwap'),
+                      boxes: document.querySelectorAll('#sideTrans textarea').length,
+                      noteBtn: !!document.querySelector('#trNote'),
+                      outEmpty: ((document.querySelector('#trOut')||{}).className || '').indexOf('empty') >= 0
+                    })""")
+                    page.click("#trSwap")
+                    time.sleep(0.4)
+                    t1 = page.evaluate("""() => ({
+                      from: (document.querySelector('#trFrom')||{}).textContent,
+                      to: (document.querySelector('#trTo')||{}).textContent,
+                      ph: (document.querySelector('#trSrc')||{}).placeholder || ''
+                    })""")
+                    page.fill("#trSrc", "测试输入")
+                    kept = page.evaluate("document.querySelector('#trSrc').value")
+                    if not t0["swap"] or t0["boxes"] != 1:
+                        bad("W10 翻译两框", "结构不对：swap=%r 文本框=%d" % (t0["swap"], t0["boxes"]))
+                    elif t0["from"] == t1["from"] or t0["to"] == t1["to"]:
+                        bad("W10 翻译两框", "点 ↑↓ 方向没换：%r → %r" % (t0, t1))
+                    elif t0["noteBtn"] or not t0["outEmpty"]:
+                        bad("W10 翻译两框", "还没译文就出现了「引用翻译记成笔记」")
+                    elif kept != "测试输入":
+                        bad("W10 翻译两框", "上面那个框输入不进去：%r" % (kept,))
+                    else:
+                        ok("W10 翻译两框", "方向 %s→%s 可交换；上面可输入；译文未出时不显示「引用翻译记成笔记」"
+                           % (t0["from"], t0["to"]))
+                except Exception as e:  # noqa: BLE001
+                    bad("W10 翻译两框", "没验成：%r" % (e,))
+
+            # ---- W11 拖选：起点在按下的地方、松手不掉 ----
+            if opened:
+                try:
+                    open_drawer(page, "TDEMO")
+                    open_reader_from_drawer(page)
+                    time.sleep(2.0)      # 等排版那几次重排落地（重排会把文字层重建）
+                    # 用页面内的 PointerEvent 直接走我们那套 handler：判的是「起点在按下的地方、
+                    #   松手保留」这两条契约。真鼠标在 CDP 下时序不稳（文字层会被重排重建），
+                    #   但鼠标最终走的就是同一组 pointer 事件。
+                    res = page.evaluate("""() => {
+                      const spans = [...document.querySelectorAll('#pdftext span')]
+                        .filter(s => s.getBoundingClientRect().width > 80);
+                      const sp = spans[0];
+                      if (!sp) return {miss: 'no span'};
+                      sp.scrollIntoView({block:'center'});
+                      const r = sp.getBoundingClientRect();
+                      const box = document.getElementById('readerBox');
+                      const fire = (type, x, y, buttons) => {
+                        const ev = new PointerEvent(type, {clientX: x, clientY: y, button: 0,
+                          buttons: buttons, bubbles: true, cancelable: true, pointerId: 1});
+                        const el = (type === 'pointerdown') ? document.elementFromPoint(x, y) : box;
+                        el.dispatchEvent(ev);
+                        return ev.defaultPrevented;
+                      };
+                      const x0 = r.left + 20, y0 = r.top + r.height / 2;
+                      const accepted = fire('pointerdown', x0, y0, 1);
+                      const x1 = x0 + Math.min(70, r.width - 30);
+                      fire('pointermove', x1, y0, 1);
+                      const sel = window.getSelection();
+                      const mid = {t: sel.toString(), a: sel.anchorOffset, c: sel.isCollapsed};
+                      fire('pointerup', x1, y0, 0);
+                      const after = {t: sel.toString(), c: sel.isCollapsed};
+                      // 反方向再来一次：从右往左
+                      fire('pointerdown', x1, y0, 1);
+                      fire('pointermove', x0, y0, 1);
+                      const rev = {t: sel.toString(), a: sel.anchorOffset,
+                                   f: sel.focusOffset, c: sel.isCollapsed};
+                      fire('pointerup', x0, y0, 0);
+                      return {accepted: accepted, mid: mid, after: after, rev: rev};
+                    }""")
+                    if res.get("miss"):
+                        skip("W11 拖选", "页面上没有够宽的文字段")
+                    elif not res["accepted"]:
+                        bad("W11 拖选", "pointerdown 没被我们接管（浏览器会自己选，方向会乱）")
+                    elif res["mid"]["c"] or len(res["mid"]["t"].strip()) < 2:
+                        bad("W11 拖选", "拖的时候没选中字：%r" % (res["mid"],))
+                    elif res["mid"]["a"] <= 0:
+                        bad("W11 拖选", "选区起点不在按下的地方（anchorOffset=%d）" % (res["mid"]["a"],))
+                    elif res["after"]["c"] or len(res["after"]["t"].strip()) < 2:
+                        bad("W11 拖选", "一松手选区就没了：%r → %r" % (res["mid"], res["after"]))
+                    elif res["rev"]["c"] or len(res["rev"]["t"].strip()) < 2 \
+                            or res["rev"]["a"] <= res["rev"]["f"]:
+                        bad("W11 拖选", "反方向（右→左）选区不对（anchor 应在右边）：%r" % (res["rev"],))
+                    else:
+                        ok("W11 拖选", "起点在按下处（anchor=%d）、松手保留、反向也对：%r / %r"
+                           % (res["mid"]["a"], res["mid"]["t"][:10], res["rev"]["t"][:10]))
+                except Exception as e:  # noqa: BLE001
+                    bad("W11 拖选", "没验成：%r" % (e,))
 
             # ---- W6 真拖动（可选，会动鼠标）----
             if args.drag:

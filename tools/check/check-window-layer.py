@@ -8,6 +8,7 @@ r"""check-window-layer.py — 窗口/列表层的三条判据（2026-11-22）
      以前是「按行合并成一个 span」，选中框和字对不齐——用户就是这么发现的。
   2 已成稿隐藏：后端 lesson_meta 必须**按磁盘事实**算出 done（原件在 + 成品在），
      生成列表滤掉这些讲；重做入口只在课件成品行的「重新生成」。
+  4 滚动条槽固定：#appScroll 用 scrollbar-gutter:stable（不然「刚好过一屏」时界面上下抖、底边闪白条）
   3 干净启动器：F:/DSH/apps/羽毛笔 只能有一个纯 ASCII 的 .cmd，靠 %~dp0 + 通配符找
      .. 下的 LaPluma 的 .ps1；混进别的文件或中文内容，双击就会没反应。
 
@@ -159,6 +160,12 @@ def check(root, ldir=None):
         and ok_done is True
     ), detail or "lesson_meta 没跑通")
 
+    add(4, "滚动条槽固定", (
+        "scrollbar-gutter:stable" in idx
+        and "body.win #appScroll{flex:1 1 auto" in idx
+    ), "body.win #appScroll 必须 scrollbar-gutter:stable —— 内容是「刚好高过一屏」时，"
+       "滚动条出现/消失会让内容宽度来回变，界面上下抖、底边白条闪（2026-11-22 用户图1）")
+
     if ldir is None:
         ldir = LAUNCHER
     ok_l, detail_l = launcher_rows(ldir)
@@ -176,7 +183,7 @@ def main():
     bad = 0
     for no, name, ok, detail in rows:
         tag = "绿" if ok else ("未验" if ok is None else "红")
-        print("[%s] %d/3 %s —— %s" % (tag, no, name, detail))
+        print("[%s] %d/4 %s —— %s" % (tag, no, name, detail))
         if ok is False:
             bad += 1
     print("结论：%d 绿 / %d 红" % (len([r for r in rows if r[2] is True]), bad))
@@ -218,6 +225,7 @@ def selftest():
             ("done 固定为假", 2, SRV, '"done": bool(_stem', '"done": False and bool(_stem'),
             ("生成列表不过滤", 2, IDX, "const isDone = n =>", "const isDone = n => false &&"),
             ("重新生成入口拿掉", 2, IDX, "function regenLesson(no, code){", "function regenLessonX(no, code){"),
+            ("滚动条槽去掉", 4, IDX, "scrollbar-gutter:stable", "scrollbar-gutter:auto"),
             ("启动器目录混进别的文件", 3, None, None, bad_dir),
         ]
         all_ok = True

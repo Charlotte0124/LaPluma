@@ -1620,6 +1620,8 @@ class Handler(BaseHTTPRequestHandler):
                                 # 2026-11-22 用户：记笔记的框里要带一段「引用的原文」（灰、不可改）。
                                 #   引用跟着笔记一起存，列表里也能看出这条是拿哪段话起的。
                                 "q": str(note.get("q") or "")[:600],
+                                # self = 自己写的；trans = 引用译文（列表里用不同颜色区分）
+                                "kind": "trans" if str(note.get("kind") or "") == "trans" else "self",
                                 "at": time.strftime("%Y-%m-%d %H:%M"),
                                 "hhmm": time.strftime("%H:%M")})
                 elif act == "del":

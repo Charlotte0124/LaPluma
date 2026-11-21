@@ -132,24 +132,33 @@ def check(root):
     tr = block(idx, "function transNote(text, page)", "function renderTransResult")
     rt = block(idx, "function renderTransResult", "function renderTransHistory")
     add(4, "译文记成笔记", (
-        "openNotePage('【译文 p." in tr
+        "openNotePage('【译文 p." in tr and "'trans'" in tr
         and 'id="nDraft"' not in idx          # 侧栏那个写入框已经删了（2026-11-22 用户）
-        and "id=\"trNote\"" in rt and "transNote(" in rt
+        and "引用翻译记成笔记" in rt and "transNote(" in rt
+        and "id=\"trNote\"" in rt
         and idx.count("openTextMenu(") == 2
         and "document.addEventListener('contextmenu'" in idx
-    ), "译文「记成笔记」→ 打开记笔记框，引用句是【译文 p.N】；菜单只在 contextmenu 里打开")
+    ), "译文「引用翻译记成笔记」→ 侧栏写作页，引用句是【译文 p.N】；菜单只在 contextmenu 里打开")
 
-    np = block(idx, "function openNotePage(quote)", "function renderNotes")
-    qcss = block(idx, ".note-quote blockquote", ".note-write{")
-    add(5, "记笔记单框", (
-        "id=\"page-note\"" in idx and "id=\"npText\"" in idx and "id=\"npQuote\"" in idx
-        and "id=\"btnNotePage\"" in idx and "function openNotePage(quote)" in idx
-        and 'id="nDraft"' not in idx and 'id="nAdd"' not in idx      # 写入框只在那个框里
-        and ".note-body{display:block}" in idx
-        and "NP_QUOTE" in np and "q:NP_QUOTE" in idx
+    np = block(idx, "function openNotePage(quote, kind)", "function renderNotes")
+    qcss = block(idx, ".note-quote blockquote", "#noteCompose textarea")
+    add(5, "记笔记（侧栏写作页）", (
+        'id="noteCompose"' in idx and 'id="noteList"' in idx and 'id="page-note"' not in idx
+        and 'id="npText"' in idx and 'id="npQuote"' in idx and 'id="btnNotePage"' in idx
+        and 'id="nDraft"' not in idx and 'id="nAdd"' not in idx      # 写入框只在写作页里
+        and "noteView(" in np and "noteView(true)" in np and "noteView(false)" in idx
+        and "NP_QUOTE" in np and "q:NP_QUOTE" in idx and "NP_KIND" in np
+        and "kind:NP_KIND" in idx
         and "color:var(--faint)" in qcss and "user-select:text" in qcss
-        and "action:'add'" in np and "showPage('read')" in np
-    ), "记笔记 = 一个框（灰底只读引用 + 1 个输入）；侧栏只剩列表；引用跟着笔记存（q）")
+        and ".nitem.self{" in idx and ".nitem.trans{" in idx
+    ), "记笔记把侧栏切到写作页（灰底只读引用 + 1 个输入）；自己写/引用译文两种颜色；引用跟着笔记存（q）")
+
+    add(7, "翻译两框", (
+        'id="trSwap"' in idx and 'id="trFrom"' in idx and 'id="trTo"' in idx
+        and idx.count('id="trSrc"') == 1 and 'id="trOut"' in idx
+        and "#sideTrans textarea#trSrc" in idx and ".tr-out" in idx
+        and "if($('#trGo'))" in idx and "TR.to" in idx and "syncTrDir()" in idx
+    ), "翻译：上面一个框输入、中间 ↑↓ 换方向、下面一个框出译文（没译文时是占位）")
 
     hist = block(idx, "function renderTransHistory(items)", "async function transPage")
     ok_hist, detail = behavior_history(root)
@@ -171,10 +180,10 @@ def main():
     rows = check(ROOT)
     bad = 0
     for no, name, ok, detail in rows:
-        print("[%s] %d/6 %s —— %s" % ("绿" if ok else "红", no, name, detail))
+        print("[%s] %d/7 %s —— %s" % ("绿" if ok else "红", no, name, detail))
         if not ok:
             bad += 1
-    print("结论：%d/6" % (len(rows) - bad))
+    print("结论：%d/7" % (len(rows) - bad))
     return 0 if bad == 0 else 1
 
 
@@ -205,7 +214,7 @@ def selftest():
             ("退出全屏去掉 SWP_FRAMECHANGED", 2, SRV, "flags = 0x0040 | 0x0020", "flags = 0x0040"),
             ("移动入口被拿掉", 3, IDX, 'data-fmove="', 'data-mv="'),
             ("左键松手也弹菜单", 4, IDX, "/* 全屏（2026-11-17", "document.addEventListener('mouseup', e => { const s = String(window.getSelection()); if(s) openTextMenu(1,1,s); });\n/* 全屏（2026-11-17"),
-            ("整页笔记页缺失", 5, IDX, 'id="page-note"', 'id="page-note-x"'),
+            ("侧栏写作页缺失", 5, IDX, 'id="noteCompose"', 'id="noteCompose-x"'),
             ("历史条数改成 9", 6, SRV, "TRANS_HISTORY_MAX = 5", "TRANS_HISTORY_MAX = 9"),
         ]
         all_ok = True
