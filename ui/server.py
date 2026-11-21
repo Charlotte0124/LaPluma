@@ -2815,6 +2815,52 @@ def _find_hwnd() -> int:
         return 0
 
 
+def _force_foreground(hwnd: int) -> None:
+    """把刚起的窗口拉到最前。
+
+    2026-11-21 用户：「启动羽毛笔.cmd 也没有用 打不开」——实测窗口是起来了，
+    但双击时前台是别的全屏程序（BlueStacks），窗口开在它后面，用户就当没打开。
+    Windows 的前台锁会让 SetForegroundWindow 直接失败，所以补两手：
+    先 SW_RESTORE + BringWindowToTop，再用 SwitchToThisWindow（任务栏点击走的就是它）。
+    """
+    try:
+        import ctypes
+        u = ctypes.windll.user32
+        import ctypes.wintypes as wt
+        before = int(u.GetForegroundWindow() or 0)
+        bits = 8 * ctypes.sizeof(ctypes.c_void_p)
+        topmost = ctypes.c_void_p((1 << bits) - 1)      # HWND_TOPMOST
+        notop = ctypes.c_void_p((1 << bits) - 2)        # HWND_NOTOPMOST
+        SWP = 0x0001 | 0x0002 | 0x0040                  # NOSIZE | NOMOVE | SHOWWINDOW
+        u.SetWindowPos.argtypes = [wt.HWND, wt.HWND, ctypes.c_int, ctypes.c_int,
+                                   ctypes.c_int, ctypes.c_int, ctypes.c_uint]
+        u.SetWindowPos(wt.HWND(hwnd), topmost, 0, 0, 0, 0, SWP)
+        u.ShowWindow(hwnd, 9)               # SW_RESTORE
+        u.BringWindowToTop(hwnd)
+        u.SetForegroundWindow(hwnd)
+        if int(u.GetForegroundWindow() or 0) != hwnd:
+            try:
+                u.SwitchToThisWindow(hwnd, True)
+            except Exception:  # noqa: BLE001
+                pass
+        after = int(u.GetForegroundWindow() or 0)
+
+        # 置顶只留 2.5 秒：够用户看见「打开了」，又不会一直压在所有程序上面。
+        #   全屏游戏（BlueStacks）会把前台抢回去，所以必须靠这 2.5 秒让人看见。
+        def _drop_topmost():
+            time.sleep(2.5)
+            try:
+                u.SetWindowPos(wt.HWND(hwnd), notop, 0, 0, 0, 0, 0x0001 | 0x0002)
+            except Exception:  # noqa: BLE001
+                pass
+
+        threading.Thread(target=_drop_topmost, daemon=True).start()
+        _log_write("startup.log", "%s 前置窗口 0x%X：前台 0x%X → 0x%X（置顶 2.5 秒）"
+                   % (time.strftime("%Y-%m-%d %H:%M:%S"), hwnd, before, after))
+    except Exception as e:  # noqa: BLE001
+        _log_error("force_foreground", e)
+
+
 def _enable_resize() -> None:
     """无边框窗口默认丢了拉边缩放与贴边；把 WS_THICKFRAME / 最大最小化位补回去。
 
@@ -2848,6 +2894,7 @@ def _enable_resize() -> None:
                 _log_write("startup.log", "%s 补回窗口可缩放样式%s：%d 个窗口，首个 0x%X → 0x%X"
                            % (time.strftime("%Y-%m-%d %H:%M:%S"), tag, len(hits),
                               hits[0][1] & 0xFFFFFFFF, hits[0][2] & 0xFFFFFFFF))
+                _force_foreground(hits[0][0])
                 return True
             _log_write("startup.log", "%s 没找到可用的顶层窗口（可缩放未补）%s"
                        % (time.strftime("%Y-%m-%d %H:%M:%S"), tag))
@@ -3009,6 +3056,11 @@ def main() -> int:
         try:
             rc = run_window(local)
         except Exception as e:  # noqa: BLE001
+            # 2026-11-21 用户：「启动羽毛笔.cmd 打开的为什么是那个网页版的 不是视窗版本的」——
+            #   pythonw 没有控制台，这句 print 等于没写，出了事只能靠猜。落盘一份带堆栈的。
+            import traceback as _tb
+            _log_write("startup.log", "%s 窗口开不了，改用浏览器：%r\n%s"
+                       % (time.strftime("%Y-%m-%d %H:%M:%S"), e, _tb.format_exc()))
             print("  窗口开不了（%s），改用浏览器。" % e, flush=True)
             if "--no-browser" not in argv:
                 webbrowser.open(local)

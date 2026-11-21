@@ -12,6 +12,18 @@ try { [Console]::OutputEncoding = [Text.Encoding]::UTF8 } catch { }
 $root = Split-Path -Parent $MyInvocation.MyCommand.Definition
 Set-Location $root
 
+# 2026-11-21 用户：「启动羽毛笔.cmd 也没有用 打不开」。双击（Explorer 拉起）时窗口是隐藏的，
+#   脚本里任何一句失败都看不到、也不留痕。这里把每一步写进 .pluma\logs\launcher.log。
+$launcherLog = Join-Path $env:USERPROFILE ".pluma\logs\launcher.log"
+function Log-Step([string]$m) {
+    try {
+        $dir = Split-Path -Parent $launcherLog
+        if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
+        Add-Content -LiteralPath $launcherLog -Encoding UTF8 -Value ((Get-Date -Format "yyyy-MM-dd HH:mm:ss") + "  " + $m)
+    } catch { }
+}
+Log-Step ("start cwd=" + (Get-Location).Path + " windowed=" + $Windowed + " lan=" + $Lan + " checkonly=" + $CheckOnly)
+
 function Show-Msg([string]$text, [string]$title, [string]$kind) {
     if (-not $Windowed) {
         if ($kind -eq "error") { Write-Host $text -ForegroundColor Red } else { Write-Host $text }
@@ -36,6 +48,7 @@ function Ask-YesNo([string]$text, [string]$title) {
 }
 
 function Fail-Exit([string]$text, [int]$code) {
+    Log-Step ("FAIL(" + $code + "): " + $text)
     Show-Msg $text "羽毛笔 La Pluma" "error"
     if (-not $Windowed) { Write-Host ""; Write-Host "按回车关闭这个窗口" -ForegroundColor DarkGray; [void](Read-Host) }
     exit $code
@@ -67,6 +80,7 @@ $parts = $verRaw -split "\."
 $major = [int]$parts[0]
 $minor = [int]$parts[1]
 if ($major -ne 3 -or $minor -lt 10) { Fail-Exit "Python 版本太低：要 3.12，现在是 $verRaw。" 2 }
+Log-Step ("python=" + $pyExe + " ver=" + $verRaw + " pymupdf=" + $hasPdf)
 if (-not $Windowed) { Write-Host "Python $verRaw   ($pyExe)" }
 if ($minor -ne 12 -and -not $Windowed) { Write-Host "提示：本仓按 Python 3.12 开发与实测，你的是 $verRaw。" -ForegroundColor Yellow }
 
@@ -113,7 +127,25 @@ if ($NoWindow) { $flags += "--no-window" }
 if ($Windowed) {
     $pyw = Join-Path (Split-Path -Parent $pyExe) "pythonw.exe"
     if (-not (Test-Path $pyw)) { $pyw = $pyExe }
-    Start-Process -FilePath $pyw -ArgumentList (@("ui\server.py") + $flags) -WorkingDirectory $root
+    Log-Step ("starting " + $pyw + " args=" + ((@("ui\server.py") + $flags) -join " "))
+    $proc = Start-Process -FilePath $pyw -ArgumentList (@("ui\server.py") + $flags) -WorkingDirectory $root -PassThru
+    # 2026-11-21 用户：「启动羽毛笔.cmd 也没有用 打不开」。windowed 模式没有控制台，
+    #   起不来时只表现为「双击了没反应」。这里等到窗口出现为止；进程提前退出就弹窗说清楚。
+    $deadline = (Get-Date).AddSeconds(30)
+    $hwnd = 0
+    while ((Get-Date) -lt $deadline) {
+        Start-Sleep -Milliseconds 300
+        $proc.Refresh()
+        if ($proc.HasExited) { break }
+        if ($proc.MainWindowHandle -ne 0) { $hwnd = $proc.MainWindowHandle; break }
+    }
+    Log-Step ("wait done hwnd=" + $hwnd + " exited=" + $proc.HasExited + " err=" + $Error[0])
+    if ($proc.HasExited) {
+        Fail-Exit ("羽毛笔启动后立刻退出了（退出码 $($proc.ExitCode)）。`n`n请双击同一个文件夹里的 一键启动.bat 再来一次：那个窗口会停住不关，最后几行就是原因。") 4
+    }
+    if ($hwnd -eq 0) {
+        Show-Msg "后台服务起来了，但 30 秒内没等到窗口。`n`n先按 Alt+Tab 找找「羽毛笔 La Pluma」——可能被全屏程序挡在后面。`n`n还找不到就双击 一键启动.bat，那个窗口会显示报错。" "羽毛笔 La Pluma" "warn"
+    }
     exit 0
 }
 
