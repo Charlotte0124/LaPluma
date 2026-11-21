@@ -71,6 +71,10 @@ LOG_DIR = paths.data("_logs")
 USER_DIR = os.environ.get("PLUMA_HOME") or os.path.join(os.path.expanduser("~"), ".pluma")
 CFG_PATH = os.path.join(USER_DIR, "api.json")
 FAV_PATH = os.path.join(USER_DIR, "favorites.json")
+# 2026-11-22 用户：翻译页签要列「最近 5 条」，本机存 ~/.pluma/translate-history.json。
+#   只留 5 条：时间 / 原文前 120 字 / 译文前 400 字（多了会把侧栏撑成另一份正文）。
+TRANS_HISTORY_PATH = os.path.join(USER_DIR, "translate-history.json")
+TRANS_HISTORY_MAX = 5
 USAGE_PATH = os.path.join(LOG_DIR, "usage.jsonl")
 HOST, PORT = "127.0.0.1", 8765
 # 静态资源 ETag 缓存（2026-11-17）：path -> ((size, mtime), '"hash"')。
@@ -1045,6 +1049,33 @@ def save_notes(code: str, notes: list, doc: str = "") -> int:
     return len(keep)
 
 
+# ---------- 翻译历史（最近 5 条）----------
+# 2026-11-22 用户：「翻译历史 5 条」——每次成功翻译记一条，最新在前，最多 5 条；
+#   只截前 120 / 400 字，界面用来一键回填，不承担全文归档（全文在侧栏译文里）。
+def load_translate_history() -> list:
+    data = _read_json(TRANS_HISTORY_PATH, [])
+    if not isinstance(data, list):
+        return []
+    return [x for x in data if isinstance(x, dict)][:TRANS_HISTORY_MAX]
+
+
+def push_translate_history(src: str, dst: str, to: str, page: int) -> list:
+    try:
+        page_n = max(1, int(page or 1))
+    except Exception:  # noqa: BLE001
+        page_n = 1
+    item = {
+        "at": time.strftime("%Y-%m-%d %H:%M"),
+        "src": str(src or "")[:120],
+        "dst": str(dst or "")[:400],
+        "to": "en" if str(to or "").lower().startswith("en") else "zh",
+        "page": page_n,
+    }
+    items = ([item] + load_translate_history())[:TRANS_HISTORY_MAX]
+    _write_json(TRANS_HISTORY_PATH, items)
+    return items
+
+
 # ---------- 主机上线 ----------
 def lan_ip() -> str:
     """拿本机在局域网里的地址（不发包：连一个不可达地址只为读路由表）。
@@ -1398,6 +1429,10 @@ class Handler(BaseHTTPRequestHandler):
             if u.path == "/api/notes":
                 return self._json(dict(ok=True, **load_notes(q.get("code", [DEFAULT_COURSE])[0],
                                                              q.get("doc", [""])[0])))
+            if u.path == "/api/translate/history":
+                # 2026-11-22：阅读页翻译页签顶部「最近 5 条」只读这里；写入在 /api/translate 成功时。
+                return self._json({"ok": True, "items": load_translate_history(),
+                                   "max": TRANS_HISTORY_MAX})
             if u.path == "/favicon.ico":
                 # 2026-11-17：以前回 204（空图标）——用户「软件图标还没有整上去」。
                 # 现在直接给 exe 那张 assets\lapluma.ico，标签页与书签都用它。
@@ -2044,8 +2079,12 @@ class Handler(BaseHTTPRequestHandler):
                 except Exception as e:  # noqa: BLE001
                     return self._json({"ok": False, "error": "翻译失败：%s" % e}, 502)
                 log_usage(out.get("model") or cfg["model"], out.get("usage") or {})
-                return self._json({"ok": True, "text": out.get("text", ""), "page": page,
-                                   "to": to, "chars": len(src), "seconds": out.get("seconds")})
+                text = out.get("text", "")
+                # 2026-11-22：成功一次记一条历史（最多 5 条），随响应回给界面直接重画列表。
+                history = push_translate_history(src, text, to, page)
+                return self._json({"ok": True, "text": text, "page": page,
+                                   "to": to, "chars": len(src), "seconds": out.get("seconds"),
+                                   "history": history})
 
             if u.path == "/api/generate":
                 no = str(body.get("lesson", "")).strip()

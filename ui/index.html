@@ -849,6 +849,7 @@ footer{max-width:1080px;margin:26px auto 0;padding:0 16px;display:flex;align-ite
           </div>
           <div id="sideTrans" hidden>
             <h5 style="margin:0 0 8px;font-size:12.5px;font-weight:600">第 <span id="curP3">p.1</span> 页 · 翻译</h5>
+            <div class="tr-hist" id="trHist"></div>
             <p class="hint" style="border:0;margin:0 0 8px;background:var(--card2);border-radius:7px;padding:6px 9px">
               只翻这一页的文字层，译文进侧栏，不挡正文。扫描件没有文字层会直说读不到。</p>
             <div class="acts" style="justify-content:flex-start;margin:0">
@@ -3089,6 +3090,7 @@ document.addEventListener('keydown', e => {
 (async function init(){
   applyTheme(localStorage.getItem('pluma.theme') || 'light');
   await boot();
+  loadTransHistory();
   // 本机配置里的偏好优先（端口换了也在）；下面的 ?theme / ?lang 仍然最高优先，留给截图与回归。
   const UI = (B && B.ui) || {};
   if(UI.theme) applyTheme(UI.theme);
