@@ -2013,17 +2013,21 @@ class Handler(BaseHTTPRequestHandler):
                 except Exception:  # noqa: BLE001
                     page = 1
                 to = "en" if str(body.get("to") or "zh").lower().startswith("en") else "zh"
-                if not rel:
-                    return self._json({"ok": False, "error": "缺 rel（PDF 相对路径）"}, 400)
-                try:
-                    path = safe_join(*[x for x in rel.replace("\\", "/").split("/") if x])
-                    import pymupdf
-                    with pymupdf.open(path) as doc:
-                        if page < 1 or page > len(doc):
-                            return self._json({"ok": False, "error": "页码超出范围：%s" % page}, 400)
-                        src = (doc[page - 1].get_text("text") or "").strip()
-                except Exception as e:  # noqa: BLE001
-                    return self._json({"ok": False, "error": "读不到这一页：%r" % (e,)}, 500)
+                # 2026-11-22 用户：「要一个复制文字进去的内置翻译器（参考 Word）」，以及选中一段
+                #   文字右键就能译。带了 text 就译这段，不再读整页。
+                src = str(body.get("text") or "").strip()[:6000]
+                if not src:
+                    if not rel:
+                        return self._json({"ok": False, "error": "缺 rel（PDF 相对路径）"}, 400)
+                    try:
+                        path = safe_join(*[x for x in rel.replace("\\", "/").split("/") if x])
+                        import pymupdf
+                        with pymupdf.open(path) as doc:
+                            if page < 1 or page > len(doc):
+                                return self._json({"ok": False, "error": "页码超出范围：%s" % page}, 400)
+                            src = (doc[page - 1].get_text("text") or "").strip()
+                    except Exception as e:  # noqa: BLE001
+                        return self._json({"ok": False, "error": "读不到这一页：%r" % (e,)}, 500)
                 if len(src) < 2:
                     return self._json({"ok": False, "error": "这一页没有文字层（扫描件/图片）"}, 400)
                 cfg = load_cfg()

@@ -796,8 +796,7 @@ footer{max-width:1080px;margin:26px auto 0;padding:0 16px;display:flex;align-ite
           </div>
           <div id="sideNotes">
             <div>
-              <h5 style="margin:0 0 10px;font-size:12.5px;font-weight:600;display:flex;justify-content:space-between">
-                第 <span id="curP">p.1</span> 页<span style="color:var(--faint);font-weight:400;font-size:11.5px"></span></h5>
+              <h5 style="margin:0 0 10px;font-size:12.5px;font-weight:600">第 <span id="curP">p.1</span> 页</h5>
               <div class="nlist" id="nlist"></div>
             </div>
             <div class="narea">
@@ -819,6 +818,8 @@ footer{max-width:1080px;margin:26px auto 0;padding:0 16px;display:flex;align-ite
               <button class="btn ghost" id="trEn">译成英文</button>
             </div>
             <div id="trOut"></div>
+            <textarea id="trSrc" placeholder="要翻译的文字（留空则翻这一页）" style="width:100%;min-height:86px;margin-top:10px;padding:9px 11px;border:1px solid var(--line);border-radius:9px;background:var(--card2);color:var(--ink);font:inherit;font-size:12.5px;resize:vertical"></textarea>
+            <div class="hint" style="border:0;margin:6px 0 0">也可以只译页面上的某一段：填在这里再点上面的按钮。</div>
           </div>
         </div>
       </div>
@@ -2331,36 +2332,61 @@ $('#readerBox').addEventListener('pointercancel', endPan);
 /* 2026-11-21 用户第九条：阅读页左上「← 课程」不用了（导航栏本来就能回课程），去掉。 */
 
 /* 选中 PDF 文字 → 右键「记笔记」（2026-11-19 用户第 10 条）*/
-let noteMenu = null;
-function closeNoteMenu(){ if(noteMenu){ noteMenu.remove(); noteMenu = null; } }
-document.addEventListener('click', closeNoteMenu);
-window.addEventListener('scroll', closeNoteMenu, true);
-document.addEventListener('contextmenu', e => {
-  if(!e.target.closest('#pdftext')) return;
-  const sel = String(window.getSelection ? window.getSelection().toString() : '').trim();
-  if(!sel) return;
-  e.preventDefault(); closeNoteMenu();
+let noteMenu = null, noteMenuAt = 0;
+function closeNoteMenu(force){
+  if(!force && Date.now() - noteMenuAt < 400) return;   // 刚弹出时的同一次点击不算「点别处」
+  if(noteMenu){ noteMenu.remove(); noteMenu = null; }
+}
+document.addEventListener('click', () => closeNoteMenu());
+window.addEventListener('scroll', () => closeNoteMenu(), true);
+/* 2026-11-22 用户：选中一段文字 → 右键 → 要「翻译」和「记笔记」两项；
+   原来只有一项，而且他们说「菜单没了、选中后没反应」——所以除了右键，选中松手也弹同一个菜单。 */
+function openTextMenu(x, y, sel){
+  closeNoteMenu(true);
+  const quote = sel.length > 500 ? sel.slice(0, 500) + '…' : sel;
   noteMenu = document.createElement('div');
   noteMenu.className = 'note-menu';
-  const b = document.createElement('button');
-  b.textContent = '记笔记（引用这段原文）';
-  b.onclick = () => {
+  const bTr = document.createElement('button');
+  bTr.textContent = '翻译这段';
+  bTr.onclick = () => {
+    closeNoteMenu(true);
+    if(typeof showSide === 'function') showSide();
+    if(typeof sideTab === 'function') sideTab('trans');
+    const s = $('#trSrc');
+    if(s){ s.value = quote; s.focus(); }
+  };
+  const bNote = document.createElement('button');
+  bNote.textContent = '记笔记（引用这段原文）';
+  bNote.onclick = () => {
     const ta = $('#nDraft');
     if(ta){
-      const quote = sel.length > 500 ? sel.slice(0, 500) + '…' : sel;
       ta.value = '【原文 p.' + RD.page + '】' + quote + '\n' + (ta.value || '');
-      // 2026-11-21 用户第八条：点「记笔记（引用这段原文）」要弹出笔记侧栏，而不是只在下面塞字。
       if(typeof showSide === 'function') showSide();
       if(typeof sideTab === 'function') sideTab('notes');
       ta.focus();
       ta.scrollIntoView({block:'center'});
     }
-    closeNoteMenu();
+    closeNoteMenu(true);
   };
-  noteMenu.appendChild(b);
-  noteMenu.style.left = Math.min(window.innerWidth - 170, e.clientX) + 'px';
-  noteMenu.style.top = Math.min(window.innerHeight - 60, e.clientY) + 'px';
+  noteMenu.appendChild(bTr);
+  noteMenu.appendChild(bNote);
+  noteMenu.style.left = Math.min(window.innerWidth - 190, x) + 'px';
+  noteMenu.style.top = Math.min(window.innerHeight - 84, y) + 'px';
+  noteMenuAt = Date.now();
   document.body.appendChild(noteMenu);
+}
+document.addEventListener('contextmenu', e => {
+  if(!e.target.closest('#pdftext')) return;
+  const sel = String(window.getSelection ? window.getSelection().toString() : '').trim();
+  if(!sel) return;
+  e.preventDefault();
+  openTextMenu(e.clientX, e.clientY, sel);
+});
+document.addEventListener('mouseup', e => {
+  if(e.button !== 0 || !e.target.closest('#pdftext')) return;
+  const sel = String(window.getSelection ? window.getSelection().toString() : '').trim();
+  if(!sel) return;
+  setTimeout(() => openTextMenu(e.clientX, e.clientY, sel), 10);
 });
 /* 全屏（2026-11-17 用户：「全屏模式不见了」）：只把阅读卡全屏，顶栏与笔记栏一起进去；
    按下后重新排版一次（可视宽度变了，按旧的 fit 算会留白）。键盘 F 同效，Esc 由浏览器退出。 */
@@ -2440,9 +2466,10 @@ async function transPage(to){
   const out = $('#trOut');
   if(!out) return;
   out.innerHTML = '<div class="hint" style="border:0">翻译中…（一次模型调用）</div>';
+  const typed = ($('#trSrc') && $('#trSrc').value || '').trim();
   try{
     const j = await (await fetch('/api/translate',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({rel:RD.rel, page:RD.page, to})})).json();
+      body:JSON.stringify(typed ? {text: typed, to} : {rel:RD.rel, page:RD.page, to})})).json();
     if(!j.ok){ out.innerHTML = '<div class="hint" style="border:0;color:var(--red)">' + esc(j.error||'翻译失败') + '</div>'; return; }
     out.innerHTML = '<div class="trans" id="trText">' + esc(j.text) + '</div>' +
       '<div class="acts" style="justify-content:flex-start"><button class="btn ghost" id="trCopy">复制译文</button></div>';
