@@ -21,6 +21,7 @@ r"""导入原件 → DeepSeek 写正文 → 落成 <课程>\_lessons\<讲号>.py
 """
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import json
 import os
@@ -41,6 +42,13 @@ import client  # noqa: E402  api\client.py
 MAX_SRC = 45000          # 一次送进模型的源文本上限（字符）
 MAX_FIGS = 40            # 最多抽多少张课件页图（整页截图）
 FALLBACK_FIGS = 12       # 课件没有图片对象时，整页兜底导出最多几张（2026-11-21 加）
+# 2026-11-23 用户：「不应该是以图片对于讲解的重要性来选择的吗 而不是先到先得名额吧」
+#   名额按「这一页的图值不值」排（_fig_score），先得把「不是内容图」的东西认出来：
+FIG_MIN_AREA = 0.01      # 一张图占页面不到 1% → 模板徽标 / 边框 / 水印，不当作内容图
+FIG_MIN_PX = 300         # 原图短边不到 300px → 缩略图 / 图标，不当作内容图
+FIG_DUP_MAX = 3          # 同一张图出现在 >3 页 → 模板 / 横幅（复制到每页的那种）
+FIG_LOW_HEAD = ("目录", "大纲", "致谢", "参考", "参考文献", "复习", "作业", "本章小结",
+                "agenda", "outline", "thank", "reference", "revision", "homework", "outcomes")
 GLOSSARY_MIN = 20        # 内容门要求的最小术语条数
 ORIG_DIR = "00_原件"
 
@@ -161,6 +169,23 @@ def lesson_path(course: str, no: str, lang: str = "zh") -> str:
     return paths.data_or_res(course, "_lessons", no + suffix)
 
 
+def fig_overrides(course: str, no: str) -> tuple:
+    r"""读 <课程>\_lessons\<讲号>.py 里手写的 FIG_PAGES / FIG_SKIP（按页号指定，优先于自动排序）。
+
+    2026-11-23：自动排序只认版面与文字，认不出「这一页是本节的关键图」这种语义；
+    所以留一个手闸——你在讲次数据文件里加一行就能一票指定（不用改代码）：
+        FIG_PAGES = [12, 13, 27]   # 这几页的图必须进讲义
+        FIG_SKIP  = [1, 48]        # 这几页不要（封面/致谢/重复图）
+    """
+    text = _read_text(lesson_path(course, no, "zh"))
+    def nums(key):
+        m = re.search(key + r"\s*=\s*\[([0-9,\s]*)\]", text)
+        if not m:
+            return ()
+        return tuple(int(x) for x in re.findall(r"\d+", m.group(1)))
+    return nums("FIG_PAGES"), nums("FIG_SKIP")
+
+
 def source_of(course: str, no: str) -> tuple[str, str]:
     """找到这一讲对应的原件 PDF：先认 stub-from 标记，再按标题在 00_原件 里找。"""
     p = lesson_path(course, no, "zh")
@@ -230,7 +255,52 @@ def _save_page_png(page, out_root: str, i: int) -> str | None:
         return None
 
 
-def extract_figures(pdf: str, course: str, no: str, emit=print) -> list:
+def _page_head(page) -> str:
+    """这一页的开头一行（用来认「目录 / 致谢 / 复习」这类页）。"""
+    try:
+        t = (page.get_text("text") or "").strip()
+    except Exception:  # noqa: BLE001
+        return ""
+    return t.split("\n")[0][:60] if t else ""
+
+
+def _fig_score(chars: int, real: float, big: float, head: str) -> float:
+    """这一页的图「值不值占一个名额」的分数——只量版面与文字，不猜语义。
+
+    2026-11-23 用户：「不应该是以图片对于讲解的重要性来选择的吗 而不是先到先得名额吧」，
+    选了「按版面启发式排」。于是规则明写成三条，可复算、可复盘：
+      · 真图占页比（去掉模板徽标 / 缩略图 / 重复图之后）：占半页的示意图 >> 角落小图；
+      · 这一页的字数：字越少，图越像这一页的主角；
+      · 页首文本：目录 / 大纲 / 致谢 / 参考 / 复习 / 作业 这类页降权。
+    """
+    s = 3.0 * min(big, 1.0) + 1.2 * min(real, 1.0)
+    if chars < 120:
+        s += 0.6
+    elif chars < 300:
+        s += 0.2
+    low = (head or "").strip().lower()
+    if any(k in low for k in FIG_LOW_HEAD):
+        s -= 1.5
+    return round(s, 3)
+
+
+def _real_area(imgs: list, dup: dict) -> tuple:
+    """一页里「真图」的合计占比与最大一张占比。
+
+    2026-11-23：课件几乎每页都带同一个模板徽标（实测一份 57 页课件里，同一张图重复 57 页、
+    每页只占 0.3%）。这种页整页截进讲义只是「一张文字页的照片」，不增加信息，所以不算真图；
+    但它不影响这一讲照常生成正文，只是不占图的名额。
+    """
+    keep = [im for im in imgs
+            if im[0] >= FIG_MIN_AREA and im[1] >= FIG_MIN_PX
+            and dup.get(im[2], 1) <= FIG_DUP_MAX]
+    if not keep:
+        return 0.0, 0.0
+    return round(sum(min(im[0], 1.0) for im in keep), 3), round(max(im[0] for im in keep), 3)
+
+
+def extract_figures(pdf: str, course: str, no: str, emit=print,
+                    fig_pages=(), fig_skip=()) -> list:
     """把课件页导出成整页 PNG，供模型用 fig 块引用。
 
     2026-11-19 用户：「生成的东西少了引用课件 PDF 原文截图图片」——讲义要以课件为依据，
@@ -239,7 +309,12 @@ def extract_figures(pdf: str, course: str, no: str, emit=print) -> list:
       · 纯文字 / 矢量版式的课件（没有图片对象）不再「抽 0 张、一声不响」：改为整页导出，
         让读者至少能看到原件版式（日志写明这是兜底，最多 FALLBACK_FIGS 张）；
       · 导出前清掉上一次的 pNNN.png，换课件重导不会把旧图混进新讲义。
-    返回 [(相对 <课程>\\06_笔记\\assets 的路径, 页码), …]；返回空列表时日志一定说明原因。
+    2026-11-23 用户：「不应该是以图片对于讲解的重要性来选择的吗 而不是先到先得名额吧」：
+      以前是**按页序抓前 40 张**，名额被「只挂模板徽标的纯文字页」占掉、真图被砍（实测一份
+      57 页课件：前 40 页里 10 页是徽标页，第 41–55 页的真图全丢）。现在按 _fig_score 从高到低
+      取，页序只在同分时定先后；被丢掉的页在日志里点名 + 给分，可复盘。
+      个人指定：FIG_PAGES / FIG_SKIP（写在 <课程>\\_lessons\\<讲号>.py 里，优先于自动排序）。
+    返回 [(相对 <课程>\\\\06_笔记\\\\assets 的路径, 页码), …]；返回空列表时日志一定说明原因。
     """
     try:
         import pymupdf
@@ -264,56 +339,99 @@ def extract_figures(pdf: str, course: str, no: str, emit=print) -> list:
     if stale:
         emit("[图] 清掉上次导出的 %d 张旧页图（换课件重导不带旧图）" % stale)
 
-    out, total, with_img, failed = [], 0, 0, 0
+    out, failed = [], []
+    total = 0
     try:
         with pymupdf.open(pdf) as doc:
             total = len(doc)
+            cands, dup = [], {}
             for i, page in enumerate(doc, 1):
                 try:
-                    imgs = page.get_images(full=True)
+                    infos = page.get_image_info(xrefs=True)
                 except Exception:  # noqa: BLE001
                     continue
-                if not imgs:
+                if not infos:
                     continue
-                with_img += 1
-                if len(out) >= MAX_FIGS:
-                    continue
-                name = _save_page_png(page, out_root, i)
-                if name:
-                    out.append(("gen/%s/%s" % (no, name), i))
-                else:
-                    failed += 1
-            if not out:
-                # 兜底：这份课件没有图片对象（纯文字/矢量版式）。整页导出，别静默给一份没图的讲义。
+                r = page.rect
+                parea = (r.width * r.height) or 1.0
+                imgs = []
+                for im in infos:
+                    bb = im.get("bbox") or (0, 0, 0, 0)
+                    area = max(0.0, bb[2] - bb[0]) * max(0.0, bb[3] - bb[1]) / parea
+                    px = max(int(im.get("width") or 0), int(im.get("height") or 0))
+                    try:
+                        h = hashlib.md5(doc.extract_image(im["xref"])["image"]).hexdigest()[:10]
+                    except Exception:  # noqa: BLE001
+                        h = "?"
+                    imgs.append((area, px, h))
+                    if area >= FIG_MIN_AREA and px >= FIG_MIN_PX:
+                        dup[h] = dup.get(h, 0) + 1
+                cands.append((i, len((page.get_text("text") or "").strip()), _page_head(page), imgs))
+
+            scored = []
+            for i, chars, head, imgs in cands:
+                real, big = _real_area(imgs, dup)
+                if real <= 0:
+                    continue            # 只有模板徽标 / 缩略图：这页不给名额（正文照旧生成）
+                scored.append((i, _fig_score(chars, real, big, head)))
+            scored.sort(key=lambda x: (-x[1], x[0]))
+            score_of = dict(scored)
+
+            forced = sorted({int(p) for p in fig_pages if 1 <= int(p) <= total})
+            skipped = {int(p) for p in fig_skip if 1 <= int(p) <= total}
+            if not scored and not forced:
+                # 一页真图都没有（纯文字 / 矢量版式）：整页兜底导出，别静默给一份没图的讲义
                 cap = min(MAX_FIGS, FALLBACK_FIGS)
                 for i, page in enumerate(doc, 1):
                     if len(out) >= cap:
                         break
-                    try:
-                        if not (page.get_text("text") or "").strip():
-                            continue          # 空白页不导
-                    except Exception:  # noqa: BLE001
-                        continue
+                    if not (page.get_text("text") or "").strip():
+                        continue        # 空白页不导
                     name = _save_page_png(page, out_root, i)
                     if name:
                         out.append(("gen/%s/%s" % (no, name), i))
+                    if len(out) >= cap:
+                        break
                 if out:
-                    emit("[图] 这份课件 %d 页都没有图片对象（纯文字/矢量版式）：改为整页导出 %d 页，"
+                    emit("[图] 这份课件 %d 页都没有内容图（纯文字/矢量版式）：改为整页导出 %d 页，"
                          "让讲义能看到原件版式 → %s" % (total, len(out), out_root))
                 else:
                     emit("[图] 这份课件导不出页图（%d 页既没有图片对象、也没有文字层，像是扫描件）"
                          "→ 这一讲不会有原件图" % total)
-                    return []
+                return []
+
+            keep = [p for p in forced if p not in skipped][:MAX_FIGS]
+            for i, _s in scored:
+                if len(keep) >= MAX_FIGS:
+                    break
+                if i in skipped or i in keep:
+                    continue
+                keep.append(i)
+            keep = sorted(set(keep))[:MAX_FIGS]
+            if not keep:
+                emit("[图] 一页可用的课件图都没有（真图全被 FIG_SKIP 排除，或都是模板徽标）→ 这一讲不带原件图")
+            for i in keep:
+                name = _save_page_png(doc[i - 1], out_root, i)
+                if name:
+                    out.append(("gen/%s/%s" % (no, name), i))
+                else:
+                    failed.append(i)
     except Exception as e:  # noqa: BLE001
         emit("[图] 抽图失败（%r）；这一讲不会有原件图" % (e,))
         return []
-    if out and with_img:
-        emit("[图] 课件共 %d 页：有图片对象的 %d 页 → 导出 %d 张%s → %s"
-             % (total, with_img, len(out),
-                "（另有 %d 页导出失败）" % failed if failed else "", out_root))
-    if out and with_img > len(out) and not failed:
-        emit("[图] 注意：课件有 %d 页带图，超过单讲上限 %d 张，后面的图没导出"
-             % (with_img, MAX_FIGS))
+
+    if out:
+        emit("[图] 课件共 %d 页：%d 页有图片对象 → 其中 %d 页是真图 → 按重要性取 %d 张%s → %s"
+             % (total, len(cands), len(scored), len(out),
+                "（另有 %d 页导出失败：%s）" % (len(failed), "、".join("p.%d" % p for p in failed[:5]))
+                if failed else "", out_root))
+    dropped = [(i, score_of.get(i)) for i, _s in scored if i not in set(keep) and i not in skipped]
+    if dropped:
+        head = "、".join("p.%d(分 %.1f)" % (i, s) for i, s in dropped[:8])
+        emit("[图] 名额 %d 张不够：另有 %d 页真图没进讲义 —— %s%s（要指定就写 FIG_PAGES / FIG_SKIP）"
+             % (MAX_FIGS, len(dropped), head, " 等" if len(dropped) > 8 else ""))
+    if forced or skipped:
+        emit("[图] 手写指定覆盖：FIG_PAGES=%r FIG_SKIP=%r" % (list(forced), sorted(skipped)))
     return out
 
 
@@ -565,7 +683,8 @@ def draft(course: str, no: str, lang: str = "zh", emit=print, model: str | None 
     emit("[原件] %s" % orig)
     src, ntext, total = pages_text(pdf, emit=emit)
     emit("[源文本] %d 页有文字 / 共 %d 页 · %d 字符" % (ntext, total, len(src)))
-    figs = extract_figures(pdf, course, no, emit=emit)
+    fp, fs = fig_overrides(course, no)
+    figs = extract_figures(pdf, course, no, emit=emit, fig_pages=fp, fig_skip=fs)
     fig_help = _fig_help(figs, lang)
     if not figs:
         emit("[图] 这一讲没有可用课件页图（原因见上面的 [图] 日志）；讲义里不会出现原件图")
