@@ -185,6 +185,79 @@ def _cap_with_page(cap: str, page: int) -> str:
     return cap
 
 
+_PAGE_TEXTS: dict = {}
+
+
+def _orig_pdf(no: str):
+    """这一讲对应的原件 PDF；找不到返回 None（只读，用来把「补图」选到对的一页）。"""
+    try:
+        import _draft                      # engine 同目录；运行时才导入（它会带 client）
+        return _draft.source_of(COURSE, no)[0]
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _page_texts(no: str, pages) -> dict:
+    """页码 → 该页文字（去空白、小写）。读不到原件就返回空 dict，补图退回页序。"""
+    key = (no, tuple(sorted(pages)))
+    if key in _PAGE_TEXTS:
+        return _PAGE_TEXTS[key]
+    out = {}
+    pdf = _orig_pdf(no)
+    if pdf and os.path.isfile(pdf):
+        try:
+            import pymupdf
+            with pymupdf.open(pdf) as doc:
+                for p in key[1]:
+                    if 1 <= p <= len(doc):
+                        out[p] = re.sub(r"\s+", "", doc[p - 1].get_text("text") or "").lower()
+        except Exception:  # noqa: BLE001
+            out = {}
+    _PAGE_TEXTS[key] = out
+    return out
+
+
+def _bigrams(s) -> set:
+    t = re.sub(r"\s+", "", str(s or "")).lower()
+    if len(t) < 2:
+        return {t} if t else set()
+    return {t[i:i + 2] for i in range(len(t) - 1)}
+
+
+def _sec_query(sec: dict) -> str:
+    """这一节「想找什么图」：标题（中英）+ 正文前几块的文字。"""
+    parts = [str(sec.get('zh') or ''), str(sec.get('en') or '')]
+    for b in (sec.get('body') or [])[:12]:
+        if isinstance(b, (list, tuple)) and len(b) > 1 and b and b[0] != 'fig':
+            parts.append(str(b[1]))
+    return ''.join(parts)[:600]
+
+
+def _pick_page(query: str, pending: list, texts: dict):
+    """在还没用过的页里选「文字最像这一节」的一页；都不像就返回 None（调用方退回页序）。
+
+    2026-11-23 用户要求提高「信息相关性」：以前补图是**按页序**弹一张——弹到哪页算哪页，
+    和这一节内容可能毫无关系（比如讲免疫的节配了张化学式）。现在按「节标题+正文」与该页
+    文字的 2-gram 重合度选页；读不到原件文字时仍然退回页序，并在日志里说明。
+    """
+    q = _bigrams(query)
+    if not q or not texts:
+        return None
+    best, best_s = None, 0.0
+    for item in pending:
+        rel, pg = item[0], item[1]
+        t = texts.get(pg) or ''
+        if not t:
+            continue
+        tb = _bigrams(t)
+        if not tb:
+            continue
+        s = len(q & tb) / float(len(q))
+        if s > best_s:
+            best, best_s = (rel, pg), s
+    return best
+
+
 def ensure_figures(lesson: dict, emit=print, avail: list | None = None) -> dict:
     """修图名 + 每节补图 + 图注补出处（R115，用户 2026-11-21）。
 
@@ -244,11 +317,15 @@ def ensure_figures(lesson: dict, emit=print, avail: list | None = None) -> dict:
     stats['used'] = len(used)
     stats['model'] = len(used)               # 数据里真正认得的图（编的/对不上的已计入 dropped）
 
-    # ③ 没图的节（§0 导读除外，与提示词口径一致）按课件页顺序补 1 张；
+    # ③ 没图的节（§0 导读除外，与提示词口径一致）补 1 张；
     #    自动补图总量 ≤ 课件总页数的 1/3（用户「不要滥补」），跨多次 build 也算同一个预算。
+    #    2026-11-23 用户要求提高「信息相关性」：选页改成按「节内容 ↔ 该页文字」的相似度，
+    #    不再按页序弹一张（弹到哪页算哪页，讲免疫的节配了张化学式那种）。读不到原件文字时退回页序。
     cap = max(1, stats['total'] // 3)
     stats['cap'] = max(0, cap - added_before)
     pending = [x for x in avail if x[0] not in used]
+    texts = _page_texts(no, {x[1] for x in pending}) if pending else {}
+    by_sim = 0
     for s in secs:
         if stats['added'] >= stats['cap'] or not pending:
             break
@@ -256,12 +333,22 @@ def ensure_figures(lesson: dict, emit=print, avail: list | None = None) -> dict:
             continue                       # 导读不塞原页图：提示词也是「§0 导读除外」
         if any(b and b[0] == 'fig' for b in s.get('body') or []):
             continue
-        rel, page = pending.pop(0)
+        hit = _pick_page(_sec_query(s), pending, texts)
+        if hit is not None:
+            pending = [x for x in pending if x != hit]
+            by_sim += 1
+        else:
+            hit = pending.pop(0)           # 读不到原件文字 / 没有像的页 → 退回页序
+        rel, page = hit
         s['body'] = list(s.get('body') or []) + [('fig', rel, '原件第 %d 页（课件 p.%d）' % (page, page))]
         stats['added'] += 1
         used.add(rel)
     if stats['added']:
         lesson['figs_added'] = added_before + stats['added']
+        emit('[图] 这一轮补了 %d 张：%d 张按「节内容 ↔ 该页文字」的相似度选页%s'
+             % (stats['added'], by_sim,
+                '' if by_sim == stats['added'] else
+                '；其余 %d 张退回页序（读不到原件文字，或没有像的页）' % (stats['added'] - by_sim)))
     stats['used'] = len(used)
     stats['sections_no_fig'] = sum(
         1 for s in secs

@@ -47,9 +47,22 @@ FALLBACK_FIGS = 12       # 课件没有图片对象时，整页兜底导出最�
 FIG_MIN_AREA = 0.01      # 一张图占页面不到 1% → 模板徽标 / 边框 / 水印，不当作内容图
 FIG_MIN_PX = 300         # 原图短边不到 300px → 缩略图 / 图标，不当作内容图
 FIG_DUP_MAX = 3          # 同一张图出现在 >3 页 → 模板 / 横幅（复制到每页的那种）
+# 2026-11-23 用户要求把「图」做得更有信息量：实测图页上最大一张图只占页面 8.7%–41%，
+#   整页截图里一多半是页面文字与留白（讲义里等于又贴了一遍正文）。所以导出时裁到图区。
+FIG_CROP = True          # 只导出图区（关掉就退回整页截图）
+FIG_CROP_PAD = 0.02      # 裁切四周留 2% 页面尺寸的边
+FIG_CROP_MIN = 0.12      # 图区占页面 <12% 时不裁（裁了像缩略图，反而看不清）
+FIG_CROP_MAX = 0.85      # 图区占页面 ≥85% 基本等于整页，不裁
+# 裁切后要多少像素：讲义里图宽度约 17cm，1000px 约合 150dpi（够印）；再高只是把体积抬上去。
+FIG_CROP_TARGET_PX = 1000
+FIG_CROP_DPI_MAX = 150
 FIG_LOW_HEAD = ("目录", "大纲", "致谢", "参考", "参考文献", "复习", "作业", "本章小结",
                 "agenda", "outline", "thank", "reference", "revision", "homework", "outcomes")
 GLOSSARY_MIN = 20        # 内容门要求的最小术语条数
+# 表格（2026-11-23）：get_text 会把表格拍平，有真表时补一段结构化文字
+TABLE_MIN_ROWS = 2
+TABLE_MIN_COLS = 2
+TABLE_MAX_ROWS = 30
 ORIG_DIR = "00_原件"
 
 _SYS_ZH = """你是课程讲义编辑。把给定课件（逐页文本，页码已标）整理成一份可打印自学的讲义数据。
@@ -218,38 +231,89 @@ def source_of(course: str, no: str) -> tuple[str, str]:
     raise FileNotFoundError("找不到这一讲的原件：%s\\%s（先导入课件）" % (course, ORIG_DIR))
 
 
-def pages_text(pdf: str, emit=print) -> tuple[str, int, int]:
-    """PDF 文字层 → (带页码的文本, 有文字的页数, 总页数)。扫描件会得到 0 页。"""
+def _table_text(page) -> str:
+    """把这一页里的表格补成「行1: a | b | c」的结构化文字（2026-11-23）。
+
+    为什么：get_text("text") 把表格拍成一行行文字，列的对应关系全丢——模型看到的是
+    「AaBbCc」这种串，写进讲义就错位。实测真实课件里表格不多（11 份里 3 份有，共 6 张），
+    所以这里只做「有真表就补一段」，没有表格的页一个字都不加。
+    """
+    try:
+        tabs = page.find_tables()
+        rows = []
+        for t in tabs.tables:
+            try:
+                data = t.extract()
+            except Exception:  # noqa: BLE001
+                continue
+            data = [r for r in (data or []) if r]
+            if len(data) < TABLE_MIN_ROWS:
+                continue
+            if max(len(r) for r in data) < TABLE_MIN_COLS:
+                continue
+            for r in data[:TABLE_MAX_ROWS]:
+                cells = [re.sub(r"\s+", " ", str(c or "")).strip() for c in r]
+                rows.append(" | ".join(cells))
+        return ("\n【表格】\n" + "\n".join(rows)) if rows else ""
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def page_blocks(pdf: str) -> tuple[list, int, int]:
+    """PDF → 每页一块「【课件 p.N】+ 文字（有表格就附结构化表格）」。
+
+    返回 (blocks, 有内容的页数, 总页数)。扫描件得到 0 块。draft() 用它来分块生成。
+    """
     try:
         import pymupdf
     except Exception as e:  # noqa: BLE001
         raise RuntimeError("缺 pymupdf，读不了 PDF：%r" % (e,))
     doc = pymupdf.open(pdf)
-    out, n = [], 0
+    blocks, n = [], 0
     total = len(doc)
     for i, pg in enumerate(doc, 1):
         t = (pg.get_text("text") or "").strip()
-        if not t:
+        tab = _table_text(pg)
+        if not t and not tab:
             continue
         t = "\n".join(x.strip() for x in t.splitlines() if x.strip())
-        out.append("【课件 p.%d】\n%s" % (i, t))
+        body = t + (("\n" + tab) if tab else "")
+        blocks.append("【课件 p.%d】\n%s" % (i, body))
         n += 1
-    text = "\n\n".join(out)
+    doc.close()
+    return blocks, n, total
+
+
+def pages_text(pdf: str, emit=print) -> tuple[str, int, int]:
+    """PDF 文字层 → (带页码的文本, 有文字的页数, 总页数)。扫描件会得到 0 页。"""
+    blocks, n, total = page_blocks(pdf)
+    text = "\n\n".join(blocks)
     if not text:
         raise RuntimeError("这份 PDF 没有文字层（像是扫描件）：%s" % os.path.basename(pdf))
     if len(text) > MAX_SRC:
-        emit("[注意] 源文本 %d 字符，超过上限 %d，只取前 %d 字符（后半本未参与生成）"
-             % (len(text), MAX_SRC, MAX_SRC))
-        text = text[:MAX_SRC]
+        emit("[注意] 源文本 %d 字符，超过上限 %d：draft() 会分块生成（这一份不再被截断）"
+             % (len(text), MAX_SRC))
     return text, n, total
 
 
-def _save_page_png(page, out_root: str, i: int) -> str | None:
-    """把一页课件导出成 96 dpi 的整页 PNG；成功返回文件名，失败返回 None。"""
+def _save_page_png(page, out_root: str, i: int, clip=None) -> str | None:
+    """把一页课件导出成 PNG；clip 给了就只导出那块区域。
+
+    2026-11-23（用户要求提高「信息量」）：以前一律整页 96 dpi，而实测图页上最大的图只占
+    8.7%–41%，整页截图一多半是页面文字与留白——讲义里那张「原件图」等于又贴了一遍正文。
+    现在按图区裁切，并按比例提 dpi（裁到 30% 宽就按 ~300 dpi 出图），保证贴进讲义时
+    像素量不低于整页截图，不会变糊；整页那条路原样保留。
+    """
     try:
-        pix = page.get_pixmap(dpi=96)
+        import pymupdf
         name = "p%03d.png" % i
-        pix.save(os.path.join(out_root, name))
+        dst = os.path.join(out_root, name)
+        if clip is None or not FIG_CROP:
+            page.get_pixmap(dpi=96).save(dst)
+            return name
+        w_pt = max(1.0, clip[2] - clip[0])
+        dpi = int(min(FIG_CROP_DPI_MAX, max(96, round(FIG_CROP_TARGET_PX * 72.0 / w_pt))))
+        page.get_pixmap(dpi=dpi, clip=pymupdf.Rect(*clip)).save(dst)
         return name
     except Exception:  # noqa: BLE001
         return None
@@ -282,6 +346,31 @@ def _fig_score(chars: int, real: float, big: float, head: str) -> float:
     if any(k in low for k in FIG_LOW_HEAD):
         s -= 1.5
     return round(s, 3)
+
+
+def _crop_rect(page, imgs: list, dup: dict) -> tuple | None:
+    """这一页要导出的区域：真图的并集 + 2% 留白；太小 / 接近整页时返回 None（用整页）。
+
+    2026-11-23：图区占页 <12% 时裁出来只有一小块，贴进讲义反而是缩略图（看不清），
+    所以那种页仍然整页导出；≥85% 时裁不裁差别不大，也不裁。
+    """
+    keep = [im for im in imgs
+            if im[0] >= FIG_MIN_AREA and im[1] >= FIG_MIN_PX
+            and dup.get(im[2], 1) <= FIG_DUP_MAX and len(im) > 3]
+    if not keep:
+        return None
+    r = page.rect
+    pad_x, pad_y = r.width * FIG_CROP_PAD, r.height * FIG_CROP_PAD
+    x0 = max(r.x0, min(im[3][0] for im in keep) - pad_x)
+    y0 = max(r.y0, min(im[3][1] for im in keep) - pad_y)
+    x1 = min(r.x1, max(im[3][2] for im in keep) + pad_x)
+    y1 = min(r.y1, max(im[3][3] for im in keep) + pad_y)
+    if x1 - x0 <= 1 or y1 - y0 <= 1:
+        return None
+    frac = ((x1 - x0) * (y1 - y0)) / ((r.width * r.height) or 1)
+    if frac < FIG_CROP_MIN or frac >= FIG_CROP_MAX:
+        return None
+    return (x0, y0, x1, y1)
 
 
 def _real_area(imgs: list, dup: dict) -> tuple:
@@ -344,7 +433,7 @@ def extract_figures(pdf: str, course: str, no: str, emit=print,
     try:
         with pymupdf.open(pdf) as doc:
             total = len(doc)
-            cands, dup = [], {}
+            cands, dup, imgs_of = [], {}, {}
             for i, page in enumerate(doc, 1):
                 try:
                     infos = page.get_image_info(xrefs=True)
@@ -363,9 +452,10 @@ def extract_figures(pdf: str, course: str, no: str, emit=print,
                         h = hashlib.md5(doc.extract_image(im["xref"])["image"]).hexdigest()[:10]
                     except Exception:  # noqa: BLE001
                         h = "?"
-                    imgs.append((area, px, h))
+                    imgs.append((area, px, h, (bb[0], bb[1], bb[2], bb[3])))
                     if area >= FIG_MIN_AREA and px >= FIG_MIN_PX:
                         dup[h] = dup.get(h, 0) + 1
+                imgs_of[i] = imgs
                 cands.append((i, len((page.get_text("text") or "").strip()), _page_head(page), imgs))
 
             scored = []
@@ -398,7 +488,10 @@ def extract_figures(pdf: str, course: str, no: str, emit=print,
                 else:
                     emit("[图] 这份课件导不出页图（%d 页既没有图片对象、也没有文字层，像是扫描件）"
                          "→ 这一讲不会有原件图" % total)
-                return []
+                # 注意：这里必须把整页兜底导出的清单返回出去（HEAD 版本就是这样）。
+                #   2026-11-23 我重写这个函数时只写了 return []，结果纯文字课件「导了 6 页却说
+                #   没有可用页图」，提示词里一张图都没有——由 check-draft-chunks 第 1 项抓出来。
+                return out
 
             keep = [p for p in forced if p not in skipped][:MAX_FIGS]
             for i, _s in scored:
@@ -411,7 +504,8 @@ def extract_figures(pdf: str, course: str, no: str, emit=print,
             if not keep:
                 emit("[图] 一页可用的课件图都没有（真图全被 FIG_SKIP 排除，或都是模板徽标）→ 这一讲不带原件图")
             for i in keep:
-                name = _save_page_png(doc[i - 1], out_root, i)
+                page = doc[i - 1]
+                name = _save_page_png(page, out_root, i, _crop_rect(page, imgs_of.get(i, []), dup))
                 if name:
                     out.append(("gen/%s/%s" % (no, name), i))
                 else:
@@ -674,6 +768,110 @@ def _write_lesson(course: str, no: str, data: dict, lang: str, emit=print) -> st
     return path
 
 
+def _page_chunks(blocks: list, limit: int) -> list:
+    """按页把源文本切成 ≤limit 字符的段（不切页）。"""
+    chunks, cur, size = [], [], 0
+    for b in blocks:
+        if cur and size + len(b) > limit:
+            chunks.append(cur)
+            cur, size = [], 0
+        cur.append(b)
+        size += len(b)
+    if cur:
+        chunks.append(cur)
+    return chunks or [[]]
+
+
+def _merge_parts(parts: list) -> dict:
+    """多段生成的 LESSON 拼成一份：元信息取第一段，节按段顺序拼并重编号。
+
+    2026-11-23 用户要求处理「超长课件」：以前超过 MAX_SRC 直接截断（后半本不参与生成）。
+    现在按页切成多段分别生成，这里负责拼回去：
+      · sections 按段顺序接起来（§0 导读只留第一段的，避免三份导读）；
+      · summary / glossary / appendix / quiz 的列表合并去重（按首列/首项判重）；
+      · 最后统一重编号 no=0,1,2…，保证渲染与内容门看到的仍然是「节号连续」。
+    """
+    base = dict(parts[0])
+    secs = []
+    for p in parts:
+        for s in (p.get("sections") or []):
+            if not isinstance(s, dict):
+                continue
+            if str(s.get("no")) == "0" and secs:
+                continue
+            secs.append(s)
+    for i, s in enumerate(secs):
+        s["no"] = str(i)
+    base["sections"] = secs
+
+    def _key(x):
+        if isinstance(x, (list, tuple)) and x:
+            return str(x[0]).strip().lower()
+        if isinstance(x, dict):
+            return str(x.get("zh") or x.get("en") or "").strip().lower()
+        return str(x).strip().lower()
+
+    for key, field in (("glossary", "rows"), ("appendix", "symbols"),
+                       ("quiz", "items"), ("summary", "rows")):
+        merged, seen = [], set()
+        for p in parts:
+            d = p.get(key)
+            if not isinstance(d, dict):
+                continue
+            for item in (d.get(field) or []):
+                k = _key(item)
+                if k and k in seen:
+                    continue
+                seen.add(k)
+                merged.append(item)
+        if merged:
+            base.setdefault(key, {})
+            base[key][field] = merged
+    tail = len(secs)
+    for key in ("summary", "glossary", "appendix", "quiz"):
+        if isinstance(base.get(key), dict):
+            base[key]["no"] = str(tail)
+            tail += 1
+    return base
+
+
+def _ask_lesson(sysmsg: str, body: str, fig_help: str, note: str,
+                course: str, model: str, lang: str = "zh", emit=print) -> tuple:
+    """问一次模型要 LESSON（原来那段「不合法就重试一次」的逻辑搬到这里，供分块调用复用）。"""
+    npages = body.count("\u3010\u8bfe\u4ef6 p.")
+    user = (("Slides (%d pages with text):\n\n%s\n\nProduce LESSON JSON in this shape:\n%s%s"
+             % (npages, body, _SCHEMA, fig_help)) if lang == "en" else
+            ("\u4e0b\u9762\u662f\u8bfe\u4ef6\u5168\u6587\uff08%d \u9875\u6709\u6587\u5b57\uff09\uff1a\n\n%s\n\n\u6309\u8fd9\u4e2a JSON \u7ed3\u6784\u8f93\u51fa LESSON\uff1a\n%s%s"
+             % (npages, body, _SCHEMA, fig_help)))
+    if note:
+        user = note + "\n\n" + user
+    out = client.chat([{"role": "system", "content": sysmsg}, {"role": "user", "content": user}],
+                      model=model, temperature=0.3, max_tokens=30000)
+    try:
+        return _norm(_json_of(out["text"])), out
+    except Exception as e1:  # noqa: BLE001
+        # 2026-11-21 用户点「开始生成」只拿到一句「[停] 补正文失败：JSONDecodeError(...)」，
+        #   界面等于死路。模型偶尔会多吐一段示例、或者输出被截断；这里把原文落盘、
+        #   换更硬的提示再要一次，两次都不行才停（并告诉用户原文在哪）。
+        dump1 = _dump_raw(course, out.get("text") or "", "draft-1")
+        emit("[\u91cd\u8bd5] \u6a21\u578b\u8fd9\u6b21\u7ed9\u7684\u4e0d\u662f\u5408\u6cd5 JSON\uff08%s%s\uff09\uff1b\u539f\u6587\u5df2\u5b58 %s\uff0c\u6362\u4e00\u6b21\u66f4\u4e25\u683c\u7684\u63d0\u793a\u91cd\u6765\u3002"
+             % (e1.__class__.__name__,
+                "\uff0c\u8f93\u51fa\u88ab\u957f\u5ea6\u4e0a\u9650\u622a\u65ad" if out.get("finish_reason") == "length" else "",
+                dump1))
+        nudge = ("\u4e0a\u4e00\u6b21\u7684\u8f93\u51fa\u4e0d\u662f\u5408\u6cd5 JSON\uff08%s\uff09\u3002\u8bf7\u53ea\u8f93\u51fa**\u4e00\u4e2a** JSON \u5bf9\u8c61\uff1a"
+                 "\u4e0d\u8981\u793a\u4f8b\u3001\u4e0d\u8981\u4ee3\u7801\u56f4\u680f\u3001\u4e0d\u8981\u6ce8\u91ca\u3001\u4e0d\u8981\u89e3\u91ca\uff1b\u5b57\u7b26\u4e32\u91cc\u4e0d\u8981\u51fa\u73b0\u672a\u8f6c\u4e49\u7684\u6362\u884c\u3002" % e1.__class__.__name__)
+        out = client.chat([{"role": "system", "content": sysmsg},
+                           {"role": "user", "content": user},
+                           {"role": "assistant", "content": (out.get("text") or "")[:2000]},
+                           {"role": "user", "content": nudge}],
+                          model=model, temperature=0.1, max_tokens=30000)
+        try:
+            return _norm(_json_of(out["text"])), out
+        except Exception as e2:  # noqa: BLE001
+            dump2 = _dump_raw(course, out.get("text") or "", "draft-2")
+            raise ValueError("\u6a21\u578b\u8fde\u7eed\u4e24\u6b21\u90fd\u6ca1\u7ed9\u51fa\u5408\u6cd5 JSON\uff08%s / %s\uff09\u3002\u539f\u6587\u5df2\u5b58\uff1a%s\u3001%s \u2014\u2014 \u628a\u8fd9\u884c\u53d1\u4f5c\u8005\uff0c\u6216\u76f4\u63a5\u518d\u70b9\u4e00\u6b21\u751f\u6210\u3002"
+                             % (e1.__class__.__name__, e2.__class__.__name__, dump1, dump2)) from e2
+
 def draft(course: str, no: str, lang: str = "zh", emit=print, model: str | None = None,
           save: bool = True) -> dict:
     """导入的原件 → DeepSeek 写 LESSON → 落盘（中文 <no>.py / 英文 <no>.en.py）。"""
@@ -681,8 +879,15 @@ def draft(course: str, no: str, lang: str = "zh", emit=print, model: str | None 
     model = model or client.load_config()["model"]
     pdf, orig = source_of(course, no)
     emit("[原件] %s" % orig)
-    src, ntext, total = pages_text(pdf, emit=emit)
-    emit("[源文本] %d 页有文字 / 共 %d 页 · %d 字符" % (ntext, total, len(src)))
+    blocks, ntext, total = page_blocks(pdf)
+    src = "\n\n".join(blocks)
+    if not src.strip():
+        raise RuntimeError("这份 PDF 没有文字层（像是扫描件）：%s" % os.path.basename(pdf))
+    chunks = _page_chunks(blocks, MAX_SRC)
+    emit("[源文本] %d 页有文字 / 共 %d 页 · %d 字符%s"
+         % (ntext, total, len(src),
+            "" if len(chunks) == 1
+            else "（超过单次上限 %d，分 %d 段分别生成再拼）" % (MAX_SRC, len(chunks))))
     fp, fs = fig_overrides(course, no)
     figs = extract_figures(pdf, course, no, emit=emit, fig_pages=fp, fig_skip=fs)
     fig_help = _fig_help(figs, lang)
@@ -690,37 +895,19 @@ def draft(course: str, no: str, lang: str = "zh", emit=print, model: str | None 
         emit("[图] 这一讲没有可用课件页图（原因见上面的 [图] 日志）；讲义里不会出现原件图")
     sysmsg = _SYS_EN if lang == "en" else _SYS_ZH
     # 图清单放在用户消息最后：模型最容易照最近读到的格式写（上面 _fig_help 有说明）。
-    user = (("Slides (%d pages with text):\n\n%s\n\nProduce LESSON JSON in this shape:\n%s%s"
-             % (ntext, src, _SCHEMA, fig_help)) if lang == "en" else
-            ("下面是课件全文（%d 页有文字）：\n\n%s\n\n按这个 JSON 结构输出 LESSON：\n%s%s"
-             % (ntext, src, _SCHEMA, fig_help)))
     emit("[生成] %s · %s" % (model, "全英（专有名称中文）" if lang == "en" else "全中（专业名称英文）"))
-    out = client.chat([{"role": "system", "content": sysmsg}, {"role": "user", "content": user}],
-                      model=model, temperature=0.3, max_tokens=30000)
-    try:
-        data = _norm(_json_of(out["text"]))
-    except Exception as e1:  # noqa: BLE001
-        # 2026-11-21 用户点「开始生成」只拿到一句「[停] 补正文失败：JSONDecodeError(...)」，
-        #   界面等于死路。模型偶尔会多吐一段示例、或者输出被截断；这里把原文落盘、
-        #   换更硬的提示再要一次，两次都不行才停（并告诉用户原文在哪）。
-        dump1 = _dump_raw(course, out.get("text") or "", "draft-1")
-        emit("[重试] 模型这次给的不是合法 JSON（%s%s）；原文已存 %s，换一次更严格的提示重来。"
-             % (e1.__class__.__name__,
-                "，输出被长度上限截断" if out.get("finish_reason") == "length" else "",
-                dump1))
-        nudge = ("上一次的输出不是合法 JSON（%s）。请只输出**一个** JSON 对象："
-                 "不要示例、不要代码围栏、不要注释、不要解释；字符串里不要出现未转义的换行。" % e1.__class__.__name__)
-        out = client.chat([{"role": "system", "content": sysmsg},
-                           {"role": "user", "content": user},
-                           {"role": "assistant", "content": (out.get("text") or "")[:2000]},
-                           {"role": "user", "content": nudge}],
-                          model=model, temperature=0.1, max_tokens=30000)
-        try:
-            data = _norm(_json_of(out["text"]))
-        except Exception as e2:  # noqa: BLE001
-            dump2 = _dump_raw(course, out.get("text") or "", "draft-2")
-            raise ValueError("模型连续两次都没给出合法 JSON（%s / %s）。原文已存：%s、%s —— 把这行发作者，或直接再点一次生成。"
-                             % (e1.__class__.__name__, e2.__class__.__name__, dump1, dump2)) from e2
+    parts, out = [], None
+    for k, ch in enumerate(chunks, 1):
+        note = ""
+        if len(chunks) > 1:
+            note = (("This is part %d of %d of the slides. Write ONLY the sections covered by these "
+                     "pages (page numbers are marked 【课件 p.N】)." % (k, len(chunks))) if lang == "en"
+                    else ("这是课件的第 %d/%d 段，只写这一段覆盖的页（页号见【课件 p.N】）。"
+                          % (k, len(chunks))))
+        data_k, out = _ask_lesson(sysmsg, "\n\n".join(ch), fig_help, note,
+                                  course, model, lang, emit=emit)
+        parts.append(data_k)
+    data = _merge_parts(parts) if len(parts) > 1 else parts[0]
     # 2026-11-21（R115，用户「一点原件的图也看不到」）：模型编的图名不再「静默整块删掉」。
     #   这里只点数并说明；真正按清单修名 / 补图在渲染时做（_build_讲义.ensure_figures），
     #   于是旧数据重打一遍 PDF 也能把漏掉的原件图补上，不必再花钱重跑模型。
@@ -737,7 +924,8 @@ def draft(course: str, no: str, lang: str = "zh", emit=print, model: str | None 
     rows = data.get("glossary", {}).get("rows") or []
     if len(rows) < GLOSSARY_MIN:
         emit("[术语] 只有 %d 条，补到 %d 条" % (len(rows), GLOSSARY_MIN))
-        extra = _glossary_rows(src, lang, model)
+        # 分块生成时 src 是整份课件（可能很长）：术语抽取只喂第一段，别再把词表那次调用顶爆
+        extra = _glossary_rows("\n\n".join(chunks[0]) if len(chunks) > 1 else src, lang, model)
         if extra:
             data["glossary"]["rows"] = extra
             data["glossary"].setdefault("lec", "术语按出现顺序整理，便于对照课件页码。")

@@ -28,6 +28,11 @@ python -X utf8 tools/check/check-window-layer.py || { echo "[hook] 文字层/成
 # 2026-11-23 用户：「不应该是以图片对于讲解的重要性来选择的吗 而不是先到先得名额吧」
 echo "[hook] 课件图按重要性选 check-figure-pick ..."
 python -X utf8 tools/check/check-figure-pick.py || { echo "[hook] 课件图选择又变回先到先得：提交已拦下"; exit 1; }
+echo "[hook] 超长分块/表格 check-draft-chunks ..."
+python -X utf8 tools/check/check-draft-chunks.py || { echo "[hook] 分块生成或表格结构化坏了：提交已拦下"; exit 1; }
+# 2026-11-23 用户：讲义里的「课件 p.N」要能点着跳回原件
+echo "[hook] 页码可跳转 check-citation-jump ..."
+python -X utf8 tools/check/check-citation-jump.py || { echo "[hook] 「课件 p.N」跳转坏了：提交已拦下"; exit 1; }
 echo "[hook] 内联脚本语法 check-inline-js ..."
 python -X utf8 tools/check/check-inline-js.py || { echo "[hook] 界面内联脚本有语法错：提交已拦下"; exit 1; }
 echo "[hook] 产品仓只放代码 check-repo-clean ..."
