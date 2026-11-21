@@ -14,12 +14,16 @@ r"""check-reading-tools.py — 阅读页六件事的判据（2026-11-22）
   6 翻译历史存 ~/.pluma/translate-history.json，最多 5 条；页签顶部可回填
   7 翻译是上下两个框 + 中间 ↑↓（上面输入、下面出译文；没译文时是占位不是空框）
   8 正常记笔记（没有引用）时不出那个灰框：灰框只给「引用原文/译文」用
+  9 讲次芯片排版：标题可省略，「占位」与讲号不收缩不折行
+ 10 「最近 5 条」翻译历史在整块最下面
+ 11 笔记颜色 + PDF 引用高亮（悬停亮、点击常驻、右键换色）
+ 12 笔记列表溢出不压扁条目；点空白处清掉选区
 
 用法：
     python tools\check\check-reading-tools.py            # 判本仓
     python tools\check\check-reading-tools.py --selftest # 临时副本逐个造坏，先证明会红
 
-退出码：0 = 8/8 · 1 = 有红
+退出码：0 = 12/12 · 1 = 有红
 """
 from __future__ import annotations
 
@@ -142,7 +146,7 @@ def check(root):
         and "document.addEventListener('contextmenu'" in idx
     ), "译文「引用翻译记成笔记」→ 侧栏写作页，引用句是【译文 p.N】；菜单只在 contextmenu 里打开")
 
-    np = block(idx, "function openNotePage(quote, kind)", "function renderNotes")
+    np = block(idx, "function openNotePage(quote, kind, src)", "function renderNotes")
     qcss = block(idx, ".note-quote blockquote", "#noteCompose textarea")
     add(5, "记笔记（侧栏写作页）", (
         'id="noteCompose"' in idx and 'id="noteList"' in idx and 'id="page-note"' not in idx
@@ -170,6 +174,42 @@ def check(root):
         and "function currentSelText()" in idx and "openNotePage(currentSelText()" in idx
         and ".note-quote[hidden]" in idx
     ), "没引用时灰框整块不出（连占位也没有）；「记笔记」只引用当前选中，选不到就是纯笔记")
+
+    # ---- 2026-11-23 用户第二批（图1~图5）----
+    # 1 排版：讲次芯片里「占位」「T06-2」被挤成竖排/折行
+    lsn = block(idx, ".lsn button{position:relative", ".lsn .kill{display:none}")
+    add(9, "讲次芯片不挤", (
+        "display:inline-flex" in lsn and "min-width:0" in lsn
+        and ".ttl{flex:1 1 auto" in idx
+        and ".no{flex:0 0 auto;white-space:nowrap" in idx
+        and ".stub{flex:0 0 auto;white-space:nowrap" in idx
+    ), "标题独占可收缩那份（省略号），「占位」徽标与讲号不收缩不折行")
+
+    # 2 最近五条翻译挪到整块最下面
+    ti, to, th = idx.find('id="trHist"'), idx.find('id="trOut"'), idx.find("留空就直接翻这一页的文字层")
+    add(10, "翻译历史在底部", (
+        ti > 0 and to > 0 and th > 0 and ti > to and ti > th
+        and ".tr-hist{margin:14px 0 0;border-top:1px solid var(--line2)" in idx
+    ), "「最近 5 条」在译文框与提示语之后（整块最下面），不再挡在输入框上面")
+
+    # 3 笔记颜色 + PDF 里的引用高亮
+    add(11, "笔记颜色与高亮", (
+        "const NC = {" in idx and "paintHL" in idx and "openNoteColorMenu" in idx
+        and "action:'color'" in idx and "id=\"pdfhl\"" in idx
+        and ".nitem.pin{" in idx and "#pdfhl .hl" in idx
+        and "NOTE_COLORS = (\"green\", \"amber\", \"blue\", \"purple\", \"red\")" in srv
+        and 'elif act == "color":' in srv
+        and "paintHL();" in idx
+    ), "悬停/点击高亮 PDF 里那段引用、右键选颜色（标签色与高亮色同改）；服务端 action=color 存颜色")
+
+    # 4 笔记不被压扁 + 点空白处取消选中
+    add(12, "笔记不压扁·点空白取消选中", (
+        ".nlist{display:flex;flex-direction:column;gap:8px;max-height:320px;overflow:auto}" in idx
+        and ".nlist > .nitem{flex:0 0 auto}" in idx      # 溢出时子项不许收缩（那条笔记被压成 25.6px 的坑）
+        and "t.closest('#pdftext') || t.closest('.note-menu')" in idx
+        # 笔记条目也叫 .trans；译文结果框那条样式必须只在 .tr-out 里生效
+        and ".tr-out .trans{" in idx and "\n.trans{" not in idx
+    ), "列表溢出时笔记不再被 flex 压成空条；.trans 样式只作用在译文框（笔记条目不再被当成译文框）；点空白清选区")
 
     hist = block(idx, "function renderTransHistory(items)", "async function transPage")
     ok_hist, detail = behavior_history(root)
@@ -228,6 +268,11 @@ def selftest():
             ("侧栏写作页缺失", 5, IDX, 'id="noteCompose"', 'id="noteCompose-x"'),
             ("历史条数改成 9", 6, SRV, "TRANS_HISTORY_MAX = 5", "TRANS_HISTORY_MAX = 9"),
             ("没引用也画灰框", 8, IDX, "if(qw) qw.hidden = !q;", "if(qw) qw.hidden = false;"),
+            ("讲次芯片又允许收缩", 9, IDX, ".lsn button .stub{flex:0 0 auto;white-space:nowrap;", ".lsn button .stub{"),
+            ("翻译历史回到输入框上面", 10, IDX, '<h5 style="margin:0 0 8px;font-size:12.5px;font-weight:600">第 <span id="curP3">p.1</span> 页 · 翻译</h5>', '<h5 style="margin:0 0 8px;font-size:12.5px;font-weight:600">第 <span id="curP3">p.1</span> 页 · 翻译</h5><div class="tr-hist" id="trHist"></div>'),
+            ("颜色表被改名", 11, IDX, "const NC = {", "const NCOLOR = {"),
+            ("笔记又允许被压扁", 12, IDX, ".nlist > .nitem{flex:0 0 auto}", ".nlist > .nitem{flex:1 1 auto}"),
+            ("译文框样式又变成全局", 12, IDX, ".tr-out .trans{white-space:pre-wrap;font-size:13px;line-height:1.8", ".trans{white-space:pre-wrap;font-size:13px;line-height:1.8"),
         ]
         all_ok = True
         for label, no, rel, old, new in defects:

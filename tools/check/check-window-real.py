@@ -22,6 +22,9 @@ r"""真窗口自测：在羽毛笔**自己的 WebView2 窗口**里量窗口矩�
   W12 滚动条槽：出滚动条前后内容宽度不变（gutter 固定；不然「刚好一屏」时界面抖、底边闪白条）
   W13 不自激：relayout 之后 4 秒不再持续收到 resize（它 +1px 逼重算，页面别回头再调它）
   W14 正常记笔记（没引用）时不显示那个灰框；有选中时灰框回来
+  W15 笔记悬停/点击 → PDF 里那段引用高亮（常驻）；右键换色 → 标签色与高亮色同改
+  W16 点空白处把选区清掉
+  W17 排版不挤：讲次芯片的徽标/讲号单行，笔记条目不被 flex 压扁
 
 注意：主脚本是 <script type="module">，函数不在 window 上——所以这里只点界面元素，
       不调页面函数；页面里只读 DOM、设选区。
@@ -641,8 +644,11 @@ def main():
             # ---- W8 全屏后按 Esc 能退出 ----
             if opened:
                 try:
-                    # WebView2 偶尔会把第一次 requestFullscreen 当「没有用户手势」拒掉（2026-11-23 见过一次），
-                    # 所以再点一次；两次都进不去才算「没验」，不许把没查当成通过。
+                    # WebView2 偶尔把 requestFullscreen 当「没有用户手势」拒掉（2026-11-23 见过两次，
+                    # 机上还开着另一个实例时更容易）：先把页面提到前台再点，还不行就再点一次；
+                    # 两次都进不去才算「没验」，不许把没查当成通过。
+                    try: page.bring_to_front()
+                    except Exception: pass
                     page.click("#btnFs")
                     time.sleep(1.0)
                     was = page.evaluate("!!document.fullscreenElement")
@@ -783,6 +789,171 @@ def main():
                            % n1["len"])
                 except Exception as e:  # noqa: BLE001
                     bad("W14 无引用不出灰框", "没验成：%r" % (e,))
+
+            # ---- W15 笔记颜色 + PDF 引用高亮 ----
+            # 2026-11-23 用户：「指针放上去那个笔记之后要看到引用的那里（如果有引用的话），
+            #   那一块地方就会高亮，点击一下就常驻高亮；右键那个笔记可以选择颜色什么的
+            #   （同时也会改变高亮的颜色和那个笔记的标签颜色）」。
+            if opened:
+                try:
+                    page.evaluate("() => { const b=document.getElementById('npBack'); if(b && b.offsetParent) b.click(); }")
+                    page.click("a[data-page='read']")
+                    page.wait_for_function(
+                        "document.querySelectorAll('#pdftext span').length > 3", timeout=30000)
+                    page.evaluate("""() => {
+                      const sp = [...document.querySelectorAll('#pdftext span')]
+                        .filter(s => (s.textContent||'').trim().length > 12)[0];
+                      const rg = document.createRange(); rg.selectNodeContents(sp);
+                      const s = window.getSelection(); s.removeAllRanges(); s.addRange(rg);
+                      document.getElementById('btnNotePage').click();
+                    }""")
+                    time.sleep(0.8)
+                    page.fill("#npText", "W15 高亮测试")
+                    page.click("#npSave")
+                    time.sleep(1.2)
+                    page.click("#tabNotes")
+                    time.sleep(0.4)
+                    page.hover("#nlist .nitem:last-child")      # 悬停：PDF 上应亮起来
+                    time.sleep(0.6)
+                    hov = page.evaluate("document.querySelectorAll('#pdfhl .hl').length")
+                    page.click("#nlist .nitem:last-child")      # 点一下：常驻
+                    time.sleep(0.9)
+                    pin = page.evaluate("""() => ({
+                      hl: document.querySelectorAll('#pdfhl .hl.pin').length,
+                      item: document.querySelectorAll('#nlist .nitem.pin').length})""")
+                    page.click("#nlist .nitem:last-child", button="right")
+                    time.sleep(0.6)
+                    dots = page.evaluate("document.querySelectorAll('.note-menu .nc-dot').length")
+                    page.click(".note-menu .nc-dot[data-nc='blue']")
+                    time.sleep(1.1)
+                    col = page.evaluate("""() => {
+                      const it = [...document.querySelectorAll('#nlist .nitem')].pop();
+                      const hl = document.querySelector('#pdfhl .hl');
+                      const cs = it ? getComputedStyle(it) : null;
+                      return {nc: cs ? cs.getPropertyValue('--nc').trim() : '',
+                              left: cs ? cs.borderLeftColor : '',
+                              fill: hl ? getComputedStyle(hl).getPropertyValue('--hl').trim() : '',
+                              n: document.querySelectorAll('#pdfhl .hl').length};
+                    }""")
+                    if hov < 1:
+                        bad("W15 笔记高亮", "悬停那条笔记，PDF 上没有出现高亮块（%d 块）" % hov)
+                    elif pin["hl"] < 1 or pin["item"] != 1:
+                        bad("W15 笔记高亮", "点了没有常驻（高亮 %r / 笔记 %r）" % (pin["hl"], pin["item"]))
+                    elif dots != 5:
+                        bad("W15 笔记高亮", "右键菜单里颜色点有 %d 个（应为 5）" % dots)
+                    elif "59, 110, 165" not in col["fill"] and "59,110,165" not in col["fill"]:
+                        bad("W15 笔记高亮", "选了蓝色，PDF 高亮没跟着变：%r" % (col,))
+                    elif col["nc"].lower() != "#3b6ea5":
+                        bad("W15 笔记高亮", "选了蓝色，笔记那条的 --nc 还是 %r" % (col["nc"],))
+                    else:
+                        ok("W15 笔记高亮", "悬停亮 %d 块、点击常驻 %d 块、右键 5 色；换蓝后笔记 --nc=%s、高亮=%s"
+                           % (hov, pin["hl"], col["nc"], col["fill"]))
+                except Exception as e:  # noqa: BLE001
+                    bad("W15 笔记高亮", "没验成：%r" % (e,))
+
+            # ---- W16 点空白处取消选中 ----
+            if opened:
+                try:
+                    page.evaluate("""() => {
+                      const sp = [...document.querySelectorAll('#pdftext span')][2];
+                      const rg = document.createRange(); rg.selectNodeContents(sp);
+                      const s = window.getSelection(); s.removeAllRanges(); s.addRange(rg);
+                    }""")
+                    before = page.evaluate("String(window.getSelection())")
+                    pt = page.evaluate("""() => {
+                      const r = document.getElementById('readerBox').getBoundingClientRect();
+                      return {x: r.left + 8, y: r.top + 8};
+                    }""")
+                    page.mouse.click(pt["x"], pt["y"])
+                    time.sleep(0.5)
+                    after = page.evaluate("String(window.getSelection())")
+                    if len(before.strip()) < 2:
+                        skip("W16 点空白取消选中", "没能先造出选区（%r），没敢判" % (before[:20],))
+                    elif after.strip():
+                        bad("W16 点空白取消选中", "点了空白处选区还在：%r" % (after[:30],))
+                    else:
+                        ok("W16 点空白取消选中", "选中 %d 字 → 点空白 → 选区清空" % len(before.strip()))
+                except Exception as e:  # noqa: BLE001
+                    bad("W16 点空白取消选中", "没验成：%r" % (e,))
+
+            # ---- W17 排版不挤：讲次芯片单行、笔记条目不被压扁 ----
+            if opened:
+                try:
+                    page.click("a[data-page='generate']")
+                    page.wait_for_selector("#courseSel", timeout=15000)
+                    page.select_option("#courseSel", "TDEMO")
+                    time.sleep(0.6)
+                    # 一次量完（芯片 + 照用户图1 造的那个）：分两次 eval 时页面可能已经切到「阅读」，
+                    #   #lessonPick 变成 display:none，量出来全是 0——这样的 0 不能算绿。
+                    meas = page.evaluate("""() => {
+                      const box = document.getElementById('lessonPick');
+                      if(!box) return null;
+                      const h = el => el ? Math.round(el.getBoundingClientRect().height) : 0;
+                      const chips = [...box.querySelectorAll('[data-lsn]')].map(b => {
+                        const st = b.querySelector('.stub'), no = b.querySelector('.no');
+                        return {s: h(st), n: h(no), w: Math.round(b.getBoundingClientRect().width),
+                                shrink: st ? getComputedStyle(st).flexShrink : 'x'};
+                      });
+                      const b2 = document.createElement('button');
+                      b2.setAttribute('data-lsn','W17STUB');
+                      b2.innerHTML = '<span class="ttl">Lecture 6 Human anatomy and physiology (3)</span>' +
+                                     '<span class="stub">占位</span><span class="no">T06-2</span>';
+                      box.appendChild(b2);
+                      const m = s => { const e = b2.querySelector(s); const r = e.getBoundingClientRect();
+                                       return {h: Math.round(r.height), w: Math.round(r.width)}; };
+                      const stub = {stub: m('.stub'), no: m('.no'),
+                                    chip: Math.round(b2.getBoundingClientRect().width)};
+                      b2.remove();
+                      return {chips: chips, stubChip: stub};
+                    }""")
+                    chips = (meas or {}).get("chips") or []
+                    stub_chip = (meas or {}).get("stubChip")
+                    page.click("a[data-page='read']")
+                    time.sleep(0.8)
+                    page.click("#tabNotes")
+                    time.sleep(0.4)
+                    items = page.evaluate("""() => {
+                      const list = document.getElementById('nlist');
+                      return {overflow: list ? list.scrollWidth - list.clientWidth : 0,
+                        rows: [...document.querySelectorAll('#nlist .nitem')].map(el => {
+                          const q = el.querySelector('.nq');
+                          return {h: Math.round(el.getBoundingClientRect().height),
+                                  q: q ? Math.round(q.getBoundingClientRect().height) : 0,
+                                  shrink: getComputedStyle(el).flexShrink};
+                        })};
+                    }""")
+                    nlist_ov = items.get("overflow", 0) if isinstance(items, dict) else 0
+                    items = (items.get("rows") or []) if isinstance(items, dict) else items
+                    tall = [c for c in chips if c["s"] > 18 or c["n"] > 18 or c["w"] > 344]
+                    squash = [it for it in items if it["q"] and it["h"] + 1 < it["q"]]
+                    badshrink = [it for it in items if it["shrink"] != "0"]
+                    if not stub_chip or stub_chip["chip"] == 0:
+                        skip("W17 排版不挤", "造出来的芯片量到 0（没布局），这一项没查到")
+                    elif (stub_chip["stub"]["h"] > 18 or stub_chip["no"]["h"] > 18
+                                      or stub_chip["chip"] > 344):
+                        bad("W17 排版不挤", "照用户图1 造的芯片还是挤：「占位」%r、讲号 %r、宽 %r"
+                            % (stub_chip["stub"], stub_chip["no"], stub_chip["chip"]))
+                    elif not chips:
+                        skip("W17 排版不挤", "生成页没有讲次芯片，没敢判")
+                    elif nlist_ov > 1:
+                        bad("W17 排版不挤", "笔记列表横向溢出了 %dpx（底下会冒一条横向滚动条）" % nlist_ov)
+                    elif tall:
+                        bad("W17 排版不挤", "芯片里还有被挤的家伙：%r" % (tall,))
+                    elif badshrink:
+                        bad("W17 排版不挤", "笔记条目还允许被压缩（flex-shrink=%r）" % (badshrink[0]["shrink"],))
+                    elif squash:
+                        bad("W17 排版不挤", "笔记被压扁了：条目 %dpx、里面的引用块 %dpx"
+                            % (squash[0]["h"], squash[0]["q"]))
+                    else:
+                        ok("W17 排版不挤",
+                           "%d 个真芯片单行（讲号 %dpx、最宽 %dpx）；照用户图1 造的芯片宽 %dpx、"
+                           "「占位」%d×%dpx、讲号 %d×%dpx；%d 条笔记都没被压扁"
+                           % (len(chips), max([c["n"] for c in chips] or [0]),
+                              max([c["w"] for c in chips] or [0]), stub_chip["chip"],
+                              stub_chip["stub"]["w"], stub_chip["stub"]["h"],
+                              stub_chip["no"]["w"], stub_chip["no"]["h"], len(items)))
+                except Exception as e:  # noqa: BLE001
+                    bad("W17 排版不挤", "没验成：%r" % (e,))
 
             # ---- W10 翻译：两个框 + 中间 ↑↓ ----
             if opened:

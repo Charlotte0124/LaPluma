@@ -301,12 +301,18 @@ nav a.on{background:var(--ink);color:var(--bg)}
 .lsn.dim{opacity:.45;pointer-events:none}
 /* 2026-11-17：讲次删除模式——点「删除」后每个讲号右上角出现红×，点×即删这一讲。
    删除模式下点芯片本体不再改选中，避免「本来想删、结果改了生成范围」。 */
-.lsn button{position:relative;display:inline-flex;align-items:baseline;gap:7px;max-width:320px;
-   font-family:"Microsoft YaHei","Source Han Sans SC",system-ui,sans-serif;letter-spacing:0}
-.lsn button .ttl{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.lsn button .no{font-family:Consolas,monospace;font-size:10.5px;color:var(--faint);letter-spacing:.04em}
+/* 2026-11-23 用户：「排版问题错误」（图1：讲次芯片里「占位」被挤成竖排、T06-2 折成两行）。
+   原因是芯片是 inline-flex 但子元素都允许收缩：小徽标与讲号没有 nowrap 就被压窄、折行。
+   现在标题独占可收缩的那一份（带省略号），徽标与讲号一律不收缩、不折行。 */
+.lsn button{position:relative;display:inline-flex;align-items:center;gap:7px;max-width:340px;min-width:0;
+   font-family:"Microsoft YaHei","Source Han Sans SC",system-ui,sans-serif;letter-spacing:0;
+   transition:border-color .16s,background .16s,transform .12s}
+.lsn button:hover{transform:translateY(-1px)}
+.lsn button:active{transform:translateY(0)}
+.lsn button .ttl{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lsn button .no{flex:0 0 auto;white-space:nowrap;font-family:Consolas,monospace;font-size:10.5px;color:var(--faint);letter-spacing:.04em}
 .lsn button.on .no{color:inherit;opacity:.62}
-.lsn button .stub{font-size:10px;line-height:1;color:var(--amber);border:1px solid var(--line);
+.lsn button .stub{flex:0 0 auto;white-space:nowrap;font-size:10px;line-height:1;color:var(--amber);border:1px solid var(--line);
    border-radius:5px;padding:1px 4px;letter-spacing:.02em}
 .lsn .kill{display:none}
 .lsn.deling button{padding-right:20px}
@@ -400,7 +406,8 @@ nav a.on{background:var(--ink);color:var(--bg)}
 .nhead h5{margin:0;font-size:12.5px;font-weight:600}
 .nhead .btn{margin-left:auto;padding:4px 12px;font-size:11.5px}
 /* 2026-11-22 用户：翻译页签顶部列最近 5 条，点一条回填原文与译文 */
-.tr-hist{margin:0 0 9px}
+/* 2026-11-23 用户：「最近五条翻译移动到最底下去」——放整块最下面，用一条分隔线收尾 */
+.tr-hist{margin:14px 0 0;border-top:1px solid var(--line2);padding-top:10px}
 .tr-hist .th-h{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);margin:0 0 5px}
 .tr-hist .th{display:flex;gap:8px;align-items:baseline;width:100%;text-align:left;border:1px solid var(--line2);
   background:var(--card2);border-radius:7px;padding:5px 8px;margin:0 0 5px;font:inherit;cursor:pointer;color:var(--ink)}
@@ -408,7 +415,7 @@ nav a.on{background:var(--ink);color:var(--bg)}
 .tr-hist .th b{flex:none;font-family:Consolas,monospace;font-size:10px;color:var(--faint);font-weight:400}
 .tr-hist .th span{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:11.5px}
 .tr-hist .th-empty{font-size:11.5px;color:var(--faint);border:0;padding:0}
-#sideTrans .trans{white-space:pre-wrap;font-size:13px;line-height:1.65;
+#sideTrans .trans,.tr-out .trans{white-space:pre-wrap;font-size:13px;line-height:1.65;
   background:var(--card2);border-radius:9px;padding:10px 12px;margin-top:10px;max-height:none}
 #readerBox{cursor:grab}
 #readerBox.panning{cursor:grabbing}
@@ -421,6 +428,19 @@ html,body{background:var(--bg)}
 #pdfcanvas{background:var(--page);box-shadow:var(--sheet-shadow);border-radius:2px;display:block}
 #pdftext{position:absolute;left:0;top:0;overflow:hidden;line-height:1;color:transparent;
   user-select:text;-webkit-user-select:text}
+/* 2026-11-23 用户：笔记上的引用要能在 PDF 里亮起来（悬停看、点一下常驻）。
+   高亮画在一层单独的面板上：在画布之上、文字层之下，不吃鼠标事件。 */
+#pdfhl{position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none}
+#pdfhl .hl{position:absolute;border-radius:3px;background:var(--hl,rgba(63,125,90,.28));
+  box-shadow:inset 0 0 0 1px rgba(0,0,0,.05);animation:hlIn .18s ease-out both}
+#pdfhl .hl.pin{box-shadow:inset 0 0 0 2px var(--hlb,rgba(63,125,90,.85))}
+/* 2026-11-23 用户第 6 条：该有动画的地方补上（侧栏换页签、译文出来、菜单、页面切换） */
+#sideNotes,#sideTrans{animation:panelIn .2s ease}
+@keyframes panelIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+.tr-out:not(.empty){animation:panelIn .2s ease}
+.note-menu{animation:pop .14s ease}
+@media (prefers-reduced-motion: reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
+@keyframes hlIn{from{opacity:0;transform:scaleY(.65)}to{opacity:1;transform:none}}
 #pdftext span{position:absolute;white-space:pre;transform-origin:0 0;cursor:text;color:transparent}
 #pdftext span::selection{background:rgba(231,194,70,.45);color:transparent}
 #pdftext span::-moz-selection{background:rgba(231,194,70,.45);color:transparent}
@@ -429,15 +449,32 @@ html,body{background:var(--bg)}
 .note-menu button{display:block;width:100%;text-align:left;border:0;background:transparent;border-radius:6px;
   padding:7px 10px;font-size:12.5px;color:var(--ink)}
 .note-menu button:hover{background:var(--card2)}
+/* 2026-11-23 用户第 4 条：常驻高亮的那一条整条描一圈同色；右键的颜色板是几个圆点 */
+.nitem.pin{border-color:var(--nc);box-shadow:0 0 0 1px var(--nc)}
+.note-menu .nc-h{font-size:10.5px;color:var(--faint);padding:4px 8px 6px;letter-spacing:.04em}
+.note-menu .nc-row{display:flex;gap:6px;padding:2px 8px 8px}
+.note-menu button.nc-dot{display:grid;place-items:center;width:22px;height:22px;padding:0;border-radius:50%;
+  background:transparent;transition:transform .12s}
+.note-menu button.nc-dot:hover{transform:scale(1.16);background:transparent}
+.note-menu button.nc-dot.on{box-shadow:0 0 0 2px var(--ink)}
+.note-menu button.nc-dot i{display:block;width:14px;height:14px;border-radius:50%}
 .side{background:var(--card);padding:14px;border-left:1px solid var(--line2);min-height:560px;display:flex;flex-direction:column;gap:12px}
+/* 2026-11-23 用户：「翻译笔记怎么成一坨的了」（图5：琥珀色那一条被压成一条空条）。
+   实测：列表是 flex 列，超出 max-height 时子项默认允许收缩，那条笔记被压到 25.6px
+   而里面的引用块有 46.8px——看着就是「空的一坨」。子项一律不许收缩。 */
 .nlist{display:flex;flex-direction:column;gap:8px;max-height:320px;overflow:auto}
-.nitem{border:1px solid var(--line2);border-left:2px solid var(--line);border-radius:8px;padding:8px 10px;font-size:12.5px;
-   line-height:1.65;background:var(--card2);cursor:pointer;transition:.16s;position:relative}
-.nitem:hover{border-color:var(--sub);border-left-color:var(--ink)}
+.nlist > .nitem{flex:0 0 auto}
+.nitem{--nc:#3f7d5a;border:1px solid var(--line2);border-left:2px solid var(--line);border-radius:8px;padding:8px 10px;font-size:12.5px;
+   line-height:1.65;background:var(--card2);cursor:pointer;transition:border-color .16s,background .16s,box-shadow .16s;position:relative}
+/* 悬停只改边框与阴影：早先给的是 translateX(2px)，而列表是 overflow:auto——
+   那 2px 会算进滚动区，鼠标一进去列表底下就冒一条横向滚动条（2026-11-23 实测 sw=273/cw=271）。 */
+.nitem:hover{border-color:var(--sub);border-left-color:var(--nc);box-shadow:0 1px 3px rgba(0,0,0,.06)}
 /* 2026-11-22 用户：自己写的笔记与「引用译文」的笔记用不同颜色，一眼分得清 */
-.nitem.self{border-left-color:#3f7d5a;background:rgba(63,125,90,.06)}
-.nitem.trans{border-left-color:#b07d1f;background:rgba(176,125,31,.08)}
-.nitem .tag{font-style:normal;font-size:10px;color:#b07d1f;border:1px solid currentColor;border-radius:5px;
+/* 2026-11-23 用户：右键笔记能选颜色——「同时也会改变高亮的颜色和那个笔记的标签颜色」。
+   所以颜色收进一个变量 --nc：左边那道竖线、标签、PDF 里的高亮都跟着它走。 */
+.nitem.self{--nc:#3f7d5a;border-left-color:var(--nc);background:rgba(63,125,90,.06)}
+.nitem.trans{--nc:#b07d1f;border-left-color:var(--nc);background:rgba(176,125,31,.08)}
+.nitem .tag{font-style:normal;font-size:10px;color:var(--nc);border:1px solid currentColor;border-radius:5px;
   padding:0 4px;margin-left:auto}
 #noteCompose .nhead .np{font-family:Consolas,monospace;color:var(--faint);font-weight:400;font-size:11.5px}
 #noteCompose .np-kind{font-size:10.5px;color:#b07d1f;border:1px solid currentColor;border-radius:5px;padding:0 5px}
@@ -538,7 +575,10 @@ html,body{background:var(--bg)}
 .gen-note h5{margin:0 0 6px;font-size:12px;color:var(--sub);font-weight:600}
 .gen-note .row{display:flex;gap:9px;font-size:11.5px;line-height:1.65;color:var(--sub);padding:2px 0}
 .gen-note .row span{color:var(--faint);font-family:Consolas,monospace;flex:none}
-.trans{white-space:pre-wrap;font-size:13px;line-height:1.8;max-height:55vh;overflow:auto;
+/* 2026-11-23 用户：「翻译笔记怎么成一坨的了」（图5）。根因：这条样式是给译文结果框用的，
+   却写成了全局 .trans，笔记条目正好也叫 .trans —— 于是一条笔记被塞进「12/14 内边距 +
+   55vh 上限 + 自己滚动」的译文框里，看着就是一大坨。改成只作用在译文结果里。 */
+.tr-out .trans{white-space:pre-wrap;font-size:13px;line-height:1.8;max-height:55vh;overflow:auto;
   background:var(--card2);border:1px solid var(--line2);border-radius:9px;padding:12px 14px;margin:10px 0}
 /* 2026-11-22 用户：记笔记改成独立整页（左原文引用、右输入框），保存后回侧栏列表 */
 /* 2026-11-22 用户：「记笔记只有一个框在，引用的字是灰的、不可以删改」——
@@ -869,7 +909,7 @@ body.win #appScroll{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden
         </div>
       </div>
       <div class="read-body">
-        <div class="reader" id="readerBox"><div id="pdfwrap"><canvas id="pdfcanvas"></canvas><div id="pdftext"></div></div></div>
+        <div class="reader" id="readerBox"><div id="pdfwrap"><canvas id="pdfcanvas"></canvas><div id="pdfhl"></div><div id="pdftext"></div></div></div>
         <div class="side">
           <div class="side-tabs">
             <button class="stab on" id="tabNotes">笔记 <span id="nCount">0</span></button>
@@ -907,7 +947,6 @@ body.win #appScroll{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden
           </div>
           <div id="sideTrans" hidden>
             <h5 style="margin:0 0 8px;font-size:12.5px;font-weight:600">第 <span id="curP3">p.1</span> 页 · 翻译</h5>
-            <div class="tr-hist" id="trHist"></div>
             <!-- 2026-11-22 用户：翻译要「两个框 + 中间一个 ↑↓」——上面只读输入，下面出译文；
                  方向用中间的 ↑↓ 交换；出了译文，下面才出现「引用翻译记成笔记」。 -->
             <div class="tr-dir">
@@ -922,6 +961,9 @@ body.win #appScroll{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden
             <!-- 下面这个框一直在（用户：「有两个框在」），没译文时只是一句占位提示 -->
             <div id="trOut" class="tr-out empty"><span class="ph">译文会出现在这里</span></div>
             <p class="hint" style="border:0;margin:8px 0 0">留空就直接翻这一页的文字层；扫描件没有文字层会直说读不到。</p>
+            <!-- 2026-11-23 用户：「最近五条翻译移动到最底下去（图2位置）」——历史放整块最下面，
+                 翻完看结果时它不再挡在上面。 -->
+            <div class="tr-hist" id="trHist"></div>
           </div>
         </div>
       </div>
@@ -2309,7 +2351,8 @@ async function openReader(rel, name, code, goPage){
     const lib = await loadPdfjs();
     const task = lib.getDocument({ url: '/api/pdf?p=' + encodeURIComponent(rel) });
     RD.doc = await task.promise;
-    $('#readerBox').innerHTML = '<div id="pdfwrap"><canvas id="pdfcanvas"></canvas><div id="pdftext"></div></div>';
+    // 笔记引用高亮那一层必须跟着重建，否则 paintHL 找不到 #pdfhl（2026-11-23 实测踩到）
+    $('#readerBox').innerHTML = '<div id="pdfwrap"><canvas id="pdfcanvas"></canvas><div id="pdfhl"></div><div id="pdftext"></div></div>';
     RD.page = Math.min(Math.max(1, RD.page), RD.doc.numPages);
     await renderPdf();
   }catch(e){
@@ -2475,6 +2518,7 @@ async function renderPdf(){
     }
     canvas.getContext('2d').drawImage(off, 0, 0);
     await renderTextLayer(page, vp, await loadPdfjs());
+    paintHL();                        // 文字层换了，笔记引用高亮跟着重画（悬停 / 常驻都在这）
     $('#pgVal').textContent = RD.page + ' / ' + RD.doc.numPages;
     $('#zVal').textContent = Math.round(RD.zoom*100) + '%';
     $('#curP').textContent = 'p.' + RD.page;
@@ -2586,6 +2630,15 @@ const endSelect = e => {
 };
 $('#readerBox').addEventListener('pointerup', endSelect);
 $('#readerBox').addEventListener('pointercancel', endSelect);
+/* 2026-11-23 用户：「没有那种点击空白处可以取消选中的」——点到文字层以外（页面背景、
+   笔记列表、上面那条工具栏）就把选区清掉，不必再去拖别的字。右键不清（要留着给菜单用）。 */
+document.addEventListener('pointerdown', e => {
+  if(e.button !== 0) return;
+  const t = e.target;
+  if(t && t.closest && (t.closest('#pdftext') || t.closest('.note-menu'))) return;
+  const s = window.getSelection();
+  if(s && !s.isCollapsed) s.removeAllRanges();
+}, true);
 $('#readerBox').addEventListener('pointercancel', endPan);
 /* 2026-11-21 用户第九条：阅读页左上「← 课程」不用了（导航栏本来就能回课程），去掉。 */
 
@@ -2728,7 +2781,10 @@ function showSide(){
    自己在下面写这一条。原来往 #nDraft 里追加，侧栏已经没有那个框了。 */
 function transNote(text, page){
   if(!RD.doc){ toast('先打开一份讲义'); return; }
-  openNotePage('【译文 p.' + page + '】' + String(text || '').trim(), 'trans');
+  // 2026-11-23：把这次翻译的**原文**也带上（#trSrc）——PDF 里能亮的是原句，
+  //   译文在 PDF 上不存在；留空翻整页时就没有原文可高亮，这时只存译文。
+  const src = ($('#trSrc') && $('#trSrc').value || '').trim();
+  openNotePage('【译文 p.' + page + '】' + String(text || '').trim(), 'trans', src);
 }
 function renderTransResult(text, page){
   const out = $('#trOut'); if(!out) return;
@@ -2851,6 +2907,7 @@ function currentPageQuote(){
     .replace(/[ \t]+\n/g,'\n').trim().slice(0, 4000);
 }
 let NP_QUOTE = '';            // 这一条笔记引用的原文（保存时一起写进笔记，列表里能看出出处）
+let NP_SRC = '';              // 引用译文时另存一份「原文」：PDF 上的高亮要亮原句，译文在 PDF 里没有
 /* 2026-11-23 用户：「正常记笔记（没有引用的情况下）就不用灰字」。
    所以：① 没引用时不显示那个灰框（连占位那行也不留），② 点「记笔记」只认当前选中，
    没选中就是一条纯笔记——不再把整页文字兜底塞进去当引用。 */
@@ -2872,10 +2929,11 @@ function noteView(compose){
   if($('#noteExp')) $('#noteExp').hidden = !!compose;
   if($('#noteCompose')) $('#noteCompose').hidden = !compose;
 }
-function openNotePage(quote, kind){
+function openNotePage(quote, kind, src){
   if(!RD.doc){ toast('先打开一份讲义'); return; }
   const q = String(quote || '').trim();
   NP_QUOTE = q;
+  NP_SRC = String(src || '').trim().slice(0, 600);
   NP_KIND = (kind === 'trans') ? 'trans' : 'self';
   if($('#npPage')) $('#npPage').textContent = 'p.' + RD.page;
   if($('#npKind')) $('#npKind').hidden = (NP_KIND !== 'trans');
@@ -2893,6 +2951,7 @@ function closeNoteCompose(){
   noteView(false);
   if($('#npText')) $('#npText').value = '';
   NP_QUOTE = '';
+  NP_SRC = '';
   NP_KIND = 'self';
 }
 async function saveNotePage(){
@@ -2901,7 +2960,7 @@ async function saveNotePage(){
   if(!RD.doc){ toast('先打开一份讲义'); return; }
   if(!v){ toast('先写点内容'); if(ta) ta.focus(); return; }
   const j = await postJson('/api/notes', {code:RD.code, doc:RD.rel, action:'add',
-    note:{p:RD.page, text:v, q:NP_QUOTE, kind:NP_KIND}});
+    note:{p:RD.page, text:v, q:NP_QUOTE, qs:NP_SRC, kind:NP_KIND}});
   if(!j.ok){ toast('没记上：' + (j.error || '未知原因')); return; }
   RD.notes = j.notes || [];
   renderNotes();
@@ -2914,29 +2973,169 @@ if($('#npSave')) $('#npSave').onclick = saveNotePage;
 if($('#npText')) $('#npText').addEventListener('keydown', e => {
   if(e.key === 'Enter' && (e.ctrlKey || e.metaKey)){ e.preventDefault(); saveNotePage(); }
 });
+/* ---------- 笔记颜色 + PDF 里的引用高亮（2026-11-23 用户第 4 条） ----------
+   用户原话：「指针放上去那个笔记之后要看到引用的那里（如果有引用的话），然后那一块地方
+   就会高亮，点击一下就常驻高亮；右键那一个笔记可以选择颜色什么的（同时也会改变高亮的
+   颜色和那个笔记的标签颜色）」。
+   做法：每条笔记存一个颜色键 c（绿/琥珀/蓝/紫/红）；高亮画在 #pdfhl 上（画布之上、
+   文字层之下、不吃鼠标事件）；悬停临时亮，点击常驻（HL_PIN），右键换色走
+   /api/notes 的 color 动作，颜色同时改左边竖线、标签、PDF 高亮。 */
+const NC = {
+  green:  {ink:'#3f7d5a', fill:'rgba(63,125,90,.30)',  line:'rgba(63,125,90,.85)'},
+  amber:  {ink:'#b07d1f', fill:'rgba(176,125,31,.32)', line:'rgba(176,125,31,.85)'},
+  blue:   {ink:'#3b6ea5', fill:'rgba(59,110,165,.28)', line:'rgba(59,110,165,.85)'},
+  purple: {ink:'#7a5aa8', fill:'rgba(122,90,168,.28)', line:'rgba(122,90,168,.85)'},
+  red:    {ink:'#b3453f', fill:'rgba(179,69,63,.26)',  line:'rgba(179,69,63,.85)'}
+};
+const NC_NAMES = {green:'绿', amber:'琥珀', blue:'蓝', purple:'紫', red:'红'};
+const ncOf = n => (n && NC[n.c]) ? n.c : (n && n.kind === 'trans' ? 'amber' : 'green');
+let HL_HOVER = -1, HL_PIN = -1;
+/* 译文笔记里存的是译文，PDF 上要亮的是原文——所以另存一份 qs（源文）。 */
+function quoteOf(n){
+  if(!n) return '';
+  const raw = String(n.qs || n.q || '');
+  return raw.replace(/^【译文 p\.\d+】\s*/, '').trim();
+}
+function clearHL(){ const b = $('#pdfhl'); if(b) b.innerHTML = ''; }
+/* 高亮层得一直存在：阅读器换页/换文档时 #pdfwrap 会被重建，这里缺了就补一块。 */
+function hlBox(){
+  let box = $('#pdfhl');
+  if(box) return box;
+  const wrap = $('#pdfwrap');
+  if(!wrap) return null;
+  box = document.createElement('div');
+  box.id = 'pdfhl';
+  wrap.insertBefore(box, $('#pdftext'));
+  return box;
+}
+function paintHL(){
+  const box = hlBox();
+  if(!box) return;
+  box.innerHTML = '';
+  const idx = (HL_PIN >= 0) ? HL_PIN : HL_HOVER;
+  const n = idx >= 0 ? (RD.notes[idx] || null) : null;
+  if(!n || !RD.doc || (+n.p || 1) !== RD.page) return;
+  const q = quoteOf(n);
+  if(!q) return;
+  const spans = Array.from(document.querySelectorAll('#pdftext span'));
+  if(!spans.length) return;
+  const key = t => String(t == null ? '' : t).replace(/\s+/g, '');
+  const full = spans.map(s => key(s.textContent)).join('');
+  const qk = key(q);
+  let at = full.indexOf(qk), qlen = qk.length;
+  if(at < 0){
+    const shortQ = qk.slice(0, 30);
+    if(shortQ.length >= 4){ at = full.indexOf(shortQ); qlen = shortQ.length; }
+  }
+  if(at < 0) return;
+  const end = at + qlen;
+  const wr = $('#pdfwrap').getBoundingClientRect();
+  const c = NC[ncOf(n)];
+  let pos = 0;
+  spans.forEach(sp => {
+    const len = key(sp.textContent).length;
+    const s0 = pos, s1 = pos + len;
+    pos = s1;
+    if(!len || s1 <= at || s0 >= end) return;
+    const r = sp.getBoundingClientRect();
+    if(!(r.width > 0)) return;
+    const d = document.createElement('div');
+    d.className = 'hl' + (HL_PIN === idx ? ' pin' : '');
+    d.style.left = (r.left - wr.left) + 'px';
+    d.style.top = (r.top - wr.top) + 'px';
+    d.style.width = r.width + 'px';
+    d.style.height = r.height + 'px';
+    d.style.setProperty('--hl', c.fill);
+    d.style.setProperty('--hlb', c.line);
+    box.appendChild(d);
+  });
+}
+function setHL(hover, pin){
+  if(hover !== undefined) HL_HOVER = hover;
+  if(pin !== undefined) HL_PIN = pin;
+  paintHL();
+}
 function renderNotes(){
   $('#nCount').textContent = RD.notes.length;
   const box = $('#nlist');
-  if(!RD.notes.length){ box.innerHTML = '<div class="hint" style="border:0;padding:0;margin:0">暂无笔记。点上面的「记笔记」写一条——引用会跟着笔记一起存。</div>'; return; }
-  box.innerHTML = RD.notes.map((n,i)=>`<div class="nitem ${n.kind === 'trans' ? 'trans' : 'self'}" data-jump="${n.p}" data-i="${i}">
-      <div class="m"><b>p.${n.p}</b><span>${esc(n.hhmm||n.at||'')}</span>${n.kind === 'trans' ? '<i class="tag">引用译文</i>' : ''}</div>
-      ${n.q ? '<div class="nq">「' + esc(String(n.q).slice(0,80)) + (String(n.q).length>80?'…':'') + '」</div>' : ''}
-      <div>${esc(n.text)}</div><span class="del" data-del="${i}">删除</span></div>`).join('');
-  box.querySelectorAll('[data-jump]').forEach(el=>{
+  if(!RD.notes.length){
+    box.innerHTML = '<div class="hint" style="border:0;padding:0;margin:0">暂无笔记。点上面的「记笔记」写一条——引用会跟着笔记一起存。</div>';
+    HL_HOVER = -1; HL_PIN = -1; clearHL(); return;
+  }
+  box.innerHTML = RD.notes.map((n,i)=>{
+    const c = NC[ncOf(n)], isTrans = n.kind === 'trans';
+    const qt = quoteOf(n);
+    const q = qt ? '<div class="nq">「' + esc(qt.slice(0,110)) + (qt.length>110?'…':'') + '」</div>' : '';
+    return `<div class="nitem ${isTrans ? 'trans' : 'self'}${HL_PIN === i ? ' pin' : ''}" data-jump="${n.p}" data-i="${i}" style="--nc:${c.ink}">
+      <div class="m"><b>p.${n.p}</b><span>${esc(n.hhmm||n.at||'')}</span>${isTrans ? '<i class="tag">引用译文</i>' : ''}</div>
+      ${q}<div>${esc(n.text)}</div><span class="del" data-del="${i}">删除</span></div>`;
+  }).join('');
+  box.querySelectorAll('.nitem').forEach(el=>{
+    const i = +el.dataset.i;
+    el.addEventListener('mouseenter', () => setHL(i));     // 悬停：把引用的那段亮起来
+    el.addEventListener('mouseleave', () => setHL(-1));
     el.onclick = e => {
-      if(e.target.dataset.del!==undefined) return;
-      if(RD.doc){ RD.page = Math.min(RD.doc.numPages, Math.max(1, +el.dataset.jump)); renderPdf(); }
+      if(e.target.dataset.del !== undefined) return;
+      const n = RD.notes[i] || {};
+      const pg = Math.min(RD.doc ? RD.doc.numPages : 1, Math.max(1, +n.p || 1));
+      HL_PIN = (HL_PIN === i) ? -1 : i;                    // 点一下常驻，再点一下取消
+      if(RD.doc && pg !== RD.page){ RD.page = pg; renderPdf(); }
+      else paintHL();
+      box.querySelectorAll('.nitem').forEach(x => x.classList.toggle('pin', +x.dataset.i === HL_PIN));
+      if(HL_PIN === i && !quoteOf(n)) toast('这一条没有可回查的引用文字');
     };
+    el.oncontextmenu = e => { e.preventDefault(); openNoteColorMenu(i, e.clientX, e.clientY); };
   });
   box.querySelectorAll('[data-del]').forEach(el=>{
     el.onclick = async e => {
       e.stopPropagation();
       const j = await (await fetch('/api/notes',{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({code:RD.code, doc:RD.rel, action:'del', index:+el.dataset.del})})).json();
-      if(j.ok){ RD.notes = j.notes; renderNotes(); toast('已删除'); }
+      if(j.ok){ RD.notes = j.notes; if(HL_PIN >= RD.notes.length) HL_PIN = -1; renderNotes(); toast('已删除'); }
     };
   });
+  paintHL();          // 颜色/常驻状态变了，PDF 上那段跟着重画
 }
+/* 2026-11-23 用户第 4 条：右键笔记 → 选颜色（同时改这条笔记的标签色和 PDF 里那段引用的高亮色） */
+async function setNoteColor(i, color){
+  const j = await (await fetch('/api/notes',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({code:RD.code, doc:RD.rel, action:'color', index:i, color:color})})).json();
+  if(!j.ok){ toast('没改成：' + (j.error || '未知原因')); return; }
+  RD.notes = j.notes || RD.notes;
+  renderNotes();
+  toast('颜色改成「' + (NC_NAMES[color] || color) + '」');
+}
+function openNoteColorMenu(i, x, y){
+  closeNoteMenu(true);
+  const cur = ncOf(RD.notes[i] || {});
+  noteMenu = document.createElement('div');
+  noteMenu.className = 'note-menu nc-menu';
+  const h = document.createElement('div');
+  h.className = 'nc-h'; h.textContent = '这一条的颜色';
+  noteMenu.appendChild(h);
+  const row = document.createElement('div');
+  row.className = 'nc-row';
+  Object.keys(NC).forEach(k => {
+    const b = document.createElement('button');
+    b.className = 'nc-dot' + (k === cur ? ' on' : '');
+    b.title = NC_NAMES[k];
+    b.dataset.nc = k;
+    b.innerHTML = '<i style="background:' + NC[k].ink + '"></i>';
+    b.onclick = () => { closeNoteMenu(true); setNoteColor(i, k); };
+    row.appendChild(b);
+  });
+  noteMenu.appendChild(row);
+  const un = document.createElement('button');
+  un.textContent = (HL_PIN === i) ? '取消常驻高亮' : '高亮这一条';
+  un.dataset.unhl = '1';
+  un.onclick = () => { closeNoteMenu(true); HL_PIN = (HL_PIN === i) ? -1 : i; renderNotes(); };
+  noteMenu.appendChild(un);
+  noteMenu.style.left = Math.min(window.innerWidth - 190, x) + 'px';
+  noteMenu.style.top = Math.min(window.innerHeight - 100, y) + 'px';
+  noteMenuAt = Date.now();
+  document.body.appendChild(noteMenu);
+}
+
 /* 2026-11-22 用户：侧栏只留笔记列表，「写」只在那一个记笔记框里——#nDraft / #nAdd 已删除。 */
 $('#expBtn').onclick = async () => {
   if(!RD.doc){ toast('先打开一份讲义'); return; }

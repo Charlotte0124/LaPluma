@@ -120,9 +120,16 @@
 8. **滚动条槽固定**：`body.win #appScroll` 必须 `scrollbar-gutter:stable`——内容是「刚好高过一屏」时，滚动条出现/消失会让内容宽度来回变，界面上下抖、底边闪白条（用户 2026-11-22 图1）。
 9. **relayout 不许自激**（2026-11-23 用户：「依旧一直闪烁，无法选中，我电脑指针都在闪」）：`relayout()` 靠「窗口 +1px 再改回」逼 WebView2 收一次 `WM_SIZE`，页面因此收到 `resize`；如果页面在 `resize` 里又调 `relayout()`，就是每秒八九轮的自激循环——窗口一直在改尺寸，整页反复重排、PDF 反复重画，指针也跟着闪（反例实测：2 秒 16 次 resize，且一直不停）。现在两道闸：① 页面记 `lastNudge`，自己 nudge 之后 2 秒内、变化 ≤2px 的 resize 直接吞掉；② Python 侧 `REL_COOLDOWN = 0.45` 秒冷却，重复调用返回 `skipped: "cooldown"`（如实说跳过了，不假装做过）。判据见 `check-window-real.py` **W13**。
 10. **没有引用就不出灰框**（2026-11-23 用户：「如果正常记笔记（就是没有引用的情况下）就不用灰字」）：灰框只给「引用原文 / 引用译文」用。点「记笔记」时只引用**当前选中**（`currentSelText()`，限定在 `#pdftext` 内），选不到就是一条纯笔记——不再拿整页文字兜底当引用。灰框藏起来时输入框贴顶（`#noteCompose.no-quote textarea{margin-top:0}`）。判据见 `check-window-real.py` **W14** 与 `check-reading-tools.py` 第 8 条。
+11. **讲次芯片排版**（2026-11-23 用户：「排版问题错误」+ 图1）：芯片是 inline-flex，标题独占「可收缩」的那一份（`.ttl{flex:1 1 auto;min-width:0}` + 省略号）；「占位」徽标与讲号一律 `flex:0 0 auto;white-space:nowrap`——不然窗口一窄，徽标被挤成竖排、讲号折成「T06-」/「2」。反例实测：去掉 nowrap 后「占位」高 24px、讲号高 34px（真窗口 W17 量到）。
+12. **笔记颜色 + PDF 引用高亮**（2026-11-23 用户：「指针放上去之后要看到引用的那里，点击一下就常驻高亮，右键那个笔记可以选择颜色，同时也会改变高亮的颜色和那个笔记的标签颜色」）：每条笔记存颜色键 `c`（green/amber/blue/purple/red，服务端 `NOTE_COLORS`）；高亮画在 `#pdfhl`（画布之上、文字层之下、不吃鼠标事件），按「归一化空白后的全文 indexOf」找引用段落；悬停临时亮、点击常驻（`HL_PIN`，再点取消）、右键出 5 个色点，换色走 `/api/notes` 的 `color` 动作。**引用译文时必须另存原文 `qs`**——PDF 里没有译文，只有原句能高亮。
+13. **笔记列表不许被压扁 / 样式不许串**（2026-11-23 用户：「翻译笔记怎么成一坨的了」图5）：`.nlist` 是 flex 列且 `max-height`，子项默认会被压缩——一条笔记被压到 25.6px、里面引用块 46.8px，看着就是「空的一坨」，所以 `.nlist > .nitem{flex:0 0 auto}`。另：译文结果框那条 `.trans` 样式**只能写成 `.tr-out .trans`**，笔记条目也叫 `.trans`——写成全局时笔记被塞进「12/14 内边距 + 55vh + 自滚动」的译文框里（实测 223px → 修后 94px）。
+14. **悬停不许制造滚动溢出**：列表是 `overflow:auto`，悬停用 `translateX` 会把位移算进滚动区（实测 sw=273 / cw=271），鼠标一进去底下就冒横向滚动条——悬停只改边框与 `box-shadow`。
+15. **点空白处取消选中**：`document` 上的 `pointerdown`（capture）里，目标不在 `#pdftext` / `.note-menu` 且不是右键时清掉选区。右键**不准清**（要留给「翻译这段 / 记笔记」菜单）。
+16. **「最近 5 条」翻译历史放整块最下面**（2026-11-23 用户：「最近五条翻译移动到最底下去」）：在译文框与提示语之后，上面一条分隔线。
+17. **动效**：页面切换用 `fade`、侧栏换页签/译文出来用 `panelIn`、菜单用 `pop`、高亮用 `hlIn`；并保留 `@media (prefers-reduced-motion: reduce)` 全关。新增可见元素时看有没有该动的没动。
 6. **翻译历史最多 5 条**：存 `%USERPROFILE%\.pluma\translate-history.json`（`PLUMA_HOME` 可改），字段为时间 / 原文前 120 字 / 译文前 400 字；翻译页签顶部列最近 5 条，点一条回填 `#trSrc` 与译文。
 
-**怎么验证它被执行**：`python tools\check\check-reading-tools.py` 必须 **8/8**，且 `--selftest` 7/7（临时副本逐条造坏，证明判据会红）；提交钩子 `.githooks\pre-commit` 自动跑。
+**怎么验证它被执行**：`python tools\check\check-reading-tools.py` 必须 **12/12**，且 `--selftest` 12/12（临时副本逐条造坏，证明判据会红）；提交钩子 `.githooks\pre-commit` 自动跑。
 
 ## 十二、文字层 / 已成稿列表 / 干净启动器（2026-11-22 用户定）
 
@@ -131,9 +138,9 @@
 1. **文字层用 pdf.js 官方 TextLayer**：`renderTextLayer()` 必须 `new lib.TextLayer({textContentSource, container, viewport})`——每段一个 div，left/top 是整页百分比、宽度靠 scaleX。容器必须先 `box.style.setProperty('--scale-factor', String(vp.scale))`（官方层的字号是 `calc(Npx * var(--scale-factor))`；缺这个变量字号就错，选中框跟着偏）。不许回到「按行合并成一个 span」（只有整行的 left/top，逐段宽度还原不了）。官方层不可用时才退回按行合并，并把走的路记在 `#pdftext.dataset.tl`（official / official-fail / fallback）。
 2. **已成稿的讲次不出现在生成列表**：后端 `lesson_meta()` 按磁盘事实算 `done`——原件目录里还有它那份源课件（`orig` 与文件名主干对上）**且** `01_讲义` 里有 `<讲号>_…pdf`；两条都成立才算成稿（只导入没生成的占位不算，出厂示例课程没原件也不算）。界面 `syncLessons()` 过滤掉 done 的讲并提示「另有 N 讲已成稿」。重做入口只有一个：课程抽屉的成品行「重新生成」（`data-fregen`）——点了把它放回列表并勾上（`REGEN` 集合），生成成功后自动移出、又回到隐藏。
 3. **启动器单独一个干净文件夹**：`F:\DSH\apps\羽毛笔\` 里只放一个纯 ASCII 的 `启动羽毛笔.cmd`（`%~dp0` + 通配符找 `..\LaPluma\*.ps1`，带 `-Windowed`）；桌面快捷方式指向它。目录里多一个文件、或启动器里出现一个非 ASCII 字节，都算红——936 代码页会把中文读成乱码，双击就没反应（§六.3 的同一个坑）。
-4. **自测一律跑临时数据根**：要造「原件 + 成品」这类数据，用 `tools\check\_win_launch.py` + `PLUMA_TEST_DATA=<临时目录>`（在 import 之前改 `paths.DATA_ROOT`），跑完删掉；不许往用户自己的课程目录里造样本。
+4. **自测一律跑临时数据根**：要造「原件 + 成品」这类数据，用 `tools\check\_win_launch.py` + `PLUMA_TEST_DATA=<临时目录>`（在 import 之前改 `paths.DATA_ROOT`），跑完删掉；不许往用户自己的课程目录里造样本。2026-11-23 补：`NOTES_DIR` 以前写死 `~\.pluma\notes`，绕过了 `PLUMA_HOME`，自测造的笔记全落进用户真实笔记目录（TDEMO 几十条就是这么来的）——现在跟着 `USER_DIR` 走，笔记也进临时根。
 
-**怎么验证它被执行**：`python tools\check\check-window-layer.py` 必须 **3/3**，`--selftest` 6/6（逐条造坏都要变红）；提交钩子自动跑。只有真窗口量得出的（窗口矩形、选中框对位、拖动），跑 `python tools\check\check-window-real.py`（会弹一下软件窗口，约 40 秒；加 `--drag` 再做一次真实鼠标拖动）：W1 真窗口 / W2 全屏进出还原（±2px）/ W3 文字层与 pymupdf 词框对位（±4px）/ W4 成稿隐藏与重新生成 / W5 只有右键弹菜单 / W7 relayout 幂等 + 底色不透明 / W8 Esc 能退出全屏 / W9 记笔记（侧栏写作页：灰底只读引用 + 1 个输入、保存带引用）/ W10 翻译两框（↑↓ 可换向、没译文不出现「引用翻译记成笔记」）/ W11 拖选（起点在按下处、松手保留、反向也对）/ W12 滚动条槽（出不出滚动条，内容宽度都不变）/ W13 relayout 不自激（之后 4 秒不再持续收到 resize）/ W14 无引用时不出灰框（有选中灰框回来）/ W6 拖动。
+**怎么验证它被执行**：`python tools\check\check-window-layer.py` 必须 **3/3**，`--selftest` 6/6（逐条造坏都要变红）；提交钩子自动跑。只有真窗口量得出的（窗口矩形、选中框对位、拖动），跑 `python tools\check\check-window-real.py`（会弹一下软件窗口，约 40 秒；加 `--drag` 再做一次真实鼠标拖动）：W1 真窗口 / W2 全屏进出还原（±2px）/ W3 文字层与 pymupdf 词框对位（±4px）/ W4 成稿隐藏与重新生成 / W5 只有右键弹菜单 / W7 relayout 幂等 + 底色不透明 / W8 Esc 能退出全屏 / W9 记笔记（侧栏写作页：灰底只读引用 + 1 个输入、保存带引用）/ W10 翻译两框（↑↓ 可换向、没译文不出现「引用翻译记成笔记」）/ W11 拖选（起点在按下处、松手保留、反向也对）/ W12 滚动条槽（出不出滚动条，内容宽度都不变）/ W13 relayout 不自激（之后 4 秒不再持续收到 resize）/ W14 无引用时不出灰框（有选中灰框回来）/ W15 笔记悬停与点击高亮 + 右键换色（标签色与高亮色同改）/ W16 点空白处清掉选区 / W17 排版不挤（讲次芯片徽标与讲号单行、笔记不被压扁、列表不横向溢出）/ W6 拖动。
 
 ## 十四、产品仓只放能跑的代码（2026-11-22 用户定）
 
@@ -156,7 +163,7 @@
 | `check-ui-conflicts.py` | 提交钩子自动 |
 | `check-lecture-rules.py` | 提交钩子自动 |
 | `check-draft-json.py` | 提交钩子自动 |
-| `check-reading-tools.py` | 提交钩子自动（阅读页八条：拖动 / 全屏 / 移动 / 翻译笔记 / 侧栏写作页 / 翻译历史 / 翻译两框 / 无引用不出灰框） |
+| `check-reading-tools.py` | 提交钩子自动（阅读页十二条：拖动 / 全屏 / 移动 / 翻译笔记 / 侧栏写作页 / 翻译历史 / 翻译两框 / 无引用不出灰框 / 讲次芯片排版 / 历史在底部 / 笔记颜色与高亮 / 笔记不压扁·点空白取消选中） |
 | `check-window-layer.py` | 提交钩子自动（文字层 / 成稿隐藏 / 干净启动器） |
 | `check-inline-js.py` | 提交钩子自动（ui/index.html 里每段内联脚本过 node --check；引号/反引号写错立刻红） |
 | `check-repo-clean.py` | 提交钩子自动（产品仓只放能跑的代码；courses.json 只留 DEMO） |

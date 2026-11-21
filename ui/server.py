@@ -164,7 +164,9 @@ BOOK_NAME = DEFAULT_COURSE + "_九讲合订本_讲义.pdf"
 LAN = False            # main() 按 --lan 置 true：只有显式要上线才对外监听
 ACCESS_CODE = ""       # 8 位数字；LAN=False 时为空
 HOST_PATH = os.path.join(os.path.expanduser("~"), ".pluma", "host.json")
-NOTES_DIR = os.path.join(os.path.expanduser("~"), ".pluma", "notes")
+# 2026-11-23 修：笔记目录以前写死 ~\.pluma\notes，绕过了 PLUMA_HOME——自测（PLUMA_HOME=临时目录）
+#   造出来的笔记全落进用户真实的笔记目录里（TDEMO 那几十条就是这么来的）。现在跟着 USER_DIR 走。
+NOTES_DIR = os.path.join(USER_DIR, "notes")
 PDFJS_DIR = paths.res("tools", "print", "pdfjs")
 
 # ---------- 启动自保（2026-11-17 别人机器上「双击打不开」的复盘）----------
@@ -1063,6 +1065,8 @@ def merge_pdfs(files: list) -> bytes:
 
 
 # ---------- 笔记（按「课程 + 具体文档」落盘）----------
+# 2026-11-23 用户：右键笔记能选颜色，颜色同时决定 PDF 里那段引用的高亮色。
+NOTE_COLORS = ("green", "amber", "blue", "purple", "red")
 # 2026-11-16 冒烟真撞到：原来只按课程存，结果打开 L02 能看到挂在 L05 的笔记，
 # 页码对不上、导出的附页也会跟错文档。现在一格文档一个文件：
 #   %USERPROFILE%\.pluma\notes\<课程>\<文档名>.json；没传 doc 时才退回按课程存（兼容旧调用）。
@@ -1636,14 +1640,31 @@ class Handler(BaseHTTPRequestHandler):
                     text = str(note.get("text") or "").strip()
                     if not text:
                         return self._json({"ok": False, "error": "空笔记"}, 400)
+                    kind = "trans" if str(note.get("kind") or "") == "trans" else "self"
+                    color = str(note.get("c") or "").strip().lower()
+                    if color not in NOTE_COLORS:
+                        color = "amber" if kind == "trans" else "green"
                     cur.append({"p": int(note.get("p") or 1), "text": text[:2000],
                                 # 2026-11-22 用户：记笔记的框里要带一段「引用的原文」（灰、不可改）。
                                 #   引用跟着笔记一起存，列表里也能看出这条是拿哪段话起的。
                                 "q": str(note.get("q") or "")[:600],
+                                # 引用译文时的原文：PDF 上能高亮的是原句，译文在 PDF 里没有
+                                "qs": str(note.get("qs") or "")[:600],
                                 # self = 自己写的；trans = 引用译文（列表里用不同颜色区分）
-                                "kind": "trans" if str(note.get("kind") or "") == "trans" else "self",
+                                "kind": kind,
+                                # 颜色键（green/amber/blue/purple/red）：标签与 PDF 高亮同色
+                                "c": color,
                                 "at": time.strftime("%Y-%m-%d %H:%M"),
                                 "hhmm": time.strftime("%H:%M")})
+                elif act == "color":
+                    # 2026-11-23 用户：右键笔记换颜色
+                    i = int(body.get("index", -1))
+                    color = str(body.get("color") or "").strip().lower()
+                    if not (0 <= i < len(cur)):
+                        return self._json({"ok": False, "error": "没有这一条"}, 400)
+                    if color not in NOTE_COLORS:
+                        return self._json({"ok": False, "error": "没有这个颜色：%s" % color}, 400)
+                    cur[i]["c"] = color
                 elif act == "del":
                     i = int(body.get("index", -1))
                     if not (0 <= i < len(cur)):
