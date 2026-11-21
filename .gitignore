@@ -59,3 +59,6 @@ _trash/
 */_lessons/*.py
 !DEMO/_lessons/*.py
 /*.pdf
+
+# 2026-11-22：真实课程标题/说明放本机覆盖文件，不进公开库（仓里 courses.json 只留 DEMO）
+courses.local.json

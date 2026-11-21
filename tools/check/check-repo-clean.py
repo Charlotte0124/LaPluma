@@ -60,6 +60,10 @@ def main() -> int:
     for f in files:
         if any(h in f for h in DENY_HINT):
             red.append("一次性脚本/真课件混进仓：%s" % f)
+        elif fnmatch.fnmatch(f, "tools/check/shot-*.py"):
+            red.append("截图脚本算后台维护，归 PRTS（projects/课程/ops/lapluma/截图脚本-20261122）：%s" % f)
+        elif f == "courses.local.json":
+            red.append("courses.local.json 是本机真实课程名，绝不能进仓：%s" % f)
         elif not matches(f, ALLOW):
             red.append("不在「只放代码」白名单里：%s" % f)
     try:

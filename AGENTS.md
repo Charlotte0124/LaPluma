@@ -138,7 +138,8 @@
 **为什么有这条**：用户原话「全部项目是不要有外露的后台资源维护的（这些归纳 PRTS 管理）只可以保留源代码在仓库里面，这点要记得」。规矩**正本**在 PRTS 的 `CONVENTIONS.md` §63 与 `registry\repo-hygiene.json`（隐私仓），本仓只留指针，不复制正文。
 
 1. **能进仓**：源代码、启动/构建脚本、许可与说明（README / AGENTS / CHANGELOG / LICENSE）、运行必需资源（`assets\lapluma.ico`、`tools\print\pdfjs`、`tools\print\katex\fonts`）、示例课程数据 `DEMO\`、`docs\` 下的说明与界面截图、`.githooks\`。
-2. **不许进仓**：真课件与真课程名（`courses.json` 只许 DEMO）、`_trash` / `_logs` / `.build`、exe / zip、一次性脚本（`_tmp` / `_probe` / `dbg-`）、后台台账与成本表——这些归 PRTS `projects\课程\` 的财产。
+2. **不许进仓**：真课件与真课程名（`courses.json` 只许 DEMO）、`_trash` / `_logs` / `.build`、exe / zip、一次性脚本（`_tmp` / `_probe` / `dbg-`）、**截图脚本**（`tools\check\shot-*.py`，2026-11-22 已迁 PRTS：`projects\课程\ops\lapluma\截图脚本-20261122\`）、后台台账与成本表——这些归 PRTS `projects\课程\` 的财产。
+   - 真实课程标题/说明放**不进 git** 的 `courses.local.json`（`.gitignore` 已忽略；`courses_meta()` 用它覆盖仓里的 `courses.json`），本机界面照常显示「操作系统」这类标题，但仓里只有 DEMO。
 3. 本仓的判据是 `check-repo-clean.py`（进仓文件白名单 + courses.json 只留 DEMO），提交钩子自动跑。
 
 **怎么验证它被执行**：`python tools\check\check-repo-clean.py` 必须绿（193 个进仓文件全在白名单内）；PRTS 的 `check-repo-hygiene.ps1` 是权威判据，但它按 `registry\projects.json` 扫，LaPluma 目前只登记在 `ui-repos.json` 里，所以那边会跳过——这条缺口在此登记，不假装通过。

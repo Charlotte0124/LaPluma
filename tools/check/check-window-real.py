@@ -19,6 +19,7 @@ r"""真窗口自测：在羽毛笔**自己的 WebView2 窗口**里量窗口矩�
   W9 记笔记单框：点「记笔记」把侧栏切到写作页（灰底只读引用 + 1 个输入框），保存后回列表并带引用
   W10 翻译两框：上下两个框 + 中间 ↑↓ 可交换方向；上面能输入；没译文时不出「引用翻译记成笔记」
   W11 拖选：起点在按下的地方（不是行首），松手后选区保留
+  W12 滚动条槽：出滚动条前后内容宽度不变（gutter 固定；不然「刚好一屏」时界面抖、底边闪白条）
 
 注意：主脚本是 <script type="module">，函数不在 window 上——所以这里只点界面元素，
       不调页面函数；页面里只读 DOM、设选区。
@@ -812,6 +813,36 @@ def main():
                            % (res["mid"]["a"], res["mid"]["t"][:10], res["rev"]["t"][:10]))
                 except Exception as e:  # noqa: BLE001
                     bad("W11 拖选", "没验成：%r" % (e,))
+
+            # ---- W12 滚动条槽固定：有没有滚动条，内容宽度都不变 ----
+            try:
+                page.click("a[data-page='generate']")
+                time.sleep(0.6)
+                m0 = page.evaluate("""() => {
+                  const s = document.getElementById('appScroll');
+                  return {cw: s.clientWidth, ow: s.offsetWidth, gutter: getComputedStyle(s).scrollbarGutter};
+                }""")
+                page.evaluate("""() => {
+                  const d = document.createElement('div');
+                  d.id = 'w12spacer'; d.style.height = '900px';
+                  document.getElementById('appScroll').appendChild(d);
+                }""")
+                time.sleep(0.5)
+                m1 = page.evaluate("""() => {
+                  const s = document.getElementById('appScroll');
+                  return {cw: s.clientWidth, ow: s.offsetWidth};
+                }""")
+                page.evaluate("() => { const d = document.getElementById('w12spacer'); if (d) d.remove(); }")
+                time.sleep(0.4)
+                d1 = abs(m1["cw"] - m0["cw"])
+                if m0["gutter"] != "stable":
+                    bad("W12 滚动条槽", "scrollbar-gutter=%r（应为 stable）" % (m0["gutter"],))
+                elif d1 > 1:
+                    bad("W12 滚动条槽", "出滚动条之后内容宽度变了 %dpx（会来回抖）" % d1)
+                else:
+                    ok("W12 滚动条槽", "滚动条出现前后内容宽度都是 %dpx（槽固定，不会抖）" % m0["cw"])
+            except Exception as e:  # noqa: BLE001
+                bad("W12 滚动条槽", "没验成：%r" % (e,))
 
             # ---- W6 真拖动（可选，会动鼠标）----
             if args.drag:

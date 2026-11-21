@@ -600,13 +600,33 @@ def usage_summary():
 
 
 # ---------- 课程（自动分类 + 收藏） ----------
+def courses_meta() -> dict:
+    """课程标题/说明：仓里的 courses.json 打底，数据根里的 courses.local.json 覆盖。
+
+    2026-11-22 用户：「那些算后台维护」「只可以保留源代码在仓库里面」——真实课程名不能进公开仓，
+    但本机界面上还得显示「操作系统」这种标题。所以把「真实标题」放到**不进 git** 的
+    courses.local.json（.gitignore 已忽略），仓里那份只留 DEMO。
+    """
+    meta = _read_json(paths.data_or_res("courses.json"), {})
+    local = _read_json(paths.data("courses.local.json"), {})
+    if isinstance(local, dict) and local:
+        for k, v in local.items():
+            if str(k).startswith("_"):
+                continue
+            if isinstance(v, dict):
+                meta.setdefault(k, {}).update(v)
+            else:
+                meta[k] = v
+    return meta
+
+
 def discover_courses():
     """扫两根：含 01_讲义 或 _lessons 的目录就是一「门课」。
 
     2026-11-17：数据根先扫（用户自己的课件），资源根后扫（随程序发布的示例课程）；
     同名时数据根优先——用户把示例课程拷到 exe 旁边改，就看改过的那份。
     """
-    meta = _read_json(paths.data_or_res("courses.json"), {})
+    meta = courses_meta()
     favs = set(_read_json(FAV_PATH, {}).get("codes", []))
     found = {}
     for root in (paths.DATA_ROOT, paths.RES_ROOT):
@@ -1827,10 +1847,15 @@ class Handler(BaseHTTPRequestHandler):
                 try:
                     for sub in ("_lessons", "01_讲义", "06_笔记", "00_原件"):
                         os.makedirs(os.path.join(d, sub), exist_ok=True)
-                    meta_path = paths.data("courses.json")
-                    meta = _read_json(paths.data_or_res("courses.json"), {})
-                    meta[code] = {"title": title, "en": "", "desc": str(body.get("desc") or ""), "reader": "大学"}
-                    _write_json(meta_path, meta)
+                    # 2026-11-22：新建课程写进**不进 git** 的 courses.local.json，
+                    #   仓里的 courses.json 只留 DEMO（真实课程名不进公开仓）。
+                    local_path = paths.data("courses.local.json")
+                    local = _read_json(local_path, {})
+                    if not isinstance(local, dict):
+                        local = {}
+                    local[code] = {"title": title, "en": "", "desc": str(body.get("desc") or ""),
+                                   "reader": "大学"}
+                    _write_json(local_path, local)
                 except Exception as e:  # noqa: BLE001
                     return self._json({"ok": False, "error": "新建课程失败：%r" % (e,)}, 500)
                 return self._json({"ok": True, "code": code, "title": title})

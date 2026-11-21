@@ -119,9 +119,15 @@ def run(root):
             files = staged
             touched = [x for x in files if x.startswith('docs/预览') or x.startswith('docs/资产')]
             ui_touched = [x for x in files if x.startswith('ui/')]
-            note.append('这次提交：ui %d 个改动 · 带图 %d 个' % (len(ui_touched), len(touched)))
-            if ui_touched and not touched:
-                red.append('A 这次提交改了 ui/ 却没带图：预览稿或真实截图要跟界面改动放同一个提交')
+            # 2026-11-22：ui/server.py 是后端代码（只是住在 ui\ 下），改了它不会让界面变样；
+            #   只改 *.py 时不要求带图（否则每次动接口都要拍一张没变化的图）。
+            ui_visible = [x for x in ui_touched if not x.endswith('.py')]
+            note.append('这次提交：ui %d 个改动（可见 %d）· 带图 %d 个'
+                        % (len(ui_touched), len(ui_visible), len(touched)))
+            if ui_touched and not ui_visible and not touched:
+                yel.append('A 这次只改了 ui/ 下的 Python（无可见界面改动），没带图')
+            elif ui_visible and not touched:
+                red.append('A 这次提交改了界面却没带图：预览稿或真实截图要跟界面改动放同一个提交')
         elif t_ui:
             rev = ui_rev
             files = ui_files
