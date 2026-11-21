@@ -95,6 +95,7 @@
 1. 每次改动收尾时，问一句：**这次踩的坑，下次怎么挡住？** 要写就写进本文件（一句为什么 + 可执行的条 + 判据）。
 2. 写进 AGENTS.md 的规矩，必须有一条能失败的判据放在 `tools/check/`，并接进 `.githooks/pre-commit`。
 3. `tools/check/check-rules-wired.py` 检查「判据 ↔ 规矩」两边对得上：有判据没规矩、有规矩没判据都判红。
+4. **钩子的开关是每个克隆的本地配置**：`.githooks/pre-commit` 跟着仓库走，但 `core.hooksPath` 不跟着走。换机器、换视窗、重新 clone 之后第一件事是 `python tools\setup-hooks.py`（它只做 `git config core.hooksPath .githooks`）。没跑这一步，上面所有判据一条都不会执行，等于没有——`check-rules-wired.py` 会把「钩子没开」判红，不会假装通过。
 
 **怎么验证它被执行**：`python tools/check/check-rules-wired.py` 全接上才算绿（提交钩子自动跑）。
 

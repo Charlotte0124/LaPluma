@@ -277,6 +277,16 @@ docs/示例/         桃花源记：原始课件（范本）与加工后讲义
 courses.json       课程元数据（标题 / 说明 / 读者口径）
 ```
 
+## 开发：克隆后先开钩子
+
+规矩写在 [AGENTS.md](AGENTS.md)，判据在 `tools/check/`，两者由 `.githooks/pre-commit` 在每次提交时自动跑。钩子文件跟着仓库走，但**「用不用它」是每个克隆自己的本地配置**（`core.hooksPath`），不会随仓库走——换一台机器或重新 clone 之后先跑一次：
+
+```bat
+python tools\setup-hooks.py
+```
+
+它做的事只有一句：`git config core.hooksPath .githooks`。跑完 `python tools\check\check-rules-wired.py` 显示「钩子已开 · 17 个判据 · 全接上」；没跑就判红（不会假绿）。
+
 ## 依赖
 
 **文件夹版**：需要 Python 3.12 和 `pymupdf`；Chrome / Edge 用系统自带的。
