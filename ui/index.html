@@ -2398,12 +2398,13 @@ function syncFsLabel(){
   if($('#fsLabel')) $('#fsLabel').textContent = on ? '退出全屏' : '全屏';
 }
 function exitReaderFullscreen(){
-  const card = readCard();
-  if(card) card.classList.remove('fs');
-  document.body.classList.remove('fs-read');
-  if(document.fullscreenElement){
-    try{ document.exitFullscreen(); }catch(_){}
+  // 走 setFullscreen(false) 而不是自己摘 class：退出全屏要顺带把窗口矩形还回去
+  // （2026-11-22 用户：全屏退出后占满屏幕）。setFullscreen 是函数声明，这里调用时已可用。
+  if(inFullscreen()){
+    try{ setFullscreen(false); }catch(_){ }
+    return;
   }
+  document.body.classList.remove('fs-read');
   syncFsLabel();
 }
 let SIDE_HIDDEN = false;
@@ -2426,7 +2427,11 @@ async function setFullscreen(on){
     try{ if(document.fullscreenElement) await document.exitFullscreen(); }catch(e){ /* 退出失败也继续撤满屏 */ }
     card.classList.remove('fs'); syncFsLabel();
     // 2026-11-22 用户：「退出全屏后占满整个屏幕、缩不回去」——把进全屏前记下的矩形设回去。
-    setTimeout(() => { try{ window.pywebview.api.restore_bounds(); }catch(e){} }, 160);
+    //   WebView2 退出 HTML 全屏后还会再撑一次，所以立刻设回一次、260ms 后再补一次；
+    //   两次都带 SWP_FRAMECHANGED（在 _WinApi.restore_bounds 里）。
+    const restoreWin = () => { try{ window.pywebview.api.restore_bounds(); }catch(e){} };
+    restoreWin();
+    setTimeout(restoreWin, 260);
     setTimeout(() => { if(RD.doc) renderPdf(); }, 140);
     return;
   }

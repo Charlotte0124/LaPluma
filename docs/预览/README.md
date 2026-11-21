@@ -105,3 +105,4 @@
 ## 2026-11-22 阅读页工具（六条）· 实现进度
 
 - ① 标题条 mousedown → _WinApi.drag_window（ReleaseCapture + WM_NCLBUTTONDOWN/HTCAPTION）
+- ② 退出全屏 restore_bounds 带 SWP_FRAMECHANGED，260ms 后再补一次

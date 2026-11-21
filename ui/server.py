@@ -2724,17 +2724,35 @@ class _WinApi:
             return {"ok": False}
 
     def restore_bounds(self):
+        """退出全屏：把 keep_bounds() 记下的矩形设回去，并让系统重算边框。
+
+        2026-11-22 用户：「从全屏退出之后会占据整个屏幕，没办法缩小」。只设一次
+        SetWindowPos(SWP_SHOWWINDOW) 在 WebView2 里会被「退出 HTML 全屏后浏览器再撑一次」
+        盖回去；这里补 SWP_FRAMECHANGED（重算非客户区/边框）并连设两次（间隔 80ms），
+        第二次把浏览器退出全屏后的尺寸盖回记下的矩形。最大化状态先 SW_RESTORE，
+        否则 SetWindowPos 改不动一个最大化窗口。
+        """
         try:
             import ctypes
             import ctypes.wintypes as wt
+            u = ctypes.windll.user32
             h = _find_hwnd()
             b = self._bounds
             if not h or not b:
                 return {"ok": False}
             x, y, w, hh = b
-            ctypes.windll.user32.SetWindowPos(wt.HWND(h), None, int(x), int(y),
-                                              int(w), int(hh), 0x0040)  # SWP_SHOWWINDOW
-            return {"ok": True, "rect": list(b)}
+            if u.IsZoomed(wt.HWND(h)):
+                u.ShowWindow(wt.HWND(h), 9)  # SW_RESTORE
+            # SWP_SHOWWINDOW(0x0040) | SWP_FRAMECHANGED(0x0020)
+            flags = 0x0040 | 0x0020
+            for _ in range(2):
+                u.SetWindowPos(wt.HWND(h), None, int(x), int(y),
+                               int(w), int(hh), flags)
+                time.sleep(0.08)
+            r = wt.RECT()
+            u.GetWindowRect(wt.HWND(h), ctypes.byref(r))
+            return {"ok": True, "rect": list(b),
+                    "after": [int(r.left), int(r.top), int(r.right - r.left), int(r.bottom - r.top)]}
         except Exception as e:  # noqa: BLE001
             _log_error("restore_bounds", e)
             return {"ok": False}
