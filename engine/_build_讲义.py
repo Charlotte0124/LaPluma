@@ -10,6 +10,12 @@
 
 数据文件放在 CS340\\_lessons\\<编号>.py，变量名 LESSON，结构见文件末尾注释。
 术语附英不在这里做：生成后统一跑 tools\\print\\terms.py（同一口径，L01 也是这么来的）。
+
+原件图（2026-11-21 加，R115）
+    用户：「不是说要根据原件了吗 为什么我一点原件的图也看不到」「如有需要的话可以增加一些图片」。
+    build() 开头先 ensure_figures()：按 assets\\gen\\<讲号>\\pNNN.png 修图名、给没图的节补 1 张
+    （不超过课件总页数 1/3）、逐张图注补「课件 p.N」出处；一张图都没有时日志写明原因。
+    图仍写绝对 file:// URI（HTML 搬到哪都能显示），缺图照旧记进 MISSING 让 _make.py 拦下。
 """
 from __future__ import annotations
 
@@ -27,15 +33,20 @@ ROOT = paths.DATA_ROOT
 # 2026-11-17：课程代码不再写死（示例课程 / 截图演示用 PLUMA_COURSE 切，默认仍是 CS340）
 COURSE = os.environ.get("PLUMA_COURSE") or "CS340"
 
-# ── 课件图片目录（2026-11-16 加）──────────────────────────────────────────────
+# ── 课件页图（2026-11-16 加；2026-11-21 加 R115「原件图必须真的画出来」）────────
 # 为什么要有：拆家后「课件原图」留在资料仓（80 MB），软件仓里一张都没有；
 # 原先 `src="assets/…"` 是相对 HTML 的，HTML 又写在软件仓，于是 Chrome 只能画出
 # 14×16 的缺图图标 —— 更坑的是它不报错，成品里就静静躺着一条白条。
 # 现在：先找图，找到就写绝对 file:// URI（HTML 搬到哪都能显示），找不到就记进 MISSING，
 # 由 _make.py 报「缺图」并停下，不再产出「看起来绿、其实没图」的 PDF。
+# 2026-11-21 用户「为什么我一点原件的图也看不到」：只把图查出来还不够——数据里没有 fig 块
+#   时讲义照样一张图都不画，而且一声不响。现在 build() 开头调 ensure_figures()：
+#   修模型写错的图名、给没图的节按课件页顺序补 1 张（≤ 总页数 1/3）、逐张图注补「课件 p.N」。
 ASSETS = None          # 解析到的图片目录（None = 没配置）
 ASSETS_FROM = ''       # 这个目录是从哪来的（报错时好说话）
 MISSING = []           # 本讲缺图的文件名
+CURRENT_AVAIL = []     # 本讲可用的课件页图 [(相对 assets 的路径, 页码), …]（build 里设）
+IMG_EXT = ('.png', '.jpg', '.jpeg', '.webp')
 
 
 def _user_assets_map() -> dict:
@@ -80,14 +91,219 @@ def use_course(code: str) -> None:
     MISSING = []
 
 
+def figure_files(no: str) -> list:
+    """本讲可用的课件页图：优先 assets/gen/<讲号>/，兼容 assets/<讲号>/；按页码排序。
+
+    返回 [(相对 assets 的路径, 页码), …]。文件名里的 pNNN 就是课件页码（_draft.extract_figures
+    的命名口径）；认不出页码的按顺序编号，至少能补进讲义、图注不会空。
+    """
+    if not ASSETS:
+        return []
+    for d in (os.path.join(ASSETS, 'gen', no), os.path.join(ASSETS, no)):
+        if not os.path.isdir(d):
+            continue
+        rows = []
+        for fn in sorted(os.listdir(d)):
+            if not fn.lower().endswith(IMG_EXT):
+                continue
+            m = re.search(r'p0*(\d{1,3})', fn, re.I)
+            page = int(m.group(1)) if m else len(rows) + 1
+            rel = os.path.relpath(os.path.join(d, fn), ASSETS).replace('\\', '/')
+            rows.append((rel, page))
+        if rows:
+            return sorted(rows, key=lambda x: (x[1], x[0]))
+    return []
+
+
+def _ref_rel(ref: str) -> str:
+    """把数据里的图片引用归一成「相对 assets 的路径」（绝对路径也剥回相对段）。"""
+    r = str(ref or '').strip().replace('\\', '/')
+    if '://' in r:                                   # file:///F:/… → F:/…
+        r = r.split('://', 1)[1].lstrip('/')
+    for pre in ('/06_笔记/assets/', '/assets/'):     # 绝对路径里的 asset 段也能剥掉
+        if pre in r:
+            r = r.split(pre, 1)[1]
+            break
+    while True:
+        for pre in ('06_笔记/assets/', 'assets/'):
+            if r.startswith(pre):
+                r = r[len(pre):]
+                break
+        else:
+            break
+    while r.startswith('./'):
+        r = r[2:]
+    return r.lstrip('/')
+
+
+def _match_fig(ref: str, avail: list) -> tuple | None:
+    """图片引用 → 清单里的 (相对路径, 页码)。认：原路径 / 带 assets 前缀 / 只给文件名 / 只给页码。
+
+    为什么认这么多：模型抄路径时会自己加前缀（assets/…）、只写文件名（p012.png）、
+    或只写页码（p.12）。原来只认一字不差的路径，对不上就整块删掉——用户看到的就是
+    「导出了 28 张图，讲义里一张也没有」。
+    """
+    if not avail:
+        return None
+    r = _ref_rel(ref).lower()
+    if not r:
+        return None
+    for rel, page in avail:                          # ① 原路径 / 尾部一致
+        rl = rel.lower()
+        if r == rl or r.endswith('/' + rl) or rl.endswith('/' + r):
+            return (rel, page)
+    name = r.rsplit('/', 1)[-1]
+    for rel, page in avail:                          # ② 只给文件名
+        if rel.rsplit('/', 1)[-1].lower() == name:
+            return (rel, page)
+    m = re.search(r'(?:p\.?|第)(\d{1,3})(?:\s*页)?', r) or re.search(r'(\d{1,3})', name)
+    if m:                                            # ③ 只给页码：p.12 / p012 / 第12页 / 12
+        want = int(m.group(1))
+        for rel, page in avail:
+            if page == want:
+                return (rel, page)
+    return None
+
+
+def _page_of_ref(ref: str) -> int:
+    """图引用对应的课件页码（图注补出处用）；认不出返回 0。"""
+    hit = _match_fig(ref, CURRENT_AVAIL)
+    if hit:
+        return hit[1]
+    m = re.search(r'p0*(\d{1,3})', _ref_rel(ref), re.I)
+    return int(m.group(1)) if m else 0
+
+
+def _cap_with_page(cap: str, page: int) -> str:
+    """图注必须带出处「课件 p.N」（R115）；数据里没写就按文件名页码补上。"""
+    cap = str(cap or '').strip()
+    if page and not re.search(r'课件\s*p\.\s*\d+', cap):
+        if cap:
+            cap = cap.rstrip('。.；;，,、)） ') + '（课件 p.%d）' % page
+        else:
+            cap = '原件第 %d 页（课件 p.%d）' % (page, page)
+    return cap
+
+
+def ensure_figures(lesson: dict, emit=print, avail: list | None = None) -> dict:
+    """修图名 + 每节补图 + 图注补出处（R115，用户 2026-11-21）。
+
+    用户原话：「不是说要根据原件了吗 为什么我一点原件的图也看不到」「如有需要的话可以增加一些图片」。
+    对 lesson['sections'] 就地做三件事：
+      ① 模型写错的图名按清单（原路径 / 文件名 / 页码）修回来；实在对不上才丢，丢几个、为什么写进日志；
+      ② 每张图注补「课件 p.N」出处（数据里没写时）；
+      ③ 某一节（§0 导读除外）一张图都没有时，按课件页顺序补 1 张；补图总量 ≤ 课件总页数的
+         1/3（用户定的「不要滥补」），且同一份数据重复 build 不会越补越多。
+    没图可用时也会在日志里说明原因，不再静默产出一份没图的讲义。返回统计 dict。
+    """
+    no = str(lesson.get('no') or '')
+    if avail is None:
+        avail = figure_files(no)
+    secs = lesson.get('sections') or []
+    stats = {'no': no, 'available': len(avail), 'model': 0, 'fixed': 0,
+             'dropped': [], 'added': 0, 'used': 0, 'cap': 0,
+             'total': int(lesson.get('figs_total') or 0) or len(avail), 'sections_no_fig': 0}
+    # 同一份 lesson 可能被 build() 调两次（例如合订本先取正文再拼）：
+    #   记下已经自动补过几张，第二次不再重复补，否则每 build 一回就多出几张图。
+    added_before = int(lesson.get('figs_added') or 0)
+
+    # 先把数据里已有的 fig 块收出来点数（后面日志要说清「数据里已有几张」）
+    for s in secs:
+        stats['model'] += sum(1 for b in s.get('body') or [] if b and b[0] == 'fig')
+
+    if not avail:
+        # 没有清单：已有的 fig 块原样留着（可能是绝对路径，照样能画），但要说明为什么补不了图
+        if stats['model']:
+            emit('[图] %s 没有可用课件页图清单（%s），已有 %d 个 fig 引用按原路径解析'
+                 % (no, ASSETS or '没找到课件图目录', stats['model']))
+        else:
+            emit('[图] %s 这一讲没有可用课件页图（%s；先导入原件让 _draft 抽图，'
+                 '或用 tools\\assets.py --set 指课件图目录）→ 讲义里不会出现原件图'
+                 % (no, ASSETS or '没找到 06_笔记\\assets'))
+        return stats
+
+    # ① 修名 + ② 图注补出处
+    used = set()
+    for s in secs:
+        body, fixed_body = list(s.get('body') or []), []
+        for b in body:
+            if not b or b[0] != 'fig':
+                fixed_body.append(b)
+                continue
+            ref = b[1] if len(b) > 1 else ''
+            hit = _match_fig(ref, avail)
+            if not hit:
+                stats['dropped'].append(str(ref))
+                continue
+            rel, page = hit
+            if str(ref).strip().replace('\\', '/') != rel:
+                stats['fixed'] += 1           # 模型写错前缀/文件名，已按清单修回来
+            fixed_body.append(('fig', rel, _cap_with_page(b[2] if len(b) > 2 else '', page)))
+            used.add(rel)
+        s['body'] = fixed_body
+    stats['used'] = len(used)
+    stats['model'] = len(used)               # 数据里真正认得的图（编的/对不上的已计入 dropped）
+
+    # ③ 没图的节（§0 导读除外，与提示词口径一致）按课件页顺序补 1 张；
+    #    自动补图总量 ≤ 课件总页数的 1/3（用户「不要滥补」），跨多次 build 也算同一个预算。
+    cap = max(1, stats['total'] // 3)
+    stats['cap'] = max(0, cap - added_before)
+    pending = [x for x in avail if x[0] not in used]
+    for s in secs:
+        if stats['added'] >= stats['cap'] or not pending:
+            break
+        if str(s.get('no')) == '0':
+            continue                       # 导读不塞原页图：提示词也是「§0 导读除外」
+        if any(b and b[0] == 'fig' for b in s.get('body') or []):
+            continue
+        rel, page = pending.pop(0)
+        s['body'] = list(s.get('body') or []) + [('fig', rel, '原件第 %d 页（课件 p.%d）' % (page, page))]
+        stats['added'] += 1
+        used.add(rel)
+    if stats['added']:
+        lesson['figs_added'] = added_before + stats['added']
+    stats['used'] = len(used)
+    stats['sections_no_fig'] = sum(
+        1 for s in secs
+        if str(s.get('no')) != '0' and not any(b and b[0] == 'fig' for b in s.get('body') or []))
+
+    if stats['dropped']:
+        emit('[图] 丢弃 %d 个对不上的图名（清单里没有，说明模型编了或路径写错）：%s'
+             % (len(stats['dropped']), '、'.join(stats['dropped'][:4])))
+    emit('[图] 可用课件页图 %d 张（课件 %s 页）· 本讲用 %d 张（数据里已有 %d · 修名 %d · 本次补 %d，'
+         '补图上限 %d）%s'
+         % (stats['available'], stats['total'], stats['used'], stats['model'], stats['fixed'],
+            stats['added'], cap,
+            ('· 还有 %d 个内容节没图（清单用完或补图到上限）' % stats['sections_no_fig'])
+            if stats['sections_no_fig'] else ''))
+    return stats
+
+
 def fig_src(name: str) -> str:
-    """把图片文件名变成能直接加载的 src；找不到就记进 MISSING。"""
-    if ASSETS:
-        p = os.path.join(ASSETS, name)
+    """把图片引用变成能直接加载的 src；找不到就记进 MISSING（上层据此报「缺图不打」）。"""
+    hit = _match_fig(name, CURRENT_AVAIL)
+    cands = []
+    if hit:
+        cands.append(hit[0])
+    rel = _ref_rel(name)
+    if rel:
+        cands.append(rel)
+    raw = str(name or '')
+    if os.path.isabs(raw):
+        cands.append(raw)
+    for c in cands:
+        if os.path.isabs(c):
+            p = c
+        elif ASSETS:
+            p = os.path.join(ASSETS, c)
+        else:
+            p = c
         if os.path.isfile(p):
             return 'file:///' + p.replace('\\', '/').lstrip('/')
-    MISSING.append(name)
-    return 'assets/' + name
+    shown = hit[0] if hit else (rel or raw)
+    if name not in MISSING:
+        MISSING.append(name)
+    return 'assets/' + shown
 
 CSS = """
   :root{
@@ -219,9 +435,11 @@ def render_block(b):
         return ('<blockquote><span class="en">%s</span>\n<span class="ref">%s</span></blockquote>'
                 % (b[1], b[2]))
     if kind == 'fig':
-        cap = b[2]
+        ref = b[1] if len(b) > 1 else ''
+        # 图注必须带出处「课件 p.N」（R115）：数据没写就按图名里的页码补，绝不空着
+        cap = _cap_with_page(b[2] if len(b) > 2 else '', _page_of_ref(ref))
         return ('<figure>\n  <img src="%s" alt="%s">\n  <figcaption>%s</figcaption>\n</figure>'
-                % (fig_src(b[1]), cap.replace('"', ''), cap))
+                % (fig_src(ref), cap.replace('"', ''), cap))
     if kind == 'ul':
         return '<ul>\n' + '\n'.join('  <li>%s</li>' % x for x in b[1]) + '\n</ul>'
     if kind == 'ol':
@@ -261,13 +479,16 @@ def render_block(b):
 # ── 语言档（2026-11-18）────────────────────────────────────────────────────────
 # 「全中」= 正文中文 + 术语每节首次附英文（原有口径）；「全英」= 正文英文 + 专有名称中文。
 # 固定件（目录 / 术语表 / 附录 / 自测 / 讲法）也按这一档切换，否则英文正文里会夹中文标题。
+# 2026-11-21（R114，用户「CO2（二氧化碳）而不是直接取代」）：全英档的固定件跟正文口径一致——
+#   英文在前、中文原名在后。封面主标题用 en、中文原名降到副行；术语表第一列 English、第二列「中文原名」；
+#   讲法 / 目录 / 附录 / 自测同样先英文后中文。正文里每个专有名称首次出现写「English（中文）」。
 LABELS = {
     "zh": {"lec": "讲法。", "toc": "目录", "toc_sub": "CONTENTS",
            "gloss": ["中文", "English", "页码", "备注"],
            "sym": ["符号 / 缩写", "读法·含义", "出处"],
            "myths": "常见误解"},
     "en": {"lec": "How to use. ", "toc": "Contents", "toc_sub": "",
-           "gloss": ["English", "中文", "Page", "Note"],
+           "gloss": ["English", "中文原名", "Page", "Note"],
            "sym": ["Symbol / Abbreviation", "Meaning", "Source"],
            "myths": "Common misconceptions"},
 }
@@ -283,6 +504,11 @@ def build(lesson: dict) -> str:
     lang = _lang_of(L)
     lab = LABELS[lang]
     use_course(code)
+    # 2026-11-21（R115）：本讲可用的课件页图 + 修名/补图/图注补出处。
+    #   放在渲染前：数据里没有 fig 块（旧数据、或模型漏写）时也能把原件图画出来。
+    global CURRENT_AVAIL
+    CURRENT_AVAIL = figure_files(no)
+    ensure_figures(L, emit=print)
     out = []
     out.append('<!DOCTYPE html>\n<html lang="%s" data-theme="dark" data-reader="大学" data-lang="%s">'
                % ("en" if lang == "en" else "zh-CN", lang))

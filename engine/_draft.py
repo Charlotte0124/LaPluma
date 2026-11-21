@@ -10,6 +10,10 @@ r"""导入原件 → DeepSeek 写正文 → 落成 <课程>\_lessons\<讲号>.py
     · 只读 <课程>\00_原件 里那一份源 PDF 的文字层；扫描件（没文字层）出不了内容，会明确报错。
     · 源文本超过 MAX_SRC 字符时只取前 MAX_SRC，并在日志里写明（不静默截断）。
     · 模型只负责组织与标注出处；三道门仍照跑，红项不产出。
+    · 全英档（lang="en"）专业名称写「English（中文）」：英文在前、中文原名放全角括号里，首次出现写全，
+      之后只写英文（用户 2026-11-21「CO2（二氧化碳）而不是直接取代」）。
+    · 原件图（用户 2026-11-21「为什么我一点原件的图也看不到」）：课件页导出成 PNG 后列表随提示词下发，
+      并要求每节引用；模型漏写时渲染阶段按清单补齐（_build_讲义.ensure_figures），一张都没有时日志写明原因。
 
 用法
     python engine\_draft.py T02 --course DEMO --lang zh
@@ -36,6 +40,7 @@ import client  # noqa: E402  api\client.py
 
 MAX_SRC = 45000          # 一次送进模型的源文本上限（字符）
 MAX_FIGS = 40            # 最多抽多少张课件页图（整页截图）
+FALLBACK_FIGS = 12       # 课件没有图片对象时，整页兜底导出最多几张（2026-11-21 加）
 GLOSSARY_MIN = 20        # 内容门要求的最小术语条数
 ORIG_DIR = "00_原件"
 
@@ -52,7 +57,12 @@ _SYS_ZH = """你是课程讲义编辑。把给定课件（逐页文本，页码�
 9. 全中模式：正文中文；术语英文只在术语表给，正文不要自己加英文括号。
 10. 节数 8-12 节，no 从 0 连续；summary / glossary / appendix / quiz 的 no 顺延。
 11. 输出尽量紧凑，避免超出输出长度。
-12. 如果课件某页有图/结构图/表格截图，用 fig 块引用给定文件名：["fig", "gen/T02/p012.png", "图注（课件 p.12）"]；只能引用清单里的文件，没有合适图就不放。
+12. 原件图（重要，用户 2026-11-21 明确要求「要能看到原件的图」）：输入末尾给了本讲导出的课件页图清单。
+    每个内容节（§0 导读除外）在正文末尾放 1 个 fig 块，按课件页顺序取图：
+      · 格式：["fig", "gen/<讲号>/pNNN.png", "这张图画的是什么（课件 p.N）"]；
+      · 路径只能原样照抄清单里的，不得改名、加前缀或编造；
+      · 图注要写清它是什么，并带「课件 p.N」出处（引擎会自动加「图 N ·」编号）；
+      · 不要只在正文里写「见图」而不用 fig 块；清单为空才不写 fig。
 """
 
 _SYS_EN = """You are a course handout editor. Turn the given lecture slides (page texts, page numbers marked) into printable self-study handout data.
@@ -62,12 +72,26 @@ Hard rules:
 3. Every section needs "lec" (how to teach it, 1-2 sentences).
 4. Every content section (except §0) needs at least one "eg" block (worked example / calculation / preparation steps).
 5. Each section 2-4 paragraphs, at most 60 words each; keep one section within one printed page (~350 words).
-6. Glossary at least 20 rows, each with a page.
+6. Glossary at least 20 rows, each with a page: [中文术语, English term, "课件 p.N", one-line note]
+   (the engine prints English first and 中文原名 second in English handouts — keep the Chinese original in data).
 7. Quiz 3-6 items; every answer ends with "Review §<section no>".
 8. Output JSON only, no code fences, no comments; must parse with json.loads.
-9. Full-English mode: write body text in English; keep Chinese proper names (drug / formula / pharmacopoeia terms) in Chinese; do not translate them into English brand names.
+9. Full-English mode — professional names (用户 2026-11-21「CO2（二氧化碳）而不是直接取代」):
+   body text is English, but EVERY professional name / drug name / formula name / compound name / technical term /
+   proper name must appear at its 首次 occurrence as English（中文）— English FIRST, the Chinese original inside
+   FULL-WIDTH Chinese parentheses（）. After that first occurrence, use the English term alone.
+   Good: "CO2（二氧化碳） dissolves in water"; "the Bellman optimality equation（贝尔曼最优方程） holds";
+   "Pharmacopoeia（药典） requires it".
+   Bad: "CO2 dissolves in water" (Chinese original DROPPED); "二氧化碳 dissolves in water" (English missing);
+   "carbon dioxide" alone (Chinese original replaced). Never drop or replace the Chinese original.
 10. 8-12 sections, no starting at 0; summary / glossary / appendix / quiz numbers follow.
 11. Be compact to fit the output limit.
+12. Source-slide figures (important): the input ends with a list of exported slide-page images.
+    For EVERY content section (except §0) add ONE fig block at the end of its body, in slide-page order:
+      ["fig", "gen/<no>/p012.png", "what the slide shows（课件 p.N）"]
+    Copy the path EXACTLY from the list — never rename it, add a prefix, or invent one. Keep the "课件 p.N"
+    source marker in the caption (the engine adds "图 N ·" automatically). Do not merely write "see the figure"
+    in prose without a fig block. If the list is empty, emit no fig blocks.
 """
 
 _SCHEMA = """{
@@ -195,44 +219,123 @@ def pages_text(pdf: str, emit=print) -> tuple[str, int, int]:
     return text, n, total
 
 
+def _save_page_png(page, out_root: str, i: int) -> str | None:
+    """把一页课件导出成 96 dpi 的整页 PNG；成功返回文件名，失败返回 None。"""
+    try:
+        pix = page.get_pixmap(dpi=96)
+        name = "p%03d.png" % i
+        pix.save(os.path.join(out_root, name))
+        return name
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def extract_figures(pdf: str, course: str, no: str, emit=print) -> list:
-    """把课件里「有图/表」的页导出成整页 PNG，供模型用 fig 块引用。
+    """把课件页导出成整页 PNG，供模型用 fig 块引用。
 
     2026-11-19 用户：「生成的东西少了引用课件 PDF 原文截图图片」——讲义要以课件为依据，
-    不是只把文字复述一遍。这里只导出有图片对象的页，最多 MAX_FIGS 张，96 dpi。
-    返回 [(相对路径, 页码), …]（相对 <课程>\\06_笔记\\assets）。
+    不是只把文字复述一遍。导出有图片对象的页，最多 MAX_FIGS 张，96 dpi。
+    2026-11-21 用户：「为什么我一点原件的图也看不到」——两条修：
+      · 纯文字 / 矢量版式的课件（没有图片对象）不再「抽 0 张、一声不响」：改为整页导出，
+        让读者至少能看到原件版式（日志写明这是兜底，最多 FALLBACK_FIGS 张）；
+      · 导出前清掉上一次的 pNNN.png，换课件重导不会把旧图混进新讲义。
+    返回 [(相对 <课程>\\06_笔记\\assets 的路径, 页码), …]；返回空列表时日志一定说明原因。
     """
     try:
         import pymupdf
     except Exception:  # noqa: BLE001
+        emit("[图] 缺 pymupdf，抽不了课件页图；这一讲不会有原件图")
         return []
     out_root = paths.data(course, "06_笔记", "assets", "gen", no)
     try:
         os.makedirs(out_root, exist_ok=True)
     except Exception as e:  # noqa: BLE001
-        emit("[图] 建目录失败：%r" % (e,))
+        emit("[图] 建目录失败（%r），抽不了课件页图；这一讲不会有原件图：%s" % (e, out_root))
         return []
-    out = []
+    # 清掉上一轮导出的页图：换课件重导时旧图会混进清单（gen/ 是生成物，删了可重导）
+    stale = 0
+    for fn in os.listdir(out_root):
+        if re.match(r"^p\d{3}\.(png|jpg|jpeg|webp)$", fn, re.I):
+            try:
+                os.remove(os.path.join(out_root, fn))
+                stale += 1
+            except Exception:  # noqa: BLE001
+                pass
+    if stale:
+        emit("[图] 清掉上次导出的 %d 张旧页图（换课件重导不带旧图）" % stale)
+
+    out, total, with_img, failed = [], 0, 0, 0
     try:
         with pymupdf.open(pdf) as doc:
+            total = len(doc)
             for i, page in enumerate(doc, 1):
-                if len(out) >= MAX_FIGS:
-                    break
                 try:
-                    if not page.get_images(full=True):
-                        continue
-                    pix = page.get_pixmap(dpi=96)
-                    name = "p%03d.png" % i
-                    pix.save(os.path.join(out_root, name))
-                    out.append(("gen/%s/%s" % (no, name), i))
+                    imgs = page.get_images(full=True)
                 except Exception:  # noqa: BLE001
                     continue
+                if not imgs:
+                    continue
+                with_img += 1
+                if len(out) >= MAX_FIGS:
+                    continue
+                name = _save_page_png(page, out_root, i)
+                if name:
+                    out.append(("gen/%s/%s" % (no, name), i))
+                else:
+                    failed += 1
+            if not out:
+                # 兜底：这份课件没有图片对象（纯文字/矢量版式）。整页导出，别静默给一份没图的讲义。
+                cap = min(MAX_FIGS, FALLBACK_FIGS)
+                for i, page in enumerate(doc, 1):
+                    if len(out) >= cap:
+                        break
+                    try:
+                        if not (page.get_text("text") or "").strip():
+                            continue          # 空白页不导
+                    except Exception:  # noqa: BLE001
+                        continue
+                    name = _save_page_png(page, out_root, i)
+                    if name:
+                        out.append(("gen/%s/%s" % (no, name), i))
+                if out:
+                    emit("[图] 这份课件 %d 页都没有图片对象（纯文字/矢量版式）：改为整页导出 %d 页，"
+                         "让讲义能看到原件版式 → %s" % (total, len(out), out_root))
+                else:
+                    emit("[图] 这份课件导不出页图（%d 页既没有图片对象、也没有文字层，像是扫描件）"
+                         "→ 这一讲不会有原件图" % total)
+                    return []
     except Exception as e:  # noqa: BLE001
-        emit("[图] 抽图失败：%r" % (e,))
+        emit("[图] 抽图失败（%r）；这一讲不会有原件图" % (e,))
         return []
-    if out:
-        emit("[图] 导出课件页图 %d 张 → %s" % (len(out), out_root))
+    if out and with_img:
+        emit("[图] 课件共 %d 页：有图片对象的 %d 页 → 导出 %d 张%s → %s"
+             % (total, with_img, len(out),
+                "（另有 %d 页导出失败）" % failed if failed else "", out_root))
+    if out and with_img > len(out) and not failed:
+        emit("[图] 注意：课件有 %d 页带图，超过单讲上限 %d 张，后面的图没导出"
+             % (with_img, MAX_FIGS))
     return out
+
+
+def _fig_help(figs: list, lang: str) -> str:
+    """把图清单 + 用法说明紧贴在用户输入末尾：模型最容易照着最近的格式写。
+
+    2026-11-21：只在 system 里写一条「有图就引用」时，模型经常只写文字描述、不写 fig 块；
+    把清单和「每节 1 张、路径原样照抄」贴到源文本后面，比远在 system 里的规矩更容易被照做。
+    """
+    if not figs:
+        return ""
+    rows = "\n".join("p.%d → %s" % (pg, rel) for rel, pg in figs)
+    if lang == "en":
+        return ("\n\nExported source-slide images for this lecture (use fig blocks; copy the path EXACTLY, "
+                "do not rename it or add a prefix):\n" + rows +
+                "\n\nFor EVERY content section (except §0) add ONE fig block at the end of body, in page order:\n"
+                '["fig", "<exact path from the list above>", "what the slide shows（课件 p.N）"]\n'
+                'Never just write "see the figure" in prose without a fig block.')
+    return ("\n\n本讲导出的课件页图（fig 块只能引用这些路径，原样照抄，不要改名或加前缀）：\n" + rows +
+            "\n\n每个内容节（§0 导读除外）在正文末尾放 1 个 fig 块，按课件页顺序取图：\n"
+            '["fig", "<上面清单里的原路径>", "这张图画的是什么（课件 p.N）"]\n'
+            "不要只在正文里写「见图」而不用 fig 块。")
 
 
 def _strip_fence(txt: str) -> str:
@@ -299,9 +402,11 @@ def _norm(data: dict) -> dict:
                 steps = b[2] if isinstance(b[2], (list, tuple)) else [b[2]]
                 b = ["eg", str(b[1]), [str(x) for x in steps], str(b[3])]
             elif kind == "fig":
-                if len(b) < 3:
+                # 2026-11-21：模型偶尔只给 [fig, 路径]（图注省了）。不再整块丢弃——
+                #   渲染时会用清单里的页码补出「原件第 N 页（课件 p.N）」图注（R115 要求每张图有出处）。
+                if len(b) < 2:
                     continue
-                b = ["fig", str(b[1]), str(b[2])]
+                b = ["fig", str(b[1]), str(b[2]) if len(b) > 2 and b[2] else ""]
             elif kind == "q":
                 if len(b) < 3:
                     continue
@@ -397,24 +502,28 @@ def draft(course: str, no: str, lang: str = "zh", emit=print, model: str | None 
     src, ntext, total = pages_text(pdf, emit=emit)
     emit("[源文本] %d 页有文字 / 共 %d 页 · %d 字符" % (ntext, total, len(src)))
     figs = extract_figures(pdf, course, no, emit=emit)
-    fig_help = ""
-    if figs:
-        fig_help = "\n\n可用的课件页图（整页截图，fig 块只能引用这些文件名）：\n" + "\n".join(
-            "p.%d → %s" % (pg, rel) for rel, pg in figs)
+    fig_help = _fig_help(figs, lang)
+    if not figs:
+        emit("[图] 这一讲没有可用课件页图（原因见上面的 [图] 日志）；讲义里不会出现原件图")
     sysmsg = _SYS_EN if lang == "en" else _SYS_ZH
-    user = (("Slides (%d pages with text):\n\n%s%s\n\nProduce LESSON JSON in this shape:\n%s"
-             % (ntext, src, fig_help, _SCHEMA)) if lang == "en" else
-            ("下面是课件全文（%d 页有文字）：\n\n%s%s\n\n按这个 JSON 结构输出 LESSON：\n%s"
-             % (ntext, src, fig_help, _SCHEMA)))
+    # 图清单放在用户消息最后：模型最容易照最近读到的格式写（上面 _fig_help 有说明）。
+    user = (("Slides (%d pages with text):\n\n%s\n\nProduce LESSON JSON in this shape:\n%s%s"
+             % (ntext, src, _SCHEMA, fig_help)) if lang == "en" else
+            ("下面是课件全文（%d 页有文字）：\n\n%s\n\n按这个 JSON 结构输出 LESSON：\n%s%s"
+             % (ntext, src, _SCHEMA, fig_help)))
     emit("[生成] %s · %s" % (model, "全英（专有名称中文）" if lang == "en" else "全中（专业名称英文）"))
     out = client.chat([{"role": "system", "content": sysmsg}, {"role": "user", "content": user}],
                       model=model, temperature=0.3, max_tokens=30000)
     data = _norm(_json_of(out["text"]))
-    # 模型可能编一个不存在的图名：只保留清单里真有的 fig，避免「缺图」整讲失败
-    allowed = {rel for rel, _pg in figs}
-    for s in data.get("sections", []):
-        s["body"] = [b for b in s.get("body", [])
-                     if b[0] != "fig" or (len(b) > 1 and b[1] in allowed)]
+    # 2026-11-21（R115，用户「一点原件的图也看不到」）：模型编的图名不再「静默整块删掉」。
+    #   这里只点数并说明；真正按清单修名 / 补图在渲染时做（_build_讲义.ensure_figures），
+    #   于是旧数据重打一遍 PDF 也能把漏掉的原件图补上，不必再花钱重跑模型。
+    n_model_figs = sum(1 for s in data.get("sections", []) for b in s.get("body", [])
+                       if b and b[0] == "fig")
+    if figs:
+        emit("[图] 模型引用课件页图 %d 处（清单 %d 张）%s"
+             % (n_model_figs, len(figs),
+                "" if n_model_figs else "——正文没写 fig 块，渲染时会按清单补齐并记日志"))
     emit("[生成] 完成 %.1fs · 入 %d / 出 %d tokens（含思考 %d）"
          % (out["seconds"], out.get("usage", {}).get("prompt_tokens", 0),
             out.get("usage", {}).get("completion_tokens", 0),
@@ -448,6 +557,9 @@ def draft(course: str, no: str, lang: str = "zh", emit=print, model: str | None 
     data["code"] = course
     data["no"] = no
     data["lang"] = lang
+    # 课件总页数：渲染时用它算「自动补图不超过总页数 1/3」的上限（R115，见 _build_讲义.ensure_figures）
+    if total:
+        data["figs_total"] = total
     title_src = data.get("en") if lang == "en" and data.get("en") else data.get("zh")
     title = re.sub(r"[\\/:*?\"<>|]+", "_", str(title_src or os.path.splitext(orig)[0]))
     data["zh"] = str(data.get("zh") or os.path.splitext(orig)[0])

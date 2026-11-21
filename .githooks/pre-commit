@@ -9,4 +9,8 @@ echo "[hook] 界面预览 check-ui-preview ..."
 python -X utf8 tools/check/check-ui-preview.py || { echo "[hook] 界面改动没带预览图/真实截图：提交已拦下"; exit 1; }
 echo "[hook] 按钮/浮层冲突 check-ui-conflicts ..."
 python -X utf8 tools/check/check-ui-conflicts.py || { echo "[hook] 全屏/弹窗与导航冲突：提交已拦下"; exit 1; }
+# 2026-11-21 用户：「规矩一直都有，但是没有触发的方法」——R114/R115 挂到这里自动跑：
+#   全英档译名要「英文（中文）」，讲义里的原件图必须真画出来（缺图不静默）。
+echo "[hook] 讲义规矩 check-lecture-rules ..."
+python -X utf8 tools/check/check-lecture-rules.py || { echo "[hook] 全英译名/原件图规矩未过：提交已拦下"; exit 1; }
 echo "[hook] 通过"

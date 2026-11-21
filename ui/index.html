@@ -664,7 +664,7 @@ footer{max-width:1080px;margin:26px auto 0;padding:0 16px;display:flex;align-ite
           <div class="opt" data-form="book"><b>合订本</b><small>全部讲一本</small></div>
         </div>
         <h3 style="margin-top:16px">讲义语言</h3>
-        <p class="hint">全中：正文中文，专业术语附英文。全英：正文英文，药名、方剂名等专有名称保留中文。</p>
+        <p class="hint">全中：正文中文，专业术语附英文。全英：正文英文，专业名称写成「English（中文）」，例如 CO2（二氧化碳）。</p>
         <div class="opts" id="langOpts">
           <div class="opt on" data-lang="zh"><b>全中</b><small>专业术语英文</small></div>
           <div class="opt" data-lang="en"><b>全英</b><small>专有名称中文</small></div>
@@ -690,7 +690,6 @@ footer{max-width:1080px;margin:26px auto 0;padding:0 16px;display:flex;align-ite
         </div>
         <div class="genprog" id="genProg"><div class="bar"><i id="genBar"></i></div><span class="st" id="genStage">准备…</span></div>
         <div class="queue" id="queue"></div>
-        <div class="log" id="log"></div>
 
       </div>
       <div>
@@ -713,6 +712,8 @@ footer{max-width:1080px;margin:26px auto 0;padding:0 16px;display:flex;align-ite
           <div class="row"><span>03</span><div>导入的占位讲次会先由 DeepSeek 补正文，约 1 分钟/讲、约 ¥0.03/讲；补完的内容仍需人工抽查。</div></div>
           <div class="row"><span>04</span><div>每份成品页脚固定印「本内容由 AI 生成，仅供参考；重要信息请自行核实」与软件名、项目地址，不可关闭。</div></div>
         </div>
+        <!-- 2026-11-21 用户（截图）：把生成日志这个视窗挪到「生成前请确认」下面 -->
+        <div class="log" id="log"></div>
       </div>
     </div>
   </div>

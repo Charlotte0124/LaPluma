@@ -27,3 +27,7 @@ jobs:
         run: |
           python -m pip install --disable-pip-version-check playwright
           python -X utf8 tools/check/check-ui-conflicts.py
+      # 2026-11-21：R114/R115——全英档译名写「英文（中文）」、讲义里的原件图必须真画出来。
+      # 用户：「规矩一直都有，但是没有触发的方法」→ 本地钩子 + 这条 CI 双保险。
+      - name: 讲义规矩（全英译名 / 原件图）4/4
+        run: python -X utf8 tools/check/check-lecture-rules.py
