@@ -2,7 +2,7 @@
 
 # 羽毛笔 La Pluma
 
-**把备课数据渲染成可核对、可复现的讲义 PDF**（Windows 单文件 exe，无需 Python）
+**把备课数据渲染成可核对、可复现的讲义 PDF**（Windows 文件夹版，双击启动；需要 Python 3.12）
 
 <img src="docs/资产/产品介绍图.png" alt="羽毛笔 La Pluma · 把备课数据渲染成可核对的讲义 PDF" width="100%">
 
@@ -15,7 +15,7 @@
 
 <div align="center">
 
-<a href="https://github.com/Charlotte0124/LaPluma/releases/latest"><img src="https://img.shields.io/badge/⬇_下载_v1.9.14-C8202C?style=for-the-badge&logo=windows&logoColor=white" height="40" alt="下载"></a>
+<a href="https://github.com/Charlotte0124/LaPluma/archive/refs/heads/main.zip"><img src="https://img.shields.io/badge/⬇_下载_v1.9.15-C8202C?style=for-the-badge&logo=windows&logoColor=white" height="40" alt="下载"></a>
 &nbsp;
 <a href="一键启动.ps1"><img src="https://img.shields.io/badge/▶_一键启动-2F7D4F?style=for-the-badge&logo=powershell&logoColor=white" height="40" alt="一键启动"></a>
 &nbsp;
@@ -85,14 +85,14 @@
 
 **它不解决的问题**：内容是否正确、类比是否恰当、例题数字是否算对，脚本无法判定——这一步必须由人复核。每份成品的页脚固定印着软件名、可点的项目地址，以及「本内容由 AI 生成，仅供参考；重要信息请自行核实」。
 
-**直接运行（Windows，最简单）**
+**直接运行（Windows，文件夹版）**
 
-从 [Releases](https://github.com/Charlotte0124/LaPluma/releases/latest) 下载 `LaPluma.exe`（约 108 MB），双击运行：
-打开独立窗口（标题栏显示版本号），关闭窗口即退出；首次启动需解包，约需数秒。
-**不需要 Python，也不需要装任何依赖**——运行环境已经打在里面。
+下载仓库压缩包（或 `git clone`）解压后，双击目录里的 `启动羽毛笔.cmd`：
+打开独立窗口（标题栏显示版本号），关闭窗口即退出。**不再提供单文件 exe**——exe 每次启动要先解包到临时目录，部分机器上会直接失败；文件夹版没有这一步。
 
-- 导入的课程、生成的 PDF 与日志均位于 **exe 旁**；配置在 `%USERPROFILE%\.pluma`
-- 自带示例课程 `DEMO`（2 讲），内容数据齐备，**不配密钥也能出 PDF**；要换成自己的课，在 exe 旁边建 `<课程代码>\_lessons\` 并在 `courses.json` 里登记
+- 需要 Python 3.12（安装时勾上 Add python.exe to PATH）；其它依赖只有 `pymupdf`
+- 导入的课程、生成的 PDF 与日志均位于**仓库目录**；配置在 `%USERPROFILE%\.pluma`
+- 自带示例课程 `DEMO`（2 讲），内容数据齐备，**不配密钥也能出 PDF**；要换成自己的课，在仓库目录建 `<课程代码>\_lessons\` 并在 `courses.json` 里登记
 - 需要本机 Chrome 或 Edge（打印 PDF 用），无需另装
 
 **从源码运行**
@@ -249,12 +249,12 @@ A/B/C 三层可离线运行；仅「让模型撰写新内容」时才需要 D �
 <!-- 最近更新:begin（由 tools/sync-readme.py 生成，别手改） -->
 | 版本 | 日期 | 这一版做了什么 |
 |:--|:--|:--|
+| **v1.9.15** | 11-21 | 三道门文案并入标题；分发改文件夹版，不再打 exe |
 | **v1.9.14** | 11-19 | 导入后自动判断更像哪门课并询问是否搬；生成须知移到三道门下面；生成完成从批次里移除 |
 | **v1.9.13** | 11-19 | 窗口启动居中；成品/原件位置互换；生成须知从弹窗搬到日志下面；新增「新建课程」 |
 | **v1.9.12** | 11-19 | 生成进度条 / 完成弹窗打开本地 / 课程抽屉自动弹 / 阅读全屏与笔记栏 / 翻译 / 拖拽 / 选中文字记笔记 / 课件页图 |
 | **v1.9.11** | 11-19 | 修无边框窗口拖不动、标题栏跟着页面滚走；阅读全屏时收起标题栏 |
-| **v1.9.10** | 11-19 | 导入的占位讲次不再直接出成品——点生成时先由 DeepSeek 补正文；讲义可选全中 / 全英；讲次显示原件名并标「占位」 |
-| — | — | 更早的 26 个版本 → [CHANGELOG](CHANGELOG.md) |
+| — | — | 更早的 27 个版本 → [CHANGELOG](CHANGELOG.md) |
 <!-- 最近更新:end -->
 
 ## 目录
@@ -279,7 +279,7 @@ courses.json       课程元数据（标题 / 说明 / 读者口径）
 
 ## 依赖
 
-**用 exe**：什么都不用装，双击即可（Chrome / Edge 用系统自带的）。
+**文件夹版**：需要 Python 3.12 和 `pymupdf`；Chrome / Edge 用系统自带的。
 
 **从源码跑**：Python 3.12、`pymupdf`、本机 Chrome 或 Edge。无前端构建、无 npm、无服务端数据库、无第三方 Web 框架。
 

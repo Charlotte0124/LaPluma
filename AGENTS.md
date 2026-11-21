@@ -55,3 +55,13 @@
 4. **扫描件**（无文字层）导入时当场提示「自动写正文不可用」，不许等到生成才失败。
 
 **怎么验证它被执行**：`python tools\check\check-stub-guard.py` 必须 **4/4**；提交前由 `.githooks/pre-commit` 自动跑（连同 `check-ui-preview.py`），红了提交就被拦下。新克隆 `core.hooksPath` 不会跟着过来，先跑一次 `powershell -File tools\check\install-hooks.ps1`。
+
+## 六、分发只走文件夹，不再打 exe（2026-11-21 用户定）
+
+**为什么有这条**：2026-11-21 用户在 `dist\LaPluma.exe` 上双击只看到 `Error / Could not create temporary directory!`——PyInstaller 单文件启动第一步要把 86 MB 解包到 `%TEMP%`，这台机器上建目录被拒，我们的代码一行都没执行。用户随后定：「以后直接是文件夹的那种形式吧，不打包了。」
+
+1. 分发形态只有一个：**仓库文件夹 + `启动羽毛笔.cmd`**（用 `pythonw` 起 `ui\server.py`，无控制台）。不再产出 `dist\LaPluma.exe`，不再维护单文件打包脚本与 spec。
+2. 启动入口只有一个：`启动羽毛笔.cmd`。要 `-Lan` / `-NoWindow` 走 `一键启动.ps1`，不要另造入口。
+3. 环境要求写进 README：Python 3.12 + `pymupdf`。
+
+**怎么验证它被执行**：`python tools\check\check-distribution.py`（红 = 又出现 exe / 打包脚本，或启动入口缺失）。
