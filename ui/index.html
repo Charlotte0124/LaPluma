@@ -379,6 +379,13 @@ nav a.on{background:var(--ink);color:var(--bg)}
 .read-card.fs .side{max-height:none;overflow:auto}
 .read-card.hide-side .read-body{grid-template-columns:1fr}
 .read-card.hide-side .side{display:none}
+/* 2026-11-21 用户第七/八条：翻译要像笔记一样从右侧切出来，不挡阅读；点「记笔记」也要弹出侧栏。 */
+.side-tabs{display:flex;gap:6px;margin:0 0 10px}
+.side-tabs .stab{border:1px solid var(--line);background:transparent;color:var(--faint);
+  border-radius:8px;padding:5px 11px;font:inherit;font-size:12px;cursor:pointer}
+.side-tabs .stab.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+#sideTrans .trans{white-space:pre-wrap;font-size:13px;line-height:1.65;
+  background:var(--card2);border-radius:9px;padding:10px 12px;margin-top:10px;max-height:none}
 #readerBox{cursor:grab}
 #readerBox.panning{cursor:grabbing}
 .reader{background:var(--reader-bg);padding:18px;min-height:560px;display:flex;justify-content:center;
@@ -767,7 +774,6 @@ footer{max-width:1080px;margin:26px auto 0;padding:0 16px;display:flex;align-ite
   <div class="page" id="page-read">
     <div class="card read-card">
       <div class="read-top">
-        <span class="back link" id="readBack">← 课程</span>
         <div>
           <div class="t" id="rTitle">还没有打开讲义</div>
           <div class="p" id="rSub">从课程抽屉中选择一份讲义</div>
@@ -784,22 +790,35 @@ footer{max-width:1080px;margin:26px auto 0;padding:0 16px;display:flex;align-ite
       <div class="read-body">
         <div class="reader" id="readerBox"><div id="pdfwrap"><canvas id="pdfcanvas"></canvas><div id="pdftext"></div></div></div>
         <div class="side">
-          <div>
-            <h5 style="margin:0 0 10px;font-size:12.5px;font-weight:600;display:flex;justify-content:space-between">
-              笔记<span style="color:var(--faint);font-weight:400;font-size:11.5px"><span id="nCount">0</span> 条</span></h5>
-            <div class="hint" style="border:0;margin:0 0 10px;background:var(--card2);border-radius:7px;padding:6px 9px">
-              当前页 <b id="curP">p.1</b>
+          <div class="side-tabs">
+            <button class="stab on" id="tabNotes">笔记 <span id="nCount">0</span></button>
+            <button class="stab" id="tabTrans">翻译</button>
+          </div>
+          <div id="sideNotes">
+            <div>
+              <h5 style="margin:0 0 10px;font-size:12.5px;font-weight:600;display:flex;justify-content:space-between">
+                第 <span id="curP">p.1</span> 页<span style="color:var(--faint);font-weight:400;font-size:11.5px"></span></h5>
+              <div class="nlist" id="nlist"></div>
             </div>
-            <div class="nlist" id="nlist"></div>
+            <div class="narea">
+              <textarea id="nDraft" placeholder="本页笔记（Ctrl+Enter 保存）"></textarea>
+              <div class="r"><span>记录于 <b id="curP2">p.1</b> · 自动保存到本机</span><button class="btn" id="nAdd">记一笔</button></div>
+            </div>
+            <div class="exp">
+              <div class="t">导出本页笔记</div>
+              <p>生成副本，并把笔记作为附页追加到讲义末尾；原件不改动。</p>
+              <button class="btn" id="expBtn">添加到这份 PDF</button>
+            </div>
           </div>
-          <div class="narea">
-            <textarea id="nDraft" placeholder="本页笔记（Ctrl+Enter 保存）"></textarea>
-            <div class="r"><span>记录于 <b id="curP2">p.1</b> · 自动保存到本机</span><button class="btn" id="nAdd">记一笔</button></div>
-          </div>
-          <div class="exp">
-            <div class="t">导出本页笔记</div>
-            <p>生成副本，并把笔记作为附页追加到讲义末尾；原件不改动。</p>
-            <button class="btn" id="expBtn">添加到这份 PDF</button>
+          <div id="sideTrans" hidden>
+            <h5 style="margin:0 0 8px;font-size:12.5px;font-weight:600">第 <span id="curP3">p.1</span> 页 · 翻译</h5>
+            <p class="hint" style="border:0;margin:0 0 8px;background:var(--card2);border-radius:7px;padding:6px 9px">
+              只翻这一页的文字层，译文进侧栏，不挡正文。扫描件没有文字层会直说读不到。</p>
+            <div class="acts" style="justify-content:flex-start;margin:0">
+              <button class="btn" id="trZh">译成中文</button>
+              <button class="btn ghost" id="trEn">译成英文</button>
+            </div>
+            <div id="trOut"></div>
           </div>
         </div>
       </div>
@@ -890,10 +909,27 @@ const DBG = new URLSearchParams(location.search).has('dbg');
 
 function mname(id){ const m=(B.models||[]).find(x=>x.id===id); return m?m.name:id; }
 
-/* ---------- 主题 ---------- */
+/* ---------- 界面偏好（主题 / 形态 / 语言）----------
+   2026-11-21 用户：「软件要保留用户的设定（例如我是夜间关闭了软件的 打开也是要黑夜模式的）」。
+   原来只写 localStorage，而它是按 http://127.0.0.1:<端口> 分家的——上一个实例还占着 8765，
+   新实例改用 8766，于是设置全丢。现在双写：本机配置（服务端 ~/.pluma）为主，localStorage 先用着不闪白。 */
+let UI_PATCH = {};
+function saveUI(patch){
+  Object.assign(UI_PATCH, patch || {});
+  clearTimeout(saveUI._t);
+  saveUI._t = setTimeout(() => {
+    const ui = UI_PATCH; UI_PATCH = {};
+    try{
+      fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({ui})});
+    }catch(_){ }
+  }, 200);
+}
 function applyTheme(t){
+  t = (t === 'dark') ? 'dark' : 'light';
   document.documentElement.dataset.theme = t;
-  localStorage.setItem('pluma.theme', t);
+  try{ localStorage.setItem('pluma.theme', t); }catch(_){ }
+  saveUI({theme: t});
   const label = t==='dark' ? '浅色' : '深色', icon = t==='dark' ? '☀' : '◐';
   ['themeLabel','themeLabel2'].forEach(id=>{ const e=document.getElementById(id); if(e) e.textContent=label; });
   ['themeIcon','themeIcon2'].forEach(id=>{ const e=document.getElementById(id); if(e) e.textContent=icon; });
@@ -1338,14 +1374,26 @@ async function afterImport(j, code){
 
 /* 2026-11-19：导入后自动判断「更像哪门课」，只给建议；用户点确认才搬原件与占位讲次。 */
 async function classifyAfterImport(code, names){
+  // 2026-11-21 用户第一条：「这个弹出来的时间太慢了」。/api/classify 要读原件、比标题，
+  //   慢起来十几秒；以前是等结果回来才弹窗，用户在那段时间什么也看不到。
+  //   现在秒开一个「正在分析」的窗（可以随时关掉），结果回来再填进去；没建议就自己关。
+  let userClosed = false;
+  $('#dlg').innerHTML = `
+    <div class="eb">Classify</div><h4>这些原件更像别的课程</h4>
+    <p class="desc">正在比较课程标题与原件首页，几秒就好；不等也没关系，直接关掉即可。</p>
+    <div class="gen-note" style="margin:8px 0 12px"><span class="hint" style="border:0">分析中…</span></div>
+    <div class="acts"><button class="btn ghost" id="clStay">关掉</button></div>`;
+  openVeil();
+  $('#clStay').onclick = () => { userClosed = true; closeVeil(); };
   let j;
   try{
     j = await (await fetch('/api/classify',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({course:code, files:names})})).json();
-  }catch(e){ return; }
-  if(!j.ok || !Array.isArray(j.suggestions)) return;
-  const sug = j.suggestions.filter(s => s && ((s.course && s.course !== code) || s.new_title));
-  if(!sug.length) return;
+  }catch(e){ if(!userClosed) closeVeil(); return; }
+  const sug = (j && j.ok && Array.isArray(j.suggestions))
+    ? j.suggestions.filter(s => s && ((s.course && s.course !== code) || s.new_title)) : [];
+  if(!sug.length){ if(!userClosed) closeVeil(); return; }
+  if(userClosed) return;   // 用户已经关掉，就别再弹回来
   const rows = sug.map(s => {
     const dst = s.course ? (s.course + ' · ' + ((j.courses||[]).find(c=>c.code===s.course)||{}).title || '')
                          : ('新建「' + (s.new_title || '新课程') + '」');
@@ -1358,7 +1406,6 @@ async function classifyAfterImport(code, names){
     <div class="gen-note" style="margin:8px 0 12px">${rows}</div>
     <div class="acts"><button class="btn ghost" id="clStay">留在 ${esc(code)}</button>
       <button class="btn" id="clMove">按建议归类</button></div>`;
-  openVeil();
   $('#clStay').onclick = closeVeil;
   $('#clMove').onclick = async () => {
     $('#clMove').disabled = true;
@@ -1386,8 +1433,20 @@ async function classifyAfterImport(code, names){
     }
     closeVeil();
     B = await (await fetch('/api/bootstrap')).json(); render(); fillSelects();
-    if(last){ const cs = $('#courseSel'); if(cs){ cs.value = last; syncLessons(); updateImpHint(); } }
-    toast('已归类 ' + moved + ' 份' + (failed ? ('，失败 ' + failed + ' 份') : ''));
+    if(last){
+      const cs = $('#courseSel'); if(cs){ cs.value = last; syncLessons(); updateImpHint(); }
+      // 2026-11-21 用户第四条：「继图1操作之后 生成的按钮没办法点击」。
+      //   归类会把界面切到目标课程，而 syncLessons() 会清空勾选——于是「开始生成」是灰的。
+      //   这里把目标课程里的占位讲次（也就是刚搬过去的那些）自动勾上，按钮立刻可用。
+      const meta = ((B.courses||[]).find(x => x.code === last) || {}).lesson_meta || {};
+      const btns = $('#lessonPick').querySelectorAll('[data-lsn]');
+      btns.forEach(b => {
+        const k = b.dataset.lsn;
+        if((meta[k] || {}).stub){ LESSON_SEL.add(k); b.classList.add('on'); }
+      });
+      syncLsnCnt();
+    }
+    toast('已归类 ' + moved + ' 份' + (failed ? ('，失败 ' + failed + ' 份') : '') + (last ? ('，已切到 ' + last + ' 并勾好待生成讲次') : ''));
   };
 }
 $('#btnImport').onclick = async () => {
@@ -1551,7 +1610,7 @@ $('#lsnAll').onclick = () => {
   btns.forEach(b=>b.classList.toggle('on', LESSON_SEL.has(b.dataset.lsn)));
   syncLsnCnt();
 };
-$('#courseSel').onchange = syncLessons;
+$('#courseSel').onchange = () => { syncLessons(); saveUI({course: $('#courseSel').value || ''}); };
 /* ---------- 删除（2026-11-17）----------
    用户要求：讲次、成品、原件、整门课 都要能删。统一约定：
    ① 入口就在那个对象旁边（讲次在讲次区、课件在抽屉行、课程在卡片底部）；
@@ -1666,12 +1725,14 @@ document.querySelectorAll('.opt[data-mode]').forEach(o=>o.onclick=()=>{
 document.querySelectorAll('.opt[data-form]').forEach(o=>o.onclick=()=>{
   document.querySelectorAll('.opt[data-form]').forEach(x=>x.classList.remove('on'));
   o.classList.add('on'); FORM=o.dataset.form;
+  saveUI({form: FORM});
   syncLsnCnt();
   if(FORM==='book' && LANG==='en') toast('合订本暂只出全中；要英文版请选「单本」');
 });
 document.querySelectorAll('.opt[data-lang]').forEach(o=>o.onclick=()=>{
   document.querySelectorAll('.opt[data-lang]').forEach(x=>x.classList.remove('on'));
   o.classList.add('on'); LANG=o.dataset.lang;
+  saveUI({lang: LANG});
   syncLsnCnt();
 });
 /* 队列：每一项均可取消（2026-11-17 用户要求「队列要有取消按钮」）。
@@ -2209,6 +2270,7 @@ async function renderPdf(){
     $('#pgVal').textContent = RD.page + ' / ' + RD.doc.numPages;
     $('#zVal').textContent = Math.round(RD.zoom*100) + '%';
     $('#curP').textContent = 'p.' + RD.page; $('#curP2').textContent = 'p.' + RD.page;
+    if($('#curP3')) $('#curP3').textContent = 'p.' + RD.page;
     if(DBG) console.log('[dbg] renderPdf done page', RD.page);
   }catch(e){
     console.warn(e); toast('这一页渲染失败：'+e);
@@ -2220,13 +2282,29 @@ $('#pgNext').onclick = () => { if(RD.doc && RD.page<RD.doc.numPages){ RD.page++;
 $('#zOut').onclick = () => { RD.zoom = Math.max(0.7, RD.zoom-0.1); renderPdf(); };
 $('#zIn').onclick = () => { RD.zoom = Math.min(1.5, RD.zoom+0.1); renderPdf(); };
 /* 滚动 = 翻页（2026-11-19 用户：「向下滚动PDF是下一页」）；节流，触控板一次手势不连翻 */
-let wheelAt = 0;
+/* 2026-11-21 用户第六条：「向下滑是要只滑动右边的滑动条，到最底部之后再下滑才到第二页、
+   并且滚动条重置到顶部；现在是冲突了——滑动时条会动，然后还会切页」。
+   顺序改成：这一页还能滚 → 交给浏览器滚（绝不拦、不翻）；到了底/顶再同向滑 → 翻页 + 滚动条归零。 */
+let wheelAt = 0, wheelLock = false;
 $('#readerBox').addEventListener('wheel', e => {
-  if(!RD.doc || Math.abs(e.deltaY) < 18) return;
-  if(Date.now() - wheelAt < 260) return;
-  wheelAt = Date.now();
+  if(!RD.doc || Math.abs(e.deltaY) < 12) return;
+  const box = e.currentTarget;
+  const maxTop = box.scrollHeight - box.clientHeight;
+  const down = e.deltaY > 0;
+  if(maxTop > 4){
+    const atBottom = box.scrollTop >= maxTop - 2;
+    const atTop = box.scrollTop <= 2;
+    if((down && !atBottom) || (!down && !atTop)) return;   // 还能滚：只滚，不翻页
+  }
+  if(wheelLock || Date.now() - wheelAt < 320){ e.preventDefault(); return; }
+  wheelLock = true; wheelAt = Date.now();
   e.preventDefault();
-  if(e.deltaY > 0) $('#pgNext').click(); else $('#pgPrev').click();
+  if(down) $('#pgNext').click(); else $('#pgPrev').click();
+  // 翻页后滚动条归零（往回翻则到这一页底部，符合「接着往上读」的手感）
+  setTimeout(() => {
+    try{ box.scrollTop = down ? 0 : (box.scrollHeight - box.clientHeight); }catch(_){ }
+    wheelLock = false;
+  }, 80);
 }, {passive:false});
 /* 左键拖拽 = 平移（缩放后页面大于阅读框时） */
 let pan = null;
@@ -2250,7 +2328,7 @@ $('#readerBox').addEventListener('pointermove', e => {
 const endPan = () => { pan = null; $('#readerBox').classList.remove('panning'); };
 $('#readerBox').addEventListener('pointerup', endPan);
 $('#readerBox').addEventListener('pointercancel', endPan);
-$('#readBack').onclick = () => showPage('courses');
+/* 2026-11-21 用户第九条：阅读页左上「← 课程」不用了（导航栏本来就能回课程），去掉。 */
 
 /* 选中 PDF 文字 → 右键「记笔记」（2026-11-19 用户第 10 条）*/
 let noteMenu = null;
@@ -2271,6 +2349,9 @@ document.addEventListener('contextmenu', e => {
     if(ta){
       const quote = sel.length > 500 ? sel.slice(0, 500) + '…' : sel;
       ta.value = '【原文 p.' + RD.page + '】' + quote + '\n' + (ta.value || '');
+      // 2026-11-21 用户第八条：点「记笔记（引用这段原文）」要弹出笔记侧栏，而不是只在下面塞字。
+      if(typeof showSide === 'function') showSide();
+      if(typeof sideTab === 'function') sideTab('notes');
       ta.focus();
       ta.scrollIntoView({block:'center'});
     }
@@ -2314,6 +2395,7 @@ $('#btnNotes').onclick = () => {
   SIDE_HIDDEN = !SIDE_HIDDEN;
   try{ localStorage.setItem('pluma.hideSide', SIDE_HIDDEN ? '1' : '0'); }catch(_){}
   applySide();
+  if(!SIDE_HIDDEN && typeof sideTab === 'function') sideTab('notes');   // 打开时回到笔记页签
   setTimeout(()=>{ if(RD.doc) renderPdf(); }, 120);
 };
 async function setFullscreen(on){
@@ -2336,39 +2418,51 @@ async function setFullscreen(on){
   setTimeout(() => { if(RD.doc) renderPdf(); }, 160);
 }
 $('#btnFs').onclick = () => setFullscreen(!inFullscreen());
-/* 翻译这一页（2026-11-19 用户：「增加一个翻译器按钮在 在软件里读 的时候」）*/
-function transDialog(){
-  if(!RD.doc){ toast('先打开一份讲义'); return; }
-  $('#dlg').innerHTML = `
-    <div class="eb">Translate</div><h4>翻译第 ${RD.page} 页</h4>
-    <p class="desc">只翻这一页的文字层；扫描件没有文字层，会直接说读不到。</p>
-    <div class="acts" style="justify-content:flex-start">
-      <button class="btn" id="trZh">译成中文</button>
-      <button class="btn ghost" id="trEn">译成英文</button>
-      <button class="btn ghost" id="trNo" style="margin-left:auto">取消</button>
-    </div>
-    <div id="trOut"></div>`;
-  openVeil();
-  $('#trNo').onclick = closeVeil;
-  const go = async (to) => {
-    const out = $('#trOut');
-    out.innerHTML = '<p class="hint" style="border:0">翻译中…（一次模型调用）</p>';
-    try{
-      const j = await (await fetch('/api/translate',{method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({rel:RD.rel, page:RD.page, to})})).json();
-      if(!j.ok){ out.innerHTML = '<p class="hint" style="border:0;color:var(--red)">' + esc(j.error||'翻译失败') + '</p>'; return; }
-      out.innerHTML = '<div class="trans" id="trText">' + esc(j.text) + '</div>' +
-        '<div class="acts" style="justify-content:flex-start"><button class="btn ghost" id="trCopy">复制译文</button></div>';
-      $('#trCopy').onclick = async () => {
-        try{ await navigator.clipboard.writeText(j.text); toast('译文已复制'); }
-        catch(e){ toast('复制失败，请手动选中'); }
-      };
-    }catch(e){ out.innerHTML = '<p class="hint" style="border:0;color:var(--red)">请求失败：' + esc(String(e)) + '</p>'; }
-  };
-  $('#trZh').onclick = () => go('zh');
-  $('#trEn').onclick = () => go('en');
+/* 翻译（2026-11-19 加按钮；2026-11-21 用户第七條：翻译不能挡住整体阅读，
+   要像笔记那样从右侧切出侧栏，参考 PDF 的那种）。
+   原来弹的是一个盖住正文的对话框，现在改成侧栏里的一个页签。 */
+function sideTab(which){
+  const t = (which === 'trans') ? 'trans' : 'notes';
+  const n = $('#sideNotes'), s = $('#sideTrans');
+  if(n) n.hidden = (t !== 'notes');
+  if(s) s.hidden = (t !== 'trans');
+  if($('#tabNotes')) $('#tabNotes').classList.toggle('on', t === 'notes');
+  if($('#tabTrans')) $('#tabTrans').classList.toggle('on', t === 'trans');
 }
-$('#btnTrans').onclick = transDialog;
+function showSide(){
+  SIDE_HIDDEN = false;
+  try{ localStorage.setItem('pluma.hideSide', '0'); }catch(_){ }
+  applySide();
+  setTimeout(() => { if(RD.doc) renderPdf(); }, 120);
+}
+async function transPage(to){
+  if(!RD.doc){ toast('先打开一份讲义'); return; }
+  const out = $('#trOut');
+  if(!out) return;
+  out.innerHTML = '<div class="hint" style="border:0">翻译中…（一次模型调用）</div>';
+  try{
+    const j = await (await fetch('/api/translate',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({rel:RD.rel, page:RD.page, to})})).json();
+    if(!j.ok){ out.innerHTML = '<div class="hint" style="border:0;color:var(--red)">' + esc(j.error||'翻译失败') + '</div>'; return; }
+    out.innerHTML = '<div class="trans" id="trText">' + esc(j.text) + '</div>' +
+      '<div class="acts" style="justify-content:flex-start"><button class="btn ghost" id="trCopy">复制译文</button></div>';
+    const cp = $('#trCopy');
+    if(cp) cp.onclick = async () => {
+      try{ await navigator.clipboard.writeText(j.text); toast('译文已复制'); }
+      catch(e){ toast('复制失败，请手动选中'); }
+    };
+  }catch(e){ out.innerHTML = '<div class="hint" style="border:0;color:var(--red)">请求失败：' + esc(String(e)) + '</div>'; }
+}
+$('#btnTrans').onclick = () => {
+  if(!RD.doc){ toast('先打开一份讲义'); return; }
+  showSide(); sideTab('trans');
+  const p = 'p.' + RD.page;
+  if($('#curP3')) $('#curP3').textContent = p;
+};
+if($('#trZh')) $('#trZh').onclick = () => transPage('zh');
+if($('#trEn')) $('#trEn').onclick = () => transPage('en');
+if($('#tabNotes')) $('#tabNotes').onclick = () => sideTab('notes');
+if($('#tabTrans')) $('#tabTrans').onclick = () => sideTab('trans');
 document.addEventListener('fullscreenchange', () => syncFsLabel());
 document.addEventListener('keydown', e=>{
   if(PAGE!=='read' || !RD.doc) return;
@@ -2776,6 +2870,15 @@ document.addEventListener('keydown', e => {
 (async function init(){
   applyTheme(localStorage.getItem('pluma.theme') || 'light');
   await boot();
+  // 本机配置里的偏好优先（端口换了也在）；下面的 ?theme / ?lang 仍然最高优先，留给截图与回归。
+  const UI = (B && B.ui) || {};
+  if(UI.theme) applyTheme(UI.theme);
+  if(UI.form){ const o = document.querySelector('.opt[data-form="' + UI.form + '"]'); if(o) o.click(); }
+  if(UI.lang && UI.lang !== LANG){ const o = document.querySelector('.opt[data-lang="' + UI.lang + '"]'); if(o) o.click(); }
+  if(UI.course){
+    const cs = $('#courseSel');
+    if(cs && [...cs.options].some(x => x.value === UI.course)){ cs.value = UI.course; syncLessons(); updateImpHint(); }
+  }
   const sp = new URLSearchParams(location.search);
   if(sp.get('theme')) applyTheme(sp.get('theme'));
   if(sp.get('page')==='generate') showPage('generate');

@@ -50,8 +50,11 @@ def main() -> int:
                 pg = br.new_page(viewport={"width": 1440, "height": 900})
                 # 强制走「满屏浮层」兜底路径：无头环境允许原生全屏时 Esc 由浏览器处理，测不到页面逻辑
                 pg.add_init_script("Element.prototype.requestFullscreen = () => Promise.reject(new Error('headless-deny'))")
+                # 2026-11-21：从 networkidle 改成 domcontentloaded。软件启动后会 POST /api/config
+                #   （界面偏好写回本机配置），那一下等它「网络彻底空闲」会偶发卡满 30 秒；
+                #   这里要验的是弹窗/全屏/返回的行为，不是网络是否归零，下面固定等 3.2s 足够。
                 pg.goto(BASE + "/?dbg=1&win=1&course=DEMO&pdf=" + urllib.request.quote(PDF, safe="") + "&code=DEMO",
-                        wait_until="networkidle")
+                        wait_until="domcontentloaded", timeout=20000)
                 pg.wait_for_timeout(3200)
                 # CI 是全新配置：首次配置浮层会挡住按钮；模块里的 closeVeil 不是 window 属性，直接摘类
                 pg.evaluate("try{ var v=document.querySelector('#veil'); if(v){v.classList.remove('on','closing');} }catch(e){}")
@@ -69,7 +72,10 @@ def main() -> int:
                     ok = (not pg.evaluate("document.body.classList.contains('fs-read')")
                           and not pg.evaluate("document.querySelector('#page-read .read-card').classList.contains('fs')"))
                 else:
-                    pg.click("#readBack"); pg.wait_for_timeout(500)
+                    # 2026-11-21 用户第九条：阅读页那条「← 课程」去掉了（顶栏导航本来就能回），
+                    #   所以这里改成点顶栏「课程」——要验的仍然是「阅读页能不能干净地退出去」。
+                    pg.evaluate("document.querySelector('#nav a[data-page=\"courses\"]').click()")
+                    pg.wait_for_timeout(500)
                     ok = pg.evaluate("document.querySelector('#page-courses').classList.contains('on')")
                 rows.append(ok)
                 print("[%s] %s" % ("绿" if ok else "红", label))

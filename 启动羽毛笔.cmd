@@ -19,4 +19,7 @@ if not defined BOOT (
     pause
     exit /b 2
 )
-powershell -NoProfile -ExecutionPolicy Bypass -File "%BOOT%" %*
+rem 2026-11-21 user: no console window wanted (see screenshot 2). The boot script still logs every
+rem   step to %USERPROFILE%\.pluma\logs\launcher.log and pops a dialog if startup fails,
+rem   so hiding the console does not hide the reason any more.
+powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "%BOOT%" -Windowed %*

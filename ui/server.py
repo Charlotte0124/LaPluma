@@ -488,6 +488,9 @@ def load_cfg():
         "save_dir": cfg.get("save_dir") or default_dir,
         "wizard_done": bool(cfg.get("wizard_done", False)),
         "save_dir_fixed": False,
+        # 2026-11-21：界面偏好（主题 / 形态 / 语言 / 上次的课程）跟着配置一起读出来。
+        #   注意这里是个白名单字典——不在这里列出来的键读一次就没了。
+        "ui": cfg.get("ui") if isinstance(cfg.get("ui"), dict) else {},
     }
     # 2026-11-16 实际撞到：某个写入环节把「讲义」写成了 ??，之后每次生成都往 CS340/01_?? 里放。
     # 路径里出现问号就认为被编码破坏，退回默认目录并在界面上说明。
@@ -1417,6 +1420,8 @@ class Handler(BaseHTTPRequestHandler):
                     "save_dir_fixed": cfg.get("save_dir_fixed", False),
                     "data_root": paths.DATA_ROOT,
                     "deps": dep_state(),
+                    # 界面偏好（主题 / 成品形态 / 讲义语言 …）：存本机配置，换端口也不丢。
+                    "ui": cfg.get("ui") or {},
                     "courses": discover_courses(), "usage": usage_summary(),
                 })
             if u.path == "/api/balance":
@@ -1889,6 +1894,17 @@ class Handler(BaseHTTPRequestHandler):
                     cfg["api_key"] = key
                 if body.get("wizard_done") is not None:
                     cfg["wizard_done"] = bool(body["wizard_done"])
+                # 2026-11-21 用户：「软件要保留用户的设定（例如我是夜间关闭了软件的 打开也是要
+                #   黑夜模式的）」。界面偏好原来只存 localStorage，而 localStorage 是按
+                #   http://127.0.0.1:<端口> 分家的——端口一变（上一个实例还占着 8765）就全丢。
+                #   现在跟模型/保存目录一起存进本机配置，端口换了一样在。
+                if isinstance(body.get("ui"), dict):
+                    ui = dict(cfg.get("ui") or {})
+                    for k, v in body["ui"].items():
+                        k = str(k)[:40]
+                        if v is None or isinstance(v, (str, int, float, bool)):
+                            ui[k] = v[:400] if isinstance(v, str) else v
+                    cfg["ui"] = ui
                 save_cfg(cfg)
                 return self._json({"ok": True, "configured": bool(cfg["api_key"])})
             if u.path == "/api/session":
