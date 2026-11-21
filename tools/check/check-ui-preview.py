@@ -80,6 +80,14 @@ def fmt(ts):
     return time.strftime('%Y-%m-%d %H:%M', time.localtime(ts)) if ts else '（无提交记录）'
 
 
+def staged_files(repo):
+    """暂存区里有哪些路径（提交钩子跑的时候，这才是「这一次提交」）。"""
+    rc, out, _ = git(repo, 'diff', '--cached', '--name-only')
+    if rc != 0 or not out:
+        return []
+    return [line.strip().replace('\\', '/') for line in out.splitlines() if line.strip()]
+
+
 def run(root):
     """返回 (reds, yellows, notes)。"""
     red, yel, note = [], [], []
@@ -99,22 +107,33 @@ def run(root):
     page_changed = any(f.startswith('ui/index.html') for f in ui_files)
     note.append('ui/ 最后提交 %s · docs\\预览 最后提交 %s' % (fmt(t_ui), fmt(t_prev)))
 
-    # —— A：最后一次改界面的提交里，有没有给图留痕（同提交必须带 docs\预览 或 docs\资产）
+    # —— A：改界面的那一次，有没有给图留痕（同一次必须带 docs\预览 或 docs\资产）
+    # 2026-11-22 修正：提交钩子跑的时候 HEAD 还是**上一次**提交，按 HEAD 判会永远判上一次
+    #   （实测：这次明明带了图，却被「上一提交没带图」拦下）。有暂存内容就判暂存内容。
     if not os.path.isdir(prev_dir):
         red.append('A 没有 docs\\预览 目录：设计稿无处可放，等于这条规矩不存在')
-    elif t_ui:
-        rev = ui_rev
-        files = ui_files
-        touched = [f for f in files if f.startswith('docs/预览') or f.startswith('docs/资产')]
-        note.append('最后一次界面提交 %s（%s）带图 %d 个' % (rev[:7] or '?', fmt(t_ui), len(touched)))
-        if not touched:
-            msg = commit_msg(root, rev)
-            if 'ui-noshow' in msg:
-                yel.append('A 界面提交 %s 自己声明「无可见改动」（[ui-noshow]）：没带图，请人工确认'
-                           % (rev[:7] or '?'))
-            else:
-                red.append('A 界面提交 %s（%s）里没带图：预览稿或真实截图要与界面改动放同一个提交'
-                           % (rev[:7] or '?', fmt(t_ui)))
+    else:
+        staged = staged_files(root)
+        if staged:
+            files = staged
+            touched = [x for x in files if x.startswith('docs/预览') or x.startswith('docs/资产')]
+            ui_touched = [x for x in files if x.startswith('ui/')]
+            note.append('这次提交：ui %d 个改动 · 带图 %d 个' % (len(ui_touched), len(touched)))
+            if ui_touched and not touched:
+                red.append('A 这次提交改了 ui/ 却没带图：预览稿或真实截图要跟界面改动放同一个提交')
+        elif t_ui:
+            rev = ui_rev
+            files = ui_files
+            touched = [f for f in files if f.startswith('docs/预览') or f.startswith('docs/资产')]
+            note.append('最后一次界面提交 %s（%s）带图 %d 个' % (rev[:7] or '?', fmt(t_ui), len(touched)))
+            if not touched:
+                msg = commit_msg(root, rev)
+                if 'ui-noshow' in msg:
+                    yel.append('A 界面提交 %s 自己声明「无可见改动」（[ui-noshow]）：没带图，请人工确认'
+                               % (rev[:7] or '?'))
+                else:
+                    red.append('A 界面提交 %s（%s）里没带图：预览稿或真实截图要与界面改动放同一个提交'
+                               % (rev[:7] or '?', fmt(t_ui)))
 
     # —— B：孤儿图 / 空目录 / 缺登记
     if os.path.isdir(prev_dir):
