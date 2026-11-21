@@ -2511,23 +2511,72 @@ function showSide(){
   applySide();
   setTimeout(() => { if(RD.doc) renderPdf(); }, 120);
 }
+/* 2026-11-22 用户：译文出来要有「记成笔记」——追加到 #nDraft 并切到笔记页签。 */
+function transNote(text, page){
+  const ta = $('#nDraft');
+  if(!ta){ toast('先打开一份讲义'); return; }
+  const line = '【译文 p.' + page + '】' + String(text || '').trim();
+  ta.value = (ta.value ? ta.value.replace(/\s+$/, '') + '\n' : '') + line;
+  showSide();
+  sideTab('notes');
+  ta.focus();
+  try{ ta.setSelectionRange(ta.value.length, ta.value.length); }catch(_){}
+  ta.scrollIntoView({block:'center'});
+  toast('译文已放进笔记草稿，点「记一笔」保存');
+}
+function renderTransResult(text, page){
+  const out = $('#trOut'); if(!out) return;
+  out.innerHTML = '<div class="trans" id="trText">' + esc(text || '') + '</div>' +
+    '<div class="acts" style="justify-content:flex-start">' +
+      '<button class="btn ghost" id="trCopy">复制译文</button>' +
+      '<button class="btn" id="trNote">记成笔记</button></div>';
+  const cp = $('#trCopy');
+  if(cp) cp.onclick = async () => {
+    try{ await navigator.clipboard.writeText(text || ''); toast('译文已复制'); }
+    catch(e){ toast('复制失败，请手动选中'); }
+  };
+  const nn = $('#trNote');
+  if(nn) nn.onclick = () => transNote(text || '', page || RD.page);
+}
+/* 2026-11-22 用户：翻译页签顶部列「最近 5 条」，点一条回填 #trSrc 与译文。 */
+function renderTransHistory(items){
+  const box = $('#trHist'); if(!box) return;
+  const list = (items || []).slice(0, 5);
+  if(!list.length){
+    box.innerHTML = '<div class="th-empty">最近 5 条：还没有翻译记录。</div>';
+    return;
+  }
+  box.innerHTML = '<div class="th-h">最近 5 条</div>' + list.map((h, i) => {
+    const src = String(h.src || '').replace(/\s+/g, ' ').trim();
+    return '<button class="th" data-h="' + i + '" title="' + esc(src) + '">' +
+      '<b>' + esc(h.at || '') + '</b><span>' + esc(src || '（无原文）') + '</span></button>';
+  }).join('');
+  box.querySelectorAll('[data-h]').forEach(b => b.onclick = () => {
+    const h = list[+b.dataset.h]; if(!h) return;
+    if($('#trSrc')) $('#trSrc').value = h.src || '';
+    if($('#curP3') && h.page) $('#curP3').textContent = 'p.' + h.page;
+    renderTransResult(h.dst || '', h.page || RD.page);
+  });
+}
+async function loadTransHistory(){
+  try{
+    const j = await (await fetch('/api/translate/history')).json();
+    if(j && j.ok !== false) renderTransHistory(j.items || []);
+  }catch(_){ }
+}
 async function transPage(to){
   if(!RD.doc){ toast('先打开一份讲义'); return; }
   const out = $('#trOut');
   if(!out) return;
+  const atPage = RD.page;
   out.innerHTML = '<div class="hint" style="border:0">翻译中…（一次模型调用）</div>';
   const typed = ($('#trSrc') && $('#trSrc').value || '').trim();
   try{
     const j = await (await fetch('/api/translate',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify(typed ? {text: typed, to} : {rel:RD.rel, page:RD.page, to})})).json();
     if(!j.ok){ out.innerHTML = '<div class="hint" style="border:0;color:var(--red)">' + esc(j.error||'翻译失败') + '</div>'; return; }
-    out.innerHTML = '<div class="trans" id="trText">' + esc(j.text) + '</div>' +
-      '<div class="acts" style="justify-content:flex-start"><button class="btn ghost" id="trCopy">复制译文</button></div>';
-    const cp = $('#trCopy');
-    if(cp) cp.onclick = async () => {
-      try{ await navigator.clipboard.writeText(j.text); toast('译文已复制'); }
-      catch(e){ toast('复制失败，请手动选中'); }
-    };
+    renderTransResult(j.text || '', atPage);
+    if(j.history) renderTransHistory(j.history);
   }catch(e){ out.innerHTML = '<div class="hint" style="border:0;color:var(--red)">请求失败：' + esc(String(e)) + '</div>'; }
 }
 $('#btnTrans').onclick = () => {

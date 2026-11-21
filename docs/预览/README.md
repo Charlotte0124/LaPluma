@@ -107,3 +107,4 @@
 - ① 标题条 mousedown → _WinApi.drag_window（ReleaseCapture + WM_NCLBUTTONDOWN/HTCAPTION）
 - ② 退出全屏 restore_bounds 带 SWP_FRAMECHANGED，260ms 后再补一次
 - ③ 原件行「移动」→ /api/move-originals，搬完重取课程与讲次
+- ④ 译文「记成笔记」→【译文 p.N】追加到 #nDraft 并切笔记页签；菜单只由右键触发
