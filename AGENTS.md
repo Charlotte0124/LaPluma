@@ -130,6 +130,16 @@
 
 **怎么验证它被执行**：`python tools\check\check-window-layer.py` 必须 **3/3**，`--selftest` 6/6（逐条造坏都要变红）；提交钩子自动跑。只有真窗口量得出的（窗口矩形、选中框对位、拖动），跑 `python tools\check\check-window-real.py`（会弹一下软件窗口，约 40 秒；加 `--drag` 再做一次真实鼠标拖动）：W1 真窗口 / W2 全屏进出还原（±2px）/ W3 文字层与 pymupdf 词框对位（±4px）/ W4 成稿隐藏与重新生成 / W5 只有右键弹菜单 / W7 relayout 幂等 + 底色不透明 / W8 Esc 能退出全屏 / W9 记笔记单框（灰底只读引用 + 1 个输入、侧栏无写入框、保存带引用）/ W6 拖动。
 
+## 十四、产品仓只放能跑的代码（2026-11-22 用户定）
+
+**为什么有这条**：用户原话「全部项目是不要有外露的后台资源维护的（这些归纳 PRTS 管理）只可以保留源代码在仓库里面，这点要记得」。规矩**正本**在 PRTS 的 `CONVENTIONS.md` §63 与 `registry\repo-hygiene.json`（隐私仓），本仓只留指针，不复制正文。
+
+1. **能进仓**：源代码、启动/构建脚本、许可与说明（README / AGENTS / CHANGELOG / LICENSE）、运行必需资源（`assets\lapluma.ico`、`tools\print\pdfjs`、`tools\print\katex\fonts`）、示例课程数据 `DEMO\`、`docs\` 下的说明与界面截图、`.githooks\`。
+2. **不许进仓**：真课件与真课程名（`courses.json` 只许 DEMO）、`_trash` / `_logs` / `.build`、exe / zip、一次性脚本（`_tmp` / `_probe` / `dbg-`）、后台台账与成本表——这些归 PRTS `projects\课程\` 的财产。
+3. 本仓的判据是 `check-repo-clean.py`（进仓文件白名单 + courses.json 只留 DEMO），提交钩子自动跑。
+
+**怎么验证它被执行**：`python tools\check\check-repo-clean.py` 必须绿（193 个进仓文件全在白名单内）；PRTS 的 `check-repo-hygiene.ps1` 是权威判据，但它按 `registry\projects.json` 扫，LaPluma 目前只登记在 `ui-repos.json` 里，所以那边会跳过——这条缺口在此登记，不假装通过。
+
 ## 十三、判据清单（谁是自动跑、谁要手动跑）
 
 | 判据 | 跑法 |
@@ -143,6 +153,7 @@
 | `check-reading-tools.py` | 提交钩子自动（阅读页六条：拖动 / 全屏 / 移动 / 翻译笔记 / 整页笔记 / 历史） |
 | `check-window-layer.py` | 提交钩子自动（文字层 / 成稿隐藏 / 干净启动器） |
 | `check-inline-js.py` | 提交钩子自动（ui/index.html 里每段内联脚本过 node --check；引号/反引号写错立刻红） |
+| `check-repo-clean.py` | 提交钩子自动（产品仓只放能跑的代码；courses.json 只留 DEMO） |
 | `check-rules-wired.py` | 提交钩子自动（本文件与 tools/check 对账） |
 | `check-error-guard.py` | 手动：`python tools\check\check-error-guard.py`（打 14 条坏请求验错误兜底） |
 | `check-fresh-install.py` | 手动：全新配置跑一遍首启流程 |
