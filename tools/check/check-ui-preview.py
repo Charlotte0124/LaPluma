@@ -133,12 +133,18 @@ def run(root):
             files = ui_files
             touched = [f for f in files if f.startswith('docs/预览') or f.startswith('docs/资产')]
             note.append('最后一次界面提交 %s（%s）带图 %d 个' % (rev[:7] or '?', fmt(t_ui), len(touched)))
+            visible = [f for f in files if f.startswith('ui/') and not f.endswith('.py')]
             exempt = {}
             try:
                 with open(os.path.join(root, 'tools', 'check', 'ui-preview-exempt.json'), encoding='utf-8') as fh:
                     exempt = {x.get('rev'): x.get('why', '') for x in json.load(fh).get('revs', [])}
             except Exception:  # noqa: BLE001
                 exempt = {}
+            if not visible and not touched:
+                # 2026-11-22：只改 ui/server.py 这类后端代码不会让界面变样，别逼着拍没变化的图
+                yel.append('A 最后一次 ui 提交只改了 ui/ 下的 Python（无可见界面改动），没带图（%s）'
+                           % (rev[:7] or '?',))
+                touched = ['(无可见改动)']
             if not touched and rev[:7] in exempt:
                 yel.append('A 界面提交 %s 的图在后续提交补上（登记的理由：%s）' % (rev[:7], exempt[rev[:7]]))
             elif not touched:
