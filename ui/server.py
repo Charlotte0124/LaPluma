@@ -2701,6 +2701,43 @@ class _WinApi:
 
     def __init__(self):
         self.maxed = False
+        self._bounds = None
+
+    def keep_bounds(self):
+        """记下进入全屏前的窗口矩形。
+
+        2026-11-22 用户：「从全屏退出之后会占据整个屏幕，没办法缩小」——退出时原来只把
+        .fs 那个 class 去掉，窗口本身还是全屏尺寸。进全屏前存一次，退出时照原样设回去。
+        """
+        try:
+            import ctypes
+            import ctypes.wintypes as wt
+            h = _find_hwnd()
+            if not h:
+                return {"ok": False}
+            r = wt.RECT()
+            ctypes.windll.user32.GetWindowRect(wt.HWND(h), ctypes.byref(r))
+            self._bounds = (int(r.left), int(r.top), int(r.right - r.left), int(r.bottom - r.top))
+            return {"ok": True, "rect": list(self._bounds)}
+        except Exception as e:  # noqa: BLE001
+            _log_error("keep_bounds", e)
+            return {"ok": False}
+
+    def restore_bounds(self):
+        try:
+            import ctypes
+            import ctypes.wintypes as wt
+            h = _find_hwnd()
+            b = self._bounds
+            if not h or not b:
+                return {"ok": False}
+            x, y, w, hh = b
+            ctypes.windll.user32.SetWindowPos(wt.HWND(h), None, int(x), int(y),
+                                              int(w), int(hh), 0x0040)  # SWP_SHOWWINDOW
+            return {"ok": True, "rect": list(b)}
+        except Exception as e:  # noqa: BLE001
+            _log_error("restore_bounds", e)
+            return {"ok": False}
 
     def _win(self):
         try:

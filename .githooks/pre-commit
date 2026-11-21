@@ -19,4 +19,6 @@ python -X utf8 tools/check/check-lecture-rules.py || { echo "[hook] 全英译名
 #   模型输出的 JSON 要能容错地取，取不到要重试并落盘原文（AGENTS.md §七）。
 echo "[hook] 模型 JSON 解析 check-draft-json ..."
 python -X utf8 tools/check/check-draft-json.py || { echo "[hook] 模型 JSON 解析判据未过：提交已拦下"; exit 1; }
+echo "[hook] 规矩接线 check-rules-wired ..."
+python -X utf8 tools/check/check-rules-wired.py || { echo "[hook] 规矩与判据没对上：提交已拦下"; exit 1; }
 echo "[hook] 通过"

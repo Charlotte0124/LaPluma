@@ -2429,9 +2429,13 @@ async function setFullscreen(on){
   if(!on){
     try{ if(document.fullscreenElement) await document.exitFullscreen(); }catch(e){ /* 退出失败也继续撤满屏 */ }
     card.classList.remove('fs'); syncFsLabel();
+    // 2026-11-22 用户：「退出全屏后占满整个屏幕、缩不回去」——把进全屏前记下的矩形设回去。
+    setTimeout(() => { try{ window.pywebview.api.restore_bounds(); }catch(e){} }, 160);
     setTimeout(() => { if(RD.doc) renderPdf(); }, 140);
     return;
   }
+  // 进全屏前记下窗口大小与位置，退出时还原。
+  try{ window.pywebview.api.keep_bounds(); }catch(e){}
   // 先上满屏浮层（立即生效，不依赖全屏 API）；再试原生全屏，成功就撤掉浮层，避免两套叠加。
   // 不用 await 直接等 requestFullscreen：实测被权限拒绝时它可能永远不 resolve。
   card.classList.add('fs'); syncFsLabel();

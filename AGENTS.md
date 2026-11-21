@@ -87,3 +87,37 @@
 4. 给用户看结果时，一段话＋关键数字就够，不必附截图（用户明确说不看）。
 
 **怎么验证它被执行**：`grep -L -- "--no-browser" tools/check/*.py` 里出现起服务的脚本即算红；`.githooks\pre-commit` 每次提交都会跑 `check-ui-conflicts`，它起服务的那一行必须带这两个开关。
+
+## 九、改完必须落规矩，规矩必须接钩子（2026-11-22 用户定）
+
+**为什么有这条**：用户原话「每次改动结束之后都要保存最新的规矩，不然永远都会发生老问题，并且制作钩子防止这事情发生、确保这规矩运行」。
+
+1. 每次改动收尾时，问一句：**这次踩的坑，下次怎么挡住？** 要写就写进本文件（一句为什么 + 可执行的条 + 判据）。
+2. 写进 AGENTS.md 的规矩，必须有一条能失败的判据放在 `tools/check/`，并接进 `.githooks/pre-commit`。
+3. `tools/check/check-rules-wired.py` 检查「判据 ↔ 规矩」两边对得上：有判据没规矩、有规矩没判据都判红。
+
+**怎么验证它被执行**：`python tools/check/check-rules-wired.py` 全接上才算绿（提交钩子自动跑）。
+
+## 十、窗口层改动（2026-11-22）
+
+1. 全屏前必须 `keep_bounds()` 记下矩形，退出时 `restore_bounds()` 设回去——用户实测「退出全屏后占满屏幕、缩不回去」。
+2. 窗口层（无边框拖动 / 缩放 / 全屏）改动只能用软件窗口验（PrintWindow），不许用浏览器页代替。
+
+## 十一、判据清单（谁是自动跑、谁要手动跑）
+
+| 判据 | 跑法 |
+|:--|:--|
+| `check-stub-guard.py` | 提交钩子自动 |
+| `check-distribution.py` | 提交钩子自动 |
+| `check-ui-preview.py` | 提交钩子自动 |
+| `check-ui-conflicts.py` | 提交钩子自动 |
+| `check-lecture-rules.py` | 提交钩子自动 |
+| `check-draft-json.py` | 提交钩子自动 |
+| `check-rules-wired.py` | 提交钩子自动（本文件与 tools/check 对账） |
+| `check-error-guard.py` | 手动：`python tools\check\check-error-guard.py`（打 14 条坏请求验错误兜底） |
+| `check-fresh-install.py` | 手动：全新配置跑一遍首启流程 |
+| `check-paths.py` | 手动：数据根 / 保存目录解析 |
+| `check-figref.py` | 手动：讲义图引用路径 |
+| `check-pdf-brand.py` | 手动：成品 PDF 的固定文案与品牌 |
+| `check-startup-guard.py` | 手动：启动期自保（遮蔽目录 / stdout） |
+| `check-update.py` | 手动：应用内更新逻辑 |
