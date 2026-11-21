@@ -347,16 +347,59 @@ def _strip_fence(txt: str) -> str:
     return txt
 
 
-def _json_of(txt: str) -> dict:
-    """从模型输出里取 JSON：容错到第一个 { 到最后一个 }。"""
-    txt = _strip_fence(txt)
+def _loads_exact(txt: str):
+    """整段能当 JSON 读才算数；读不出返回 None。"""
+    body = (txt or "").strip()
+    if not body:
+        return None
     try:
-        return json.loads(txt)
+        return json.loads(body, strict=False)
     except Exception:  # noqa: BLE001
-        a, b = txt.find("{"), txt.rfind("}")
-        if a >= 0 and b > a:
-            return json.loads(txt[a:b + 1])
-        raise
+        return None
+
+
+def _scan_any(txt: str):
+    """模型偶尔把示例 JSON 和真正的 JSON 一起吐出来，或正文后面又跟一段。
+
+    从每个 { / [ 起试 raw_decode：优先取「像 LESSON」（带 sections）的那个，
+    否则取第一个能解开的。
+    """
+    dec = json.JSONDecoder(strict=False)
+    first_any = None
+    for m in re.finditer(r"[\[{]", txt or ""):
+        try:
+            obj, _end = dec.raw_decode((txt or "")[m.start():])
+        except Exception:  # noqa: BLE001
+            continue
+        if isinstance(obj, dict) and "sections" in obj:
+            return obj
+        if first_any is None:
+            first_any = obj
+    return first_any
+
+
+def _json_of(txt: str) -> dict:
+    """从模型输出里取 JSON。
+
+    2026-11-21 用户点「开始生成」拿到「[停] 补正文失败：JSONDecodeError('Expecting property
+    name enclosed in double quotes: line 1 column 1126')」——模型这次没按约定只吐一个对象。
+    以前是「第一个 { 到最后一个 }」一刀切：多吐一个对象、或前面带示例，就必错。
+    现在分两轮：先要求整段可解析（原样 / 去掉尾逗号），都不行再从括号起点逐个扫描。
+    """
+    body = _strip_fence(txt)
+    cands = [body]
+    fixed = re.sub(r",\s*([}\]])", r"\1", body)
+    if fixed != body:
+        cands.append(fixed)
+    for cand in cands:
+        obj = _loads_exact(cand)
+        if obj is not None:
+            return obj
+    for cand in cands:
+        obj = _scan_any(cand)
+        if obj is not None:
+            return obj
+    raise ValueError("模型输出不是合法 JSON（%d 字符）" % len(body or ""))
 
 
 def _norm(data: dict) -> dict:
@@ -467,7 +510,11 @@ def _glossary_rows(src: str, lang: str, model: str) -> list:
     out = client.chat([{"role": "system", "content": sysmsg},
                        {"role": "user", "content": ask + src}],
                       model=model, temperature=0.2, max_tokens=8000)
-    rows = _json_of(out["text"])
+    try:
+        rows = _json_of(out["text"])
+    except Exception:  # noqa: BLE001
+        # 术语是补充项：这一段没解析出来不该把整讲判死。
+        return []
     if not isinstance(rows, list):
         return []
     fixed = []
@@ -475,6 +522,23 @@ def _glossary_rows(src: str, lang: str, model: str) -> list:
         if isinstance(r, (list, tuple)) and len(r) >= 3:
             fixed.append([str(r[0]), str(r[1]), str(r[2]), str(r[3]) if len(r) > 3 else ""])
     return fixed
+
+
+def _dump_raw(course: str, text: str, tag: str) -> str:
+    """把模型「不是合法 JSON」的原文落盘。
+
+    2026-11-21 用户只看到「[停] 补正文失败：JSONDecodeError(...)」——没有原文，连我都没法判断
+    是多了个示例还是被截断。以后这条路上永远留一份 txt，路径会写进日志与报错里。
+    """
+    try:
+        d = os.path.join(paths.data(course), "_trash")
+        os.makedirs(d, exist_ok=True)
+        p = os.path.join(d, "%s-%s.txt" % (tag, time.strftime("%Y%m%d-%H%M%S")))
+        with open(p, "w", encoding="utf-8") as fh:
+            fh.write(text or "")
+        return p
+    except Exception:  # noqa: BLE001
+        return "(原文落盘失败)"
 
 
 def _write_lesson(course: str, no: str, data: dict, lang: str, emit=print) -> str:
@@ -514,7 +578,30 @@ def draft(course: str, no: str, lang: str = "zh", emit=print, model: str | None 
     emit("[生成] %s · %s" % (model, "全英（专有名称中文）" if lang == "en" else "全中（专业名称英文）"))
     out = client.chat([{"role": "system", "content": sysmsg}, {"role": "user", "content": user}],
                       model=model, temperature=0.3, max_tokens=30000)
-    data = _norm(_json_of(out["text"]))
+    try:
+        data = _norm(_json_of(out["text"]))
+    except Exception as e1:  # noqa: BLE001
+        # 2026-11-21 用户点「开始生成」只拿到一句「[停] 补正文失败：JSONDecodeError(...)」，
+        #   界面等于死路。模型偶尔会多吐一段示例、或者输出被截断；这里把原文落盘、
+        #   换更硬的提示再要一次，两次都不行才停（并告诉用户原文在哪）。
+        dump1 = _dump_raw(course, out.get("text") or "", "draft-1")
+        emit("[重试] 模型这次给的不是合法 JSON（%s%s）；原文已存 %s，换一次更严格的提示重来。"
+             % (e1.__class__.__name__,
+                "，输出被长度上限截断" if out.get("finish_reason") == "length" else "",
+                dump1))
+        nudge = ("上一次的输出不是合法 JSON（%s）。请只输出**一个** JSON 对象："
+                 "不要示例、不要代码围栏、不要注释、不要解释；字符串里不要出现未转义的换行。" % e1.__class__.__name__)
+        out = client.chat([{"role": "system", "content": sysmsg},
+                           {"role": "user", "content": user},
+                           {"role": "assistant", "content": (out.get("text") or "")[:2000]},
+                           {"role": "user", "content": nudge}],
+                          model=model, temperature=0.1, max_tokens=30000)
+        try:
+            data = _norm(_json_of(out["text"]))
+        except Exception as e2:  # noqa: BLE001
+            dump2 = _dump_raw(course, out.get("text") or "", "draft-2")
+            raise ValueError("模型连续两次都没给出合法 JSON（%s / %s）。原文已存：%s、%s —— 把这行发作者，或直接再点一次生成。"
+                             % (e1.__class__.__name__, e2.__class__.__name__, dump1, dump2)) from e2
     # 2026-11-21（R115，用户「一点原件的图也看不到」）：模型编的图名不再「静默整块删掉」。
     #   这里只点数并说明；真正按清单修名 / 补图在渲染时做（_build_讲义.ensure_figures），
     #   于是旧数据重打一遍 PDF 也能把漏掉的原件图补上，不必再花钱重跑模型。

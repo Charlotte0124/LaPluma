@@ -66,3 +66,13 @@
 4. 环境要求写进 README：Python 3.12 + `pymupdf`。
 
 **怎么验证它被执行**：`python tools\check\check-distribution.py`（红 = 又出现 exe / 打包脚本、启动入口缺失、或启动器里混进非 ASCII 字节）。
+## 七、模型返回的 JSON 要容错地取（2026-11-21）
+
+**为什么有这条**：用户在「生成」页点开始生成，只拿到一句「[停] 补正文失败：JSONDecodeError('Expecting property name enclosed in double quotes: line 1 column 1126 (char 1125)')」——界面等于死路。旧实现取 JSON 是「第一个 `{` 到最后一个 `}`」一刀切：模型多吐一个对象、前面带一段示例、或者带尾逗号，就必错；输出被长度上限截断时也只会报这一句，看不出是截断。
+
+1. 取 JSON 走 `engine\_draft._json_of`（整段 → 去掉尾逗号 → 从每个括号起点 `raw_decode`），不要在别处再写一刀切的 `json.loads`。
+2. 解析不出来时**换更硬的提示重试一次**；两次都不行才停，并且把两次的原文落盘到 `<课程>\_trash\draft-*.txt`，停的时候要把路径说出来（没有原文，连作者都判不出是多了示例还是被截断）。
+3. **截断要说得出口**：`api\client.chat` 返回 `finish_reason`，是 `length` 时日志要写明「输出被长度上限截断」。
+4. 术语这类补充项解析失败不许把整讲判死（返回空表继续，后面会补齐）。
+
+**怎么验证它被执行**：`python tools\check\check-draft-json.py` 必须 **7/7**（提交钩子 `.githooks\pre-commit` 自动跑）。

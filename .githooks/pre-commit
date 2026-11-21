@@ -15,4 +15,8 @@ python -X utf8 tools/check/check-ui-conflicts.py || { echo "[hook] 全屏/弹窗
 #   全英档译名要「英文（中文）」，讲义里的原件图必须真画出来（缺图不静默）。
 echo "[hook] 讲义规矩 check-lecture-rules ..."
 python -X utf8 tools/check/check-lecture-rules.py || { echo "[hook] 全英译名/原件图规矩未过：提交已拦下"; exit 1; }
+# 2026-11-21 用户点「开始生成」只拿到「[停] 补正文失败：JSONDecodeError(...)」：
+#   模型输出的 JSON 要能容错地取，取不到要重试并落盘原文（AGENTS.md §七）。
+echo "[hook] 模型 JSON 解析 check-draft-json ..."
+python -X utf8 tools/check/check-draft-json.py || { echo "[hook] 模型 JSON 解析判据未过：提交已拦下"; exit 1; }
 echo "[hook] 通过"

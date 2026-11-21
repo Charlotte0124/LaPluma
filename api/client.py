@@ -218,13 +218,17 @@ def chat(messages: list[dict], model: str | None = None, temperature: float = 0.
          "max_tokens": max_tokens, "stream": False},
         cfg["api_key"],
     )
-    text = body["choices"][0]["message"]["content"]
+    choice = body["choices"][0] or {}
+    text = (choice.get("message") or {}).get("content") or ""
     return {
         "text": text,
         "model": use_model,
         "usage": body.get("usage", {}),
         "seconds": round(time.time() - t0, 2),
         "source": cfg["source"],
+        # 2026-11-21：「补正文失败 JSONDecodeError」有一半是输出被长度上限截断，
+        #   截断时 finish_reason=length。留着它，日志里能一句话说清是截断还是格式错。
+        "finish_reason": choice.get("finish_reason") or "",
     }
 
 
