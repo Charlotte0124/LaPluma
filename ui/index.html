@@ -485,11 +485,16 @@ html,body{background:var(--bg)}
 #noteCompose textarea{width:100%;min-height:130px;margin-top:8px;border:1px solid var(--line);
   background:var(--card2);border-radius:9px;padding:9px 11px;font:inherit;font-size:12.5px;resize:vertical;outline:none}
 #noteCompose textarea:focus{border-color:var(--ink);background:var(--card)}
-/* 翻译：两个框 + 中间 ↑↓（2026-11-22 用户口述的布局） */
-.tr-dir{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--sub);margin:0 0 7px}
+/* 翻译：两个框 + 中间 ↑↓（2026-11-22 用户口述的布局）
+   2026-11-23 用户：方向切换要夹在两个框中间；翻译按钮挪到标题行右侧。 */
+.tr-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 8px}
+.tr-head h5{margin:0;font-size:12.5px;font-weight:600}
+.tr-head .btn{padding:5px 16px;font-size:12px}
+.tr-dir{display:flex;align-items:center;justify-content:center;gap:10px;font-size:12px;color:var(--sub);
+  margin:9px 0 9px}
 .tr-dir #trFrom,.tr-dir #trTo{min-width:34px;text-align:center}
 .tr-swap{padding:2px 9px;font-size:13px;line-height:1.2}
-#sideTrans textarea#trSrc{width:100%;min-height:92px;border:1px solid var(--line);background:var(--card2);
+#sideTrans textarea#trSrc{width:100%;min-height:92px;margin:0;border:1px solid var(--line);background:var(--card2);
   border-radius:9px;padding:9px 11px;color:var(--ink);font:inherit;font-size:12.5px;resize:vertical;outline:none}
 #sideTrans textarea#trSrc:focus{border-color:var(--ink);background:var(--card)}
 /* 下面那个框（输出）：没译文时是虚框 + 一句占位，出了译文才换成正文 */
@@ -946,17 +951,19 @@ body.win #appScroll{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden
             </div>
           </div>
           <div id="sideTrans" hidden>
-            <h5 style="margin:0 0 8px;font-size:12.5px;font-weight:600">第 <span id="curP3">p.1</span> 页 · 翻译</h5>
+            <!-- 2026-11-23 用户：「这个（英文 ↑↓ 中文）就不可以放在两个方块中间吗，然后翻译再重新找一个位置」
+                 —— 方向切换挪到两个框中间（正好表示「上面翻成下面」），翻译按钮挪到标题那一行的右边。 -->
+            <div class="tr-head">
+              <h5>第 <span id="curP3">p.1</span> 页 · 翻译</h5>
+              <button class="btn" id="trGo">翻译</button>
+            </div>
             <!-- 2026-11-22 用户：翻译要「两个框 + 中间一个 ↑↓」——上面只读输入，下面出译文；
-                 方向用中间的 ↑↓ 交换；出了译文，下面才出现「引用翻译记成笔记」。 -->
+                 出了译文，下面才出现「引用翻译记成笔记」。 -->
+            <textarea id="trSrc" placeholder="在这里输入要翻译的文字（右键「翻译这段」也会带到这里）"></textarea>
             <div class="tr-dir">
               <span id="trFrom">中文</span>
               <button class="btn ghost tr-swap" id="trSwap" title="交换翻译方向">↑↓</button>
               <span id="trTo">英文</span>
-            </div>
-            <textarea id="trSrc" placeholder="在这里输入要翻译的文字（右键「翻译这段」也会带到这里）"></textarea>
-            <div class="acts" style="justify-content:flex-start;margin:8px 0 0">
-              <button class="btn" id="trGo">翻译</button>
             </div>
             <!-- 下面这个框一直在（用户：「有两个框在」），没译文时只是一句占位提示 -->
             <div id="trOut" class="tr-out empty"><span class="ph">译文会出现在这里</span></div>

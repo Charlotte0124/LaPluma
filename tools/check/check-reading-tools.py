@@ -159,12 +159,17 @@ def check(root):
         and ".nitem.self{" in idx and ".nitem.trans{" in idx
     ), "记笔记把侧栏切到写作页（灰底只读引用 + 1 个输入）；自己写/引用译文两种颜色；引用跟着笔记存（q）")
 
+    # 2026-11-23 用户：「这个（英文 ↑↓ 中文）就不可以放在两个方块中间吗，然后翻译再重新找一个位置」
+    i_src, i_dir, i_out = idx.find('id="trSrc"'), idx.find('class="tr-dir"'), idx.find('id="trOut"')
     add(7, "翻译两框", (
         'id="trSwap"' in idx and 'id="trFrom"' in idx and 'id="trTo"' in idx
         and idx.count('id="trSrc"') == 1 and 'id="trOut"' in idx
         and "#sideTrans textarea#trSrc" in idx and ".tr-out" in idx
         and "if($('#trGo'))" in idx and "TR.to" in idx and "syncTrDir()" in idx
-    ), "翻译：上面一个框输入、中间 ↑↓ 换方向、下面一个框出译文（没译文时是占位）")
+        # DOM 顺序：输入框 → 方向行 → 输出框；翻译按钮在标题行（在输入框之前）
+        and 0 < i_src < i_dir < i_out
+        and '<div class="tr-head">' in idx and 0 < idx.find('id="trGo"') < i_src
+    ), "翻译：上面一个框输入、中间 ↑↓ 换方向、下面一个框出译文；翻译按钮在标题行（不夹在两个框中间）")
 
     # 2026-11-23 用户：「正常记笔记（就是没有引用的情况下）就不用灰字」
     add(8, "无引用不出灰框", (
@@ -267,9 +272,10 @@ def selftest():
             ("左键松手也弹菜单", 4, IDX, "/* 全屏（2026-11-17", "document.addEventListener('mouseup', e => { const s = String(window.getSelection()); if(s) openTextMenu(1,1,s); });\n/* 全屏（2026-11-17"),
             ("侧栏写作页缺失", 5, IDX, 'id="noteCompose"', 'id="noteCompose-x"'),
             ("历史条数改成 9", 6, SRV, "TRANS_HISTORY_MAX = 5", "TRANS_HISTORY_MAX = 9"),
+            ("翻译输入框被改名", 7, IDX, 'id="trSrc"', 'id="trSrcX"'),
             ("没引用也画灰框", 8, IDX, "if(qw) qw.hidden = !q;", "if(qw) qw.hidden = false;"),
             ("讲次芯片又允许收缩", 9, IDX, ".lsn button .stub{flex:0 0 auto;white-space:nowrap;", ".lsn button .stub{"),
-            ("翻译历史回到输入框上面", 10, IDX, '<h5 style="margin:0 0 8px;font-size:12.5px;font-weight:600">第 <span id="curP3">p.1</span> 页 · 翻译</h5>', '<h5 style="margin:0 0 8px;font-size:12.5px;font-weight:600">第 <span id="curP3">p.1</span> 页 · 翻译</h5><div class="tr-hist" id="trHist"></div>'),
+            ("翻译历史回到输入框上面", 10, IDX, '<button class="btn" id="trGo">翻译</button>', '<button class="btn" id="trGo">翻译</button><div class="tr-hist" id="trHist"></div>'),
             ("颜色表被改名", 11, IDX, "const NC = {", "const NCOLOR = {"),
             ("笔记又允许被压扁", 12, IDX, ".nlist > .nitem{flex:0 0 auto}", ".nlist > .nitem{flex:1 1 auto}"),
             ("译文框样式又变成全局", 12, IDX, ".tr-out .trans{white-space:pre-wrap;font-size:13px;line-height:1.8", ".trans{white-space:pre-wrap;font-size:13px;line-height:1.8"),

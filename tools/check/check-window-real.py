@@ -961,14 +961,22 @@ def main():
                     page.click("a[data-page='read']")
                     page.click("#tabTrans")
                     time.sleep(0.5)
-                    t0 = page.evaluate("""() => ({
-                      from: (document.querySelector('#trFrom')||{}).textContent,
-                      to: (document.querySelector('#trTo')||{}).textContent,
-                      swap: !!document.querySelector('#trSwap'),
-                      boxes: document.querySelectorAll('#sideTrans textarea').length,
-                      noteBtn: !!document.querySelector('#trNote'),
-                      outEmpty: ((document.querySelector('#trOut')||{}).className || '').indexOf('empty') >= 0
-                    })""")
+                    t0 = page.evaluate("""() => {
+                      const r = s => { const e = document.querySelector(s);
+                        return e ? e.getBoundingClientRect() : null; };
+                      const src = r('#trSrc'), dir = r('.tr-dir'), out = r('#trOut'), go = r('#trGo');
+                      return {from: (document.querySelector('#trFrom')||{}).textContent,
+                        to: (document.querySelector('#trTo')||{}).textContent,
+                        swap: !!document.querySelector('#trSwap'),
+                        boxes: document.querySelectorAll('#sideTrans textarea').length,
+                        noteBtn: !!document.querySelector('#trNote'),
+                        outEmpty: ((document.querySelector('#trOut')||{}).className || '').indexOf('empty') >= 0,
+                        // 2026-11-23 用户：方向切换要夹在两个框中间；翻译按钮别夹在中间
+                        geo: src && dir && out && go ? {
+                          srcB: Math.round(src.bottom), dirT: Math.round(dir.top),
+                          dirB: Math.round(dir.bottom), outT: Math.round(out.top),
+                          goB: Math.round(go.bottom), srcT: Math.round(src.top)} : null};
+                    }""")
                     page.click("#trSwap")
                     time.sleep(0.4)
                     t1 = page.evaluate("""() => ({
@@ -978,8 +986,17 @@ def main():
                     })""")
                     page.fill("#trSrc", "测试输入")
                     kept = page.evaluate("document.querySelector('#trSrc').value")
+                    geo = t0.get("geo") or {}
                     if not t0["swap"] or t0["boxes"] != 1:
                         bad("W10 翻译两框", "结构不对：swap=%r 文本框=%d" % (t0["swap"], t0["boxes"]))
+                    elif not geo:
+                        bad("W10 翻译两框", "量不到输入框 / 方向行 / 输出框的位置")
+                    elif not (geo["dirT"] >= geo["srcB"] - 1 and geo["outT"] >= geo["dirB"] - 1):
+                        bad("W10 翻译两框", "方向切换不在两个框中间：输入底 %d / 方向 %d-%d / 输出顶 %d"
+                            % (geo["srcB"], geo["dirT"], geo["dirB"], geo["outT"]))
+                    elif geo["goB"] > geo["srcT"]:
+                        bad("W10 翻译两框", "翻译按钮还夹在两个框之间（按钮底 %d / 输入顶 %d）"
+                            % (geo["goB"], geo["srcT"]))
                     elif t0["from"] == t1["from"] or t0["to"] == t1["to"]:
                         bad("W10 翻译两框", "点 ↑↓ 方向没换：%r → %r" % (t0, t1))
                     elif t0["noteBtn"] or not t0["outEmpty"]:
@@ -987,8 +1004,11 @@ def main():
                     elif kept != "测试输入":
                         bad("W10 翻译两框", "上面那个框输入不进去：%r" % (kept,))
                     else:
-                        ok("W10 翻译两框", "方向 %s→%s 可交换；上面可输入；译文未出时不显示「引用翻译记成笔记」"
-                           % (t0["from"], t0["to"]))
+                        ok("W10 翻译两框",
+                           "方向 %s→%s 可交换（%d-%dpx 夹在输入框底 %d 与输出框顶 %d 之间）；"
+                           "翻译按钮在标题行（底 %d < 输入顶 %d）；上面可输入；译文未出时不显示「引用翻译记成笔记」"
+                           % (t0["from"], t0["to"], geo["dirT"], geo["dirB"], geo["srcB"],
+                              geo["outT"], geo["goB"], geo["srcT"]))
                 except Exception as e:  # noqa: BLE001
                     bad("W10 翻译两框", "没验成：%r" % (e,))
 
