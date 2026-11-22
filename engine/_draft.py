@@ -388,6 +388,50 @@ def _real_area(imgs: list, dup: dict) -> tuple:
     return round(sum(min(im[0], 1.0) for im in keep), 3), round(max(im[0] for im in keep), 3)
 
 
+def real_figure_pages(pdf: str) -> set:
+    """这份课件里「真有内容图」的页（与 extract_figures 同一判据：占页 ≥1%、短边 ≥300px、同图不重复 >3 页）。
+
+    2026-11-22 用户：「90% 都要是原课件的图，也要防伪图」——补图 / 修图名之前先用它过一遍：
+    页上只有模板徽标、或者干脆是纯文字页的「页图」，看着像图，其实什么也没画出来。
+    读不到就返回空集合（调用方当作「不知道」，不拦，别把好图误杀）。"""
+    try:
+        import pymupdf
+    except Exception:  # noqa: BLE001
+        return set()
+    out = set()
+    try:
+        dup = {}
+        per = {}
+        with pymupdf.open(pdf) as doc:
+            for i, page in enumerate(doc, 1):
+                try:
+                    infos = page.get_image_info(xrefs=True)
+                except Exception:  # noqa: BLE001
+                    continue
+                r = page.rect
+                parea = (r.width * r.height) or 1.0
+                imgs = []
+                for im in infos:
+                    bb = im.get("bbox") or (0, 0, 0, 0)
+                    area = max(0.0, bb[2] - bb[0]) * max(0.0, bb[3] - bb[1]) / parea
+                    px = max(int(im.get("width") or 0), int(im.get("height") or 0))
+                    try:
+                        h = hashlib.md5(doc.extract_image(im["xref"])["image"]).hexdigest()[:10]
+                    except Exception:  # noqa: BLE001
+                        h = "?"
+                    imgs.append((area, px, h, (bb[0], bb[1], bb[2], bb[3])))
+                    if area >= FIG_MIN_AREA and px >= FIG_MIN_PX:
+                        dup[h] = dup.get(h, 0) + 1
+                per[i] = imgs
+        for i, imgs in per.items():
+            real, _big = _real_area(imgs, dup)
+            if real > 0:
+                out.add(i)
+    except Exception:  # noqa: BLE001
+        return set()
+    return out
+
+
 def extract_figures(pdf: str, course: str, no: str, emit=print,
                     fig_pages=(), fig_skip=()) -> list:
     """把课件页导出成整页 PNG，供模型用 fig 块引用。

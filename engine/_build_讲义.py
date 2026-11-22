@@ -197,6 +197,25 @@ def _orig_pdf(no: str):
         return None
 
 
+_REAL_PAGES: dict = {}
+
+
+def _real_pages(no: str) -> set:
+    """这一讲原件里「真有内容图」的页（与 _draft.real_figure_pages 同一套判据）。读不到返回空集合。"""
+    if no in _REAL_PAGES:
+        return _REAL_PAGES[no]
+    out = set()
+    pdf = _orig_pdf(no)
+    if pdf and os.path.isfile(pdf):
+        try:
+            import _draft
+            out = _draft.real_figure_pages(pdf)
+        except Exception:  # noqa: BLE001
+            out = set()
+    _REAL_PAGES[no] = out
+    return out
+
+
 def _page_texts(no: str, pages) -> dict:
     """页码 → 该页文字（去空白、小写）。读不到原件就返回空 dict，补图退回页序。"""
     key = (no, tuple(sorted(pages)))
@@ -272,6 +291,16 @@ def ensure_figures(lesson: dict, emit=print, avail: list | None = None) -> dict:
     no = str(lesson.get('no') or '')
     if avail is None:
         avail = figure_files(no)
+    # 2026-11-22 用户：「90% 都要是原课件的图，也要防伪图」。旧导出的页图里可能混着
+    #   纯文字页 / 只挂模板徽标的页（那会儿是先到先得），在补图之前先按「这页真有图吗」过一遍；
+    #   页上只有徽标 / 文字的一律不当图用，宁可不补，也不塞一张看着像图的东西。
+        real_pg = _real_pages(no)
+        if real_pg:
+            fake = [x for x in avail if x[1] not in real_pg]
+            if fake:
+                avail = [x for x in avail if x[1] in real_pg]
+                emit('[图] 剔掉 %d 张「页上没有真图」的页图（旧导出残留）：p.%s%s'
+                     % (len(fake), '、'.join(str(x[1]) for x in fake[:8]), ' 等' if len(fake) > 8 else ''))
     secs = lesson.get('sections') or []
     stats = {'no': no, 'available': len(avail), 'model': 0, 'fixed': 0,
              'dropped': [], 'added': 0, 'used': 0, 'cap': 0,
