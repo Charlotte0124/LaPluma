@@ -3450,8 +3450,8 @@ function wizard(step){
       + `装法：<b>docs\\使用\\07-装依赖-用CMD.md</b>（在 cmd 里粘一行 pip install），或用 <b>一键启动.bat</b> 重启让它自动装。</p>`;
   }
   if(step===0){
-    body = `<h4>先选模型版本</h4>
-      <p class="note-s">两个版本均可生成 PDF，区别仅在于生成新内容时的质量与花费；之后可在设置中修改。</p>
+    // 2026-11-23 R101：这一步的说明并进标题（原是一条灰色小注），信息不丢，小注少一条
+    body = `<h4>先选模型版本（两个都能出 PDF，区别在质量与花费；之后可在设置里换）</h4>
       <div class="pick-model">${(B.models||[]).map(m=>`<div class="p ${W.model===m.id?'on':''}" data-m="${esc(m.id)}">
         <b>${esc(m.name)}</b><small>${esc(m.note)}</small></div>`).join('')}</div>`;
   }else if(step===1){
@@ -3469,8 +3469,7 @@ function wizard(step){
     body = `<h4>可以开始了</h4>
       <div class="kv"><span>模型</span><b>${esc(W.model?mname(W.model):mname(MODEL))}</b></div>
       <div class="kv"><span>API 密钥</span><b>${W.key?'已填写':'未填写（不影响生成 PDF）'}</b></div>
-      <div class="kv"><span>保存目录</span><b>${esc(W.dir||B.save_dir||'')}</b></div>
-      <p class="note-s">点击「完成」写入本机配置；之后可随时在「设置」中修改。</p>`;
+      <div class="kv"><span>保存目录</span><b>${esc(W.dir||B.save_dir||'')}</b></div>`;
   }
   $('#dlg').innerHTML = `<div class="eb">首次配置</div>${steps}${depWarn}${body}
     <div class="acts">${step>0?'<button class="btn ghost" id="wBack">上一步</button>':''}
@@ -3502,7 +3501,6 @@ function wizard(step){
 $('#btnSet').onclick = () => {
   $('#dlg').innerHTML = `
     <div class="eb">Settings</div><h4>设置</h4>
-    <p class="note-s">改动即时写入本机配置；密钥仅保存在本机。模型可随时更换，保存后下一问或下一次生成即生效。</p>
     <div class="lbl">模型版本</div>
     <select id="sModel">${(B.models||[]).map(m=>`<option value="${esc(m.id)}" ${m.id===MODEL?'selected':''}>${esc(m.name)} — ${esc(m.note)}</option>`).join('')}</select>
     <div class="lbl">API 密钥（留空表示不修改）</div>
