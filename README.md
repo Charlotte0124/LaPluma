@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="docs/资产/lapluma-icon-256.png" alt="羽毛笔 La Pluma" width="96">
+
 # 羽毛笔 La Pluma
 
 **把备课数据渲染成可核对、可复现的讲义 PDF**（Windows 文件夹版，双击启动；需要 Python 3.12）
@@ -15,7 +17,7 @@
 
 <div align="center">
 
-<a href="https://github.com/Charlotte0124/LaPluma/archive/refs/heads/main.zip"><img src="https://img.shields.io/badge/⬇_下载_v1.9.15-C8202C?style=for-the-badge&logo=windows&logoColor=white" height="40" alt="下载"></a>
+<a href="https://github.com/Charlotte0124/LaPluma/archive/refs/heads/main.zip"><img src="https://img.shields.io/badge/⬇_下载_v1.9.16-C8202C?style=for-the-badge&logo=windows&logoColor=white" height="40" alt="下载"></a>
 &nbsp;
 <a href="一键启动.ps1"><img src="https://img.shields.io/badge/▶_一键启动-2F7D4F?style=for-the-badge&logo=powershell&logoColor=white" height="40" alt="一键启动"></a>
 &nbsp;
@@ -30,7 +32,7 @@
 ![license](https://img.shields.io/badge/license-MIT-171714?style=flat-square)
 ![content](https://img.shields.io/badge/示例内容-CC_BY--NC_4.0-171714?style=flat-square)
 ![python](https://img.shields.io/badge/python-3.12-171714?style=flat-square)
-![version](https://img.shields.io/badge/version-1.9.4-171714?style=flat-square)
+![version](https://img.shields.io/badge/version-1.9.16-171714?style=flat-square)
 ![gates](https://img.shields.io/badge/三道门-绿才出门-C8202C?style=flat-square)
 ![offline](https://img.shields.io/badge/出_PDF-不需要密钥-2F7D4F?style=flat-square)
 
@@ -249,12 +251,12 @@ A/B/C 三层可离线运行；仅「让模型撰写新内容」时才需要 D �
 <!-- 最近更新:begin（由 tools/sync-readme.py 生成，别手改） -->
 | 版本 | 日期 | 这一版做了什么 |
 |:--|:--|:--|
+| **v1.9.16** | 11-23 | 讲义里的「课件 p.N」可点开原件；补图不再拿徽标页凑数；桌面快捷方式直连 powershell；补管理员入口与项目简介 |
 | **v1.9.15** | 11-21 | 三道门文案并入标题；分发改文件夹版，不再打 exe |
 | **v1.9.14** | 11-19 | 导入后自动判断更像哪门课并询问是否搬；生成须知移到三道门下面；生成完成从批次里移除 |
 | **v1.9.13** | 11-19 | 窗口启动居中；成品/原件位置互换；生成须知从弹窗搬到日志下面；新增「新建课程」 |
 | **v1.9.12** | 11-19 | 生成进度条 / 完成弹窗打开本地 / 课程抽屉自动弹 / 阅读全屏与笔记栏 / 翻译 / 拖拽 / 选中文字记笔记 / 课件页图 |
-| **v1.9.11** | 11-19 | 修无边框窗口拖不动、标题栏跟着页面滚走；阅读全屏时收起标题栏 |
-| — | — | 更早的 27 个版本 → [CHANGELOG](CHANGELOG.md) |
+| — | — | 更早的 28 个版本 → [CHANGELOG](CHANGELOG.md) |
 <!-- 最近更新:end -->
 
 ## 目录
