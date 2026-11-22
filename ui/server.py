@@ -793,6 +793,62 @@ def course_pdfs(code: str) -> list:
     return out
 
 
+def lesson_of_doc(course: str, doc: str) -> str:
+    """这份讲义 PDF 属于哪一讲：从文件名前缀 <讲号>_ 认（'L01_进程' → L01，'T02-2_…' → T02-2）。
+
+    为什么要从文件名反推：阅读页手里只有 RD.rel（<课程>/01_讲义/<文件名>），
+    而「课件 p.N」要跳的是**这一讲的原件**，中间唯一对得上的就是讲号。
+    长讲号优先（T02-2 不能被认成 T02），所以要取最长前缀、不能取第一个命中。
+    """
+    base = os.path.basename((doc or "").replace("\\", "/"))
+    low = os.path.splitext(base)[0].lower()
+    hit = ""
+    for no in find_lesson(course):
+        n = no.lower()
+        if (low == n or low.startswith(n + "_")) and len(no) > len(hit):
+            hit = no
+    return hit
+
+
+def orig_of(course: str, doc: str) -> dict:
+    """讲义正文里「课件 p.N」的出处：这一讲的原件是哪一份、在哪、共几页（只读，不写盘）。
+
+    2026-11-23 用户优化项 F：「讲义里的『课件 p.N』现在只是文字，点了不能跳到原件那一页」。
+    讲义是按课件生成的，正文/图注里写着（课件 p.27）这类出处，用户核对时应该一点就跳过去。
+    这里只回答「对应哪份原件」，翻页由阅读页做（它已有 openReader(rel, name, code, page)）。
+
+    三种情况分开说清，不做「跳不了也当跳了」：
+      ① 阅读页本来就在看原件（00_原件 里的文件）→ same:true，就地翻页；
+      ② 讲义文件名认得出讲号 → 走 engine\\_draft.source_of()：先认 stub-from 标记，
+         再认 meta 的「源课件」行，最后按标题/唯一原件兜底（**只复用这一处实现**，
+         不在这里再写一遍「原件怎么找」）；
+      ③ 认不出（合订本 / 附页 / 手动拷进来的 PDF）→ ok:false + 原因，界面照实提示。
+    """
+    code = _safe_code((course or "").strip() or DEFAULT_COURSE)
+    parts = [p for p in (doc or "").replace("\\", "/").split("/") if p]
+    if not parts:
+        return {"ok": False, "error": "缺参数：doc（讲义相对路径）"}
+    if len(parts) >= 3 and _safe_code(parts[0]) == code and parts[1] == ORIG_DIR:
+        full = safe_join(*parts)
+        if os.path.isfile(full):
+            return {"ok": True, "course": code, "no": "", "same": True,
+                    "rel": "%s/%s/%s" % (code, ORIG_DIR, parts[-1]),
+                    "name": parts[-1], "pages": _pages(full), "how": "原件本身"}
+    no = lesson_of_doc(code, parts[-1])
+    if not no:
+        return {"ok": False, "error": "这一份认不出是哪一讲（合订本 / 附页 / 手动放进来的 PDF）：%s"
+                                      % parts[-1]}
+    try:
+        full, name = _engine("_draft").source_of(code, no)
+    except FileNotFoundError as e:
+        return {"ok": False, "no": no, "error": str(e)}
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "no": no, "error": "找原件失败：%r" % (e,)}
+    return {"ok": True, "course": code, "no": no, "same": False,
+            "rel": "%s/%s/%s" % (code, ORIG_DIR, name), "name": name,
+            "pages": _pages(full), "how": "source_of"}
+
+
 def rel_out(path: str) -> str:
     """绝对路径→相对路径（两根都对得上）。
 
@@ -1470,6 +1526,11 @@ class Handler(BaseHTTPRequestHandler):
                 d = dict(GEN_PROG)
                 d["elapsed"] = round(time.time() - d.pop("t0", time.time()), 1) if d.get("on") else 0
                 return self._json(dict(ok=True, **d))
+            if u.path == "/api/orig-of":
+                # 2026-11-23 用户优化项 F：讲义正文里的「课件 p.N」点了要能打开原件那一页。
+                # 只读：不解析 PDF 内容、不写盘，只回答「这一讲的原件是哪一份」。
+                return self._json(orig_of(q.get("code", [DEFAULT_COURSE])[0],
+                                          q.get("doc", [""])[0]))
             if u.path == "/api/notes":
                 return self._json(dict(ok=True, **load_notes(q.get("code", [DEFAULT_COURSE])[0],
                                                              q.get("doc", [""])[0])))

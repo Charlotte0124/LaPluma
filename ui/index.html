@@ -444,6 +444,12 @@ html,body{background:var(--bg)}
 #pdftext span{position:absolute;white-space:pre;transform-origin:0 0;cursor:text;color:transparent}
 #pdftext span::selection{background:rgba(231,194,70,.45);color:transparent}
 #pdftext span::-moz-selection{background:rgba(231,194,70,.45);color:transparent}
+/* 2026-11-23 用户优化项 F：「讲义里的『课件 p.N』现在只是文字，点了不能跳到原件那一页」。
+   提示只用 cursor + 悬停下划虚线：加类名不改 span 的 left/top/宽度/字号，
+   W3 的文字层对位判据量的是这些几何量，所以不会被动到。 */
+#pdftext span.cite{cursor:pointer}
+#pdftext span.cite:hover{text-decoration:underline dotted;text-decoration-color:rgba(231,194,70,.85);
+  text-underline-offset:2px}
 .note-menu{position:fixed;z-index:96;background:var(--card);border:1px solid var(--ink);border-radius:8px;
   box-shadow:0 10px 30px rgba(0,0,0,.22);padding:4px;min-width:130px}
 .note-menu button{display:block;width:100%;text-align:left;border:0;background:transparent;border-radius:6px;
@@ -2416,6 +2422,7 @@ async function renderTextLayer(page, vp, lib){
         const p = layer.render();
         if(p && p.then) await p;
         box.dataset.tl = 'official';
+        markCites();                 // 「课件 p.N」加指针提示（只加类名，不动几何）
         return;
       }catch(e){ box.dataset.tl = 'official-fail'; }
     }
@@ -2444,6 +2451,7 @@ async function renderTextLayer(page, vp, lib){
     }
     flush();
     box.appendChild(frag);
+    markCites();
   }catch(e){ /* 没有文字层就留空，不影响看图 */ }
 }
 /* 2026-11-22：窗口尺寸变过之后重排一次（字号/留白都按当前宽度算过才对得上） */
@@ -2609,6 +2617,102 @@ function inTextLayer(node){
   const el = node && (node.nodeType === 1 ? node : node.parentElement);
   return !!(el && el.closest && el.closest('#pdftext'));
 }
+/* ---------- 「课件 p.N」点了跳原件那一页（2026-11-23 用户优化项 F） ----------
+   用户原话：「讲义里的『课件 p.N』现在只是文字，点了不能跳到原件那一页」。
+   讲义是按课件生成的，正文/图注里写着（课件 p.27）这类出处——核对时应该一点就跳过去。
+   三条约束（照用户给的建议）：
+     · 只有**单击**才跳：按下记起点，pointermove 超过 3px 就算拖选，拖选松手绝不跳
+       （否则「选中一段字去记笔记」会变成「跳到别处」）；
+     · 判「点的是不是这段字」不靠猜：把文字层从头到光标数出字符偏移量，再在整页文字里
+       找 课件 p.N 的区间，落在区间内才算——同一行旁边的字不跳；
+     · 原件由服务端算（/api/orig-of → engine\_draft.source_of），阅读页只管翻页；
+       找不到原件时照实说，不静默。 */
+const CITE_RE = /课件\s*p\.\s*(\d+)|课件第\s*(\d+)\s*页/;     // 非全局：test/match 都不留 lastIndex
+const citeNum = m => Number(m[1] || m[2] || 0);
+/* 点了就一定会触发的那一层提示：给含出处的 span 加个类名与 title。 */
+function markCites(){
+  const box = document.getElementById('pdftext');
+  if(!box) return;
+  const spans = Array.from(box.querySelectorAll('span'));
+  if(!spans.length) return;
+  // 2026-11-23：pdf.js 的文字层是按行切 span 的，「（课件 p.28）」可能被拆成两个 span
+  //   （实测 demo 讲义第 3 页：整页拼接后才有「课件 p.」）。所以这里在「整页拼接文本」上找，
+  //   再把命中的区间映射回覆盖到的 span——只加类名与 title，不动 left/top/宽度（W3 对位判据量的就是这些）。
+  //   点击精度由 citeAtPoint() 保证：它按字符偏移判断，点这一行别处不会跳。
+  const full = spans.map(sp => sp.textContent || '').join('');
+  const re = new RegExp(CITE_RE.source, 'g');
+  let m, hit = 0;
+  while((m = re.exec(full)) !== null){
+    const start = m.index, end = start + m[0].length;
+    let pos = 0;
+    for(const sp of spans){
+      const len = (sp.textContent || '').length;
+      const s0 = pos, s1 = pos + len;
+      pos = s1;
+      if(len && s1 > start && s0 < end){
+        sp.classList.add('cite');
+        if(!sp.title) sp.title = citeNum(m) ? ('点了打开原件 p.' + citeNum(m)) : '点了打开这一讲的原件';
+      }
+    }
+    hit += 1;
+    if(m.index === re.lastIndex) re.lastIndex += 1;      // 空匹配保护
+  }
+  return hit;
+}
+function citeAtPoint(x, y){
+  const box = document.getElementById('pdftext');
+  if(!box) return 0;
+  const r = caretAt(x, y);
+  if(!r || !inTextLayer(r.startContainer)) return 0;
+  const pre = document.createRange();
+  pre.selectNodeContents(box);
+  try{ pre.setEnd(r.startContainer, r.startOffset); }catch(_){ return 0; }
+  const head = pre.toString();                 // 文字层开头 → 光标这一段的字
+  const off = head.length;
+  const full = box.textContent || '';
+  // 先用「字符偏移」精确判：光标落在「课件 p.N」这几个字上才算，点同一行旁边的字不跳。
+  // 但偏移能不能用要先验：正文与 Range 拼出来的字必须一致（层里夹了别的节点时会对不上）。
+  // 对不上就退回「这一段文字自己写着出处」——宁可粗一点，也不按错位的偏移跳到别的页。
+  if(head.length <= full.length && full.slice(0, off) === head){
+    const g = new RegExp(CITE_RE.source, 'g');
+    let m;
+    while((m = g.exec(full))){
+      if(off >= m.index && off <= m.index + m[0].length) return citeNum(m);
+      if(m.index > off) break;
+    }
+    return 0;
+  }
+  const sp = r.startContainer.nodeType === 3 ? r.startContainer.parentElement : r.startContainer;
+  const near = sp && sp.closest ? sp.closest('#pdftext span') : null;
+  const m2 = near ? (near.textContent || '').match(CITE_RE) : null;
+  return m2 ? citeNum(m2) : 0;
+}
+let CITE_BUSY = false;
+async function jumpToCite(page){
+  if(CITE_BUSY || !RD.rel) return;
+  CITE_BUSY = true;
+  try{
+    const j = await (await fetch('/api/orig-of?code=' + encodeURIComponent(RD.code || '')
+      + '&doc=' + encodeURIComponent(RD.rel))).json();
+    if(!j.ok){ toast('这一段没找到原件：' + (j.error || '未知原因')); return; }
+    // 出处页码超过原件的页数时不静默跳到最后一页：说一句「原件只有 N 页」，别让人以为跳对了
+    let go = Math.max(1, page);
+    if(j.pages && go > j.pages){
+      toast('原件只有 ' + j.pages + ' 页（讲义里写的是 p.' + page + '），已翻到最后一页');
+      go = j.pages;
+    }
+    if(j.same || j.rel === RD.rel){                  // 本来就在看原件：就地翻页
+      const max = RD.doc ? RD.doc.numPages : go;
+      RD.page = Math.min(go, max);
+      renderPdf();
+      toast('同一份原件，已翻到 p.' + RD.page);
+      return;
+    }
+    toast('打开原件 p.' + go + '（' + (j.name || '原件') + '）');
+    await openReader(j.rel, j.name, j.course || RD.code, go);
+  }catch(e){ toast('跳转失败：' + e); }
+  finally{ CITE_BUSY = false; }
+}
 $('#readerBox').addEventListener('pointerdown', e => {
   if(e.button !== 0) return;
   const hit = e.target.closest && e.target.closest('#pdftext');
@@ -2619,12 +2723,17 @@ $('#readerBox').addEventListener('pointerdown', e => {
   }
   const r = caretAt(e.clientX, e.clientY);
   if(!r || !inTextLayer(r.startContainer)) return;
-  selDrag = {node: r.startContainer, off: r.startOffset};
+  // x/y/moved 是给「单击跳出处」用的：拖过 3px 就是选字，不算点击（2026-11-23 优化项 F）
+  selDrag = {node: r.startContainer, off: r.startOffset, x: e.clientX, y: e.clientY, moved: false};
   e.preventDefault();              // 不让浏览器再跑一套它自己的（会跟这里打架）
   try{ e.currentTarget.setPointerCapture(e.pointerId); }catch(_){}
 });
 $('#readerBox').addEventListener('pointermove', e => {
   if(!selDrag) return;
+  if(!selDrag.moved){
+    const dx = e.clientX - selDrag.x, dy = e.clientY - selDrag.y;
+    if(dx * dx + dy * dy > 9) selDrag.moved = true;     // >3px：是拖选，不是单击
+  }
   const r = caretAt(e.clientX, e.clientY);
   if(!r || !inTextLayer(r.startContainer)) return;
   const sel = window.getSelection();
@@ -2632,8 +2741,16 @@ $('#readerBox').addEventListener('pointermove', e => {
 });
 const endSelect = e => {
   if(!selDrag) return;
+  const g = selDrag;
   selDrag = null;
   try{ $('#readerBox').releasePointerCapture(e.pointerId); }catch(_){}
+  // 2026-11-23 用户优化项 F：单击落在「课件 p.N」上 → 打开这一讲的原件那一页。
+  // 只看「这一次按下到松开有没有拖」：拖过就一定是选字（松手要保留选区），不跳；
+  // pointercancel（手势被打断 / 触控滚走）也不跳，否则滑动阅读会误跳走。
+  if(e.type === 'pointerup' && !g.moved && e.button === 0){
+    const p = citeAtPoint(e.clientX, e.clientY);
+    if(p) jumpToCite(p);
+  }
 };
 $('#readerBox').addEventListener('pointerup', endSelect);
 $('#readerBox').addEventListener('pointercancel', endSelect);

@@ -25,6 +25,7 @@ r"""真窗口自测：在羽毛笔**自己的 WebView2 窗口**里量窗口矩�
   W15 笔记悬停/点击 → PDF 里那段引用高亮（常驻）；右键换色 → 标签色与高亮色同改
   W16 点空白处把选区清掉
   W17 排版不挤：讲次芯片的徽标/讲号单行，笔记条目不被 flex 压扁
+  W18 出处可点：「课件 p.N」单击打开原件第 N 页；拖选、点同一行别处都不跳
 
 注意：主脚本是 <script type="module">，函数不在 window 上——所以这里只点界面元素，
       不调页面函数；页面里只读 DOM、设选区。
@@ -103,9 +104,13 @@ def make_home():
     shutil.copytree(ROOT / "DEMO", course)
     (course / "00_原件").mkdir(exist_ok=True)
     import pymupdf
+    # 造假原件 8 页（2026-11-23）：W18 要判「点『课件 p.N』翻到第 N 页」。
+    #   原件只有 1 页时，「翻对页」与「永远翻第 1 页」量不出来——那是假绿。
     doc = pymupdf.open()
-    page = doc.new_page(width=420, height=595)
-    page.insert_text((60, 90), "Sample 01 original source", fontsize=14)
+    for i in range(8):
+        page = doc.new_page(width=420, height=595)
+        page.insert_text((60, 90), "Sample 01 original source", fontsize=14)
+        page.insert_text((60, 130), "original page %d of 8" % (i + 1), fontsize=14)
     doc.save(str(course / "00_原件" / "Sample 01.pdf"))
     doc.close()
     # 首次运行向导会盖住整个界面：先写一份「已配置」的 api.json（不含 key），
@@ -322,6 +327,56 @@ def span_probe(page, probes):
       }
       return out;
     }""", probes)
+
+
+CITE_PICK = r"""() => {
+  const box = document.getElementById('pdftext');
+  if (!box) return {n: 0};
+  const RE = /课件\s*p\.\s*(\d+)|课件第\s*(\d+)\s*页/;
+  for (const sp of box.querySelectorAll('span.cite')) {
+    const t = sp.textContent || '';
+    if ((t.match(new RegExp(RE.source, 'g')) || []).length !== 1) continue;   // 一行两个出处的不当靶子
+    const m = t.match(RE);
+    const n = Number(m[1] || m[2] || 0);
+    // 只拿 p.2 以上的靶子：p.1 分不清「翻到第 N 页」与「永远停在第 1 页」，那是假绿。
+    //   （2026-11-23 第一版就挑了 D02 p4 的「课件 p.1」，虽然绿了但什么也没证明。）
+    if (!n || n === 1) continue;
+    const node = sp.firstChild;
+    if (!node || node.nodeType !== 3) continue;      // 出处被拆到两个节点就没法量精确框
+    sp.scrollIntoView({block: 'center'});
+    const r0 = sp.getBoundingClientRect();
+    const rg = document.createRange();
+    rg.setStart(node, m.index);
+    rg.setEnd(node, m.index + m[0].length);
+    const r = rg.getClientRects()[0];
+    if (!r) continue;
+    const px = r0.right - 6;                        // 同一段里「出处」右边的普通字
+    if (r0.width < 30 || px <= r.right + 2) continue;
+    return {n: n, x: r.left + r.width / 2, y: r.top + r.height / 2,
+            px: px, py: r0.top + r0.height / 2, text: t.slice(0, 40)};
+  }
+  return {n: 0};
+}"""
+
+
+def menu_click(page, nth, tries=6):
+    """点右键菜单里的第 nth 项。
+
+    为什么重试：菜单是每次右键**重建**的（选区一变就换一个新节点），Playwright 先解析定位、
+    再等可点，中间菜单被换掉就成了「element was detached」。这不是页面错，是自测的时序——
+    W9 在 2026-11-23 那次跑就因为这个红了 30 秒（每次都拿到已经换掉的旧节点）。
+    重试时每次都重新解析，不拿旧引用。
+    """
+    last = None
+    for _ in range(tries):
+        try:
+            page.click(".note-menu button:nth-child(%d)" % nth, timeout=2500)
+            return True
+        except Exception as e:  # noqa: BLE001
+            last = e
+            time.sleep(0.35)
+    print("  （右键菜单点不到第 %d 项：%r）" % (nth, last))
+    return False
 
 
 def main():
@@ -691,7 +746,9 @@ def main():
                     pt = page.evaluate("window.__w9")
                     page.mouse.click(pt["x"], pt["y"], button="right")
                     time.sleep(0.5)
-                    page.click(".note-menu button:nth-child(2)")   # 记笔记（引用这段原文）
+                    # 记笔记（引用这段原文）：菜单会被重建，用重试版点（见 menu_click 的说明）
+                    if not menu_click(page, 2):
+                        raise RuntimeError("右键菜单点不到「记笔记」")
                     time.sleep(0.8)
                     info = page.evaluate("""() => {
                       const comp = document.querySelector('#noteCompose');
@@ -1070,6 +1127,93 @@ def main():
                            % (res["mid"]["a"], res["mid"]["t"][:10], res["rev"]["t"][:10]))
                 except Exception as e:  # noqa: BLE001
                     bad("W11 拖选", "没验成：%r" % (e,))
+
+            # ---- W18 出处可点：「课件 p.N」单击 → 打开原件第 N 页；拖选与点别处都不跳 ----
+            # 2026-11-23 用户优化项 F：「讲义里的『课件 p.N』现在只是文字，点了不能跳到原件那一页」。
+            # 判四件事，靶子（N）从页面里读、不写死，否则「翻对页」与「永远翻第 1 页」量不出区别：
+            #   ① 点同一行里出的处以外的字 → 不跳（点判的是字符偏移，不是整段）
+            #   ② 拖选经过这几个字 → 只是选字，不跳（否则「选一段去记笔记」会变成「跳走」）
+            #   ③ 单击这几个字 → 打开原件，且翻到 p.N
+            #   ④ 原件的页数与 N 对得上（造假原件 8 页，见 make_home）
+            if opened:
+                try:
+                    open_drawer(page, "TDEMO")
+                    page.locator("#drFiles .f").filter(has_text="D02").first.click()
+                    # 只等「这一页是 D02 且文字层已出来」：第 1 页本来就没有出处，
+                    #   等 .cite 会先超时（第一次跑就是这么红的）。
+                    page.wait_for_function(
+                        "(document.querySelector('#rSub')||{}).textContent.indexOf('D02') >= 0",
+                        timeout=30000)
+                    page.wait_for_function(
+                        "document.querySelectorAll('#pdftext span').length > 3", timeout=30000)
+                    pick = {"n": 0}
+                    for _ in range(7):          # D02 的出处集中在前 6 页，翻着找
+                        pick = page.evaluate(CITE_PICK)
+                        if pick.get("n"):
+                            break
+                        page.click("#pgNext")
+                        time.sleep(0.8)
+                    if not pick.get("n"):
+                        skip("W18 出处可点", "翻了 7 页没找到「一段里只有一个出处」的靶子，没敢判")
+                    else:
+                        api = page.evaluate("""async () => {
+                          const sub = (document.querySelector('#rSub')||{}).textContent || '';
+                          const r = await fetch('/api/orig-of?code=TDEMO&doc=' + encodeURIComponent(sub));
+                          return await r.json();
+                        }""")
+
+                        def rd(sel):
+                            return (page.evaluate(
+                                "(document.querySelector('%s')||{}).textContent || ''" % sel) or "").strip()
+
+                        t0, p0 = rd("#rTitle"), rd("#pgVal")
+                        # ① 点同一行别处
+                        page.mouse.move(pick["px"], pick["py"])
+                        page.mouse.down()
+                        time.sleep(0.06)
+                        page.mouse.up()
+                        time.sleep(0.9)
+                        t1 = rd("#rTitle")
+                        # ② 拖选经过出处（真鼠标按下 → 移 >3px → 松开）
+                        page.mouse.move(pick["x"] - 2, pick["y"])
+                        page.mouse.down()
+                        for i in range(1, 7):
+                            page.mouse.move(pick["x"] - 2 + i * 6, pick["y"])
+                            time.sleep(0.02)
+                        page.mouse.up()
+                        time.sleep(0.9)
+                        t2 = rd("#rTitle")
+                        selv = (page.evaluate("String(window.getSelection())") or "").strip()
+                        # ③ 单击出处
+                        page.mouse.move(pick["x"], pick["y"])
+                        page.mouse.down()
+                        time.sleep(0.06)
+                        page.mouse.up()
+                        time.sleep(1.8)
+                        t3, p3 = rd("#rTitle"), rd("#pgVal")
+                        toast = rd("#toast")
+                        want = "%d / %d" % (pick["n"], api.get("pages") or 0)
+                        if not api.get("ok"):
+                            bad("W18 出处可点", "服务端没认出这一讲的原件：%r" % (api,))
+                        elif (api.get("pages") or 0) < pick["n"]:
+                            bad("W18 出处可点", "元件只有 %r 页，写的是 p.%d（数据的靶子不对）"
+                                % (api.get("pages"), pick["n"]))
+                        elif t1 != t0:
+                            bad("W18 出处可点", "点同一行别处也跳了：%r → %r" % (t0, t1))
+                        elif t2 != t0 or len(selv) < 2:
+                            bad("W18 出处可点", "拖选经过出处时跳走了或没选上字：%r → %r / 选区 %r"
+                                % (t0, t2, selv))
+                        elif t3 != "Sample 01.pdf" or p3 != want:
+                            bad("W18 出处可点", "单击出处没打开原件那页：标题 %r → %r；页码 %r → %r（应为 %r）"
+                                % (t0, t3, p0, p3, want))
+                        elif "打开原件" not in toast:
+                            bad("W18 出处可点", "跳过去了但没提示：%r" % (toast,))
+                        else:
+                            ok("W18 出处可点",
+                               "「%s」→ 单击打开 %s 的 %s（提示 %r）；点同一行别处与拖选都不跳（选区 %r）"
+                               % (pick["text"][:18], t3, p3, toast[:24], selv[:12]))
+                except Exception as e:  # noqa: BLE001
+                    bad("W18 出处可点", "没验成：%r" % (e,))
 
             # ---- W12 滚动条槽固定：有没有滚动条，内容宽度都不变 ----
             try:
