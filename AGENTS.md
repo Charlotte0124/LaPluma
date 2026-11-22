@@ -61,7 +61,9 @@
 **为什么有这条**：2026-11-21 用户在 `dist\LaPluma.exe` 上双击只看到 `Error / Could not create temporary directory!`——PyInstaller 单文件启动第一步要把 86 MB 解包到 `%TEMP%`，这台机器上建目录被拒，我们的代码一行都没执行。用户随后定：「以后直接是文件夹的那种形式吧，不打包了。」
 
 1. 分发形态只有一个：**仓库文件夹 + `启动羽毛笔.cmd`**（控制台可见地起 `ui\server.py`：起不来时原因就在屏幕上；要无控制台加 `-Windowed`）。不再产出 `dist\LaPluma.exe`，不再维护单文件打包脚本与 spec。
-2. 启动入口只有一个：`启动羽毛笔.cmd`。要 `-Lan` / `-NoWindow` 走 `一键启动.ps1`，不要另造入口。
+2. 仓内启动入口只有一个：`启动羽毛笔.cmd`。要 `-Lan` / `-NoWindow` 走 `一键启动.ps1`，不要另造脚本。
+   2026-11-22 用户定：**桌面那条快捷方式直接指向 `powershell.exe -File 一键启动.ps1 -Windowed`**，
+   绕开 `.cmd` 的「未知发布者」安全窗口；仓里仍然只留那一个 `.cmd`，不因为快捷方式多放文件。
 3. **启动器必须是纯 ASCII，用 `*.ps1` 通配找启动脚本**（2026-11-21）。双击时 cmd.exe 按系统 ANSI 码页（本机 936）读 `.cmd`，文件里硬编码中文名会被解成乱码，powershell 拿到不存在的路径、控制台一闪即关——用户看到的就是「双击没反应」。同样内容改成 GBK 存的 `.bat` 就一直能用，这正是当时「只有 一键启动.bat 打得开」的原因。改启动器时不要把中文写回去。
 4. 环境要求写进 README：Python 3.12 + `pymupdf`。
 
@@ -138,7 +140,7 @@
 
 1. **文字层用 pdf.js 官方 TextLayer**：`renderTextLayer()` 必须 `new lib.TextLayer({textContentSource, container, viewport})`——每段一个 div，left/top 是整页百分比、宽度靠 scaleX。容器必须先 `box.style.setProperty('--scale-factor', String(vp.scale))`（官方层的字号是 `calc(Npx * var(--scale-factor))`；缺这个变量字号就错，选中框跟着偏）。不许回到「按行合并成一个 span」（只有整行的 left/top，逐段宽度还原不了）。官方层不可用时才退回按行合并，并把走的路记在 `#pdftext.dataset.tl`（official / official-fail / fallback）。
 2. **已成稿的讲次不出现在生成列表**：后端 `lesson_meta()` 按磁盘事实算 `done`——原件目录里还有它那份源课件（`orig` 与文件名主干对上）**且** `01_讲义` 里有 `<讲号>_…pdf`；两条都成立才算成稿（只导入没生成的占位不算，出厂示例课程没原件也不算）。界面 `syncLessons()` 过滤掉 done 的讲并提示「另有 N 讲已成稿」。重做入口只有一个：课程抽屉的成品行「重新生成」（`data-fregen`）——点了把它放回列表并勾上（`REGEN` 集合），生成成功后自动移出、又回到隐藏。
-3. **启动器单独一个干净文件夹**：`F:\DSH\apps\羽毛笔\` 里只放一个纯 ASCII 的 `启动羽毛笔.cmd`（`%~dp0` + 通配符找 `..\LaPluma\*.ps1`，带 `-Windowed`）；桌面快捷方式指向它。目录里多一个文件、或启动器里出现一个非 ASCII 字节，都算红——936 代码页会把中文读成乱码，双击就没反应（§六.3 的同一个坑）。
+3. **启动器单独一个干净文件夹**：`F:\DSH\apps\羽毛笔\` 里只放一个纯 ASCII 的 `启动羽毛笔.cmd`（`%~dp0` + 通配符找 `..\LaPluma\*.ps1`，带 `-Windowed`）；桌面快捷方式按 §六.2 直接指向 powershell + `一键启动.ps1`，不往这个文件夹里加 `.lnk` / `.ico`。目录里多一个文件、或启动器里出现一个非 ASCII 字节，都算红——936 代码页会把中文读成乱码，双击就没反应（§六.3 的同一个坑）。
 4. **自测一律跑临时数据根**：要造「原件 + 成品」这类数据，用 `tools\check\_win_launch.py` + `PLUMA_TEST_DATA=<临时目录>`（在 import 之前改 `paths.DATA_ROOT`），跑完删掉；不许往用户自己的课程目录里造样本。2026-11-23 补：`NOTES_DIR` 以前写死 `~\.pluma\notes`，绕过了 `PLUMA_HOME`，自测造的笔记全落进用户真实笔记目录（TDEMO 几十条就是这么来的）——现在跟着 `USER_DIR` 走，笔记也进临时根。
 
 **怎么验证它被执行**：`python tools\check\check-window-layer.py` 必须 **3/3**，`--selftest` 6/6（逐条造坏都要变红）；提交钩子自动跑。只有真窗口量得出的（窗口矩形、选中框对位、拖动），跑 `python tools\check\check-window-real.py`（会弹一下软件窗口，约 40 秒；加 `--drag` 再做一次真实鼠标拖动）：W1 真窗口 / W2 全屏进出还原（±2px）/ W3 文字层与 pymupdf 词框对位（±4px）/ W4 成稿隐藏与重新生成 / W5 只有右键弹菜单 / W7 relayout 幂等 + 底色不透明 / W8 Esc 能退出全屏 / W9 记笔记（侧栏写作页：灰底只读引用 + 1 个输入、保存带引用）/ W10 翻译两框（↑↓ 可换向、没译文不出现「引用翻译记成笔记」）/ W11 拖选（起点在按下处、松手保留、反向也对）/ W12 滚动条槽（出不出滚动条，内容宽度都不变）/ W13 relayout 不自激（之后 4 秒不再持续收到 resize）/ W14 无引用时不出灰框（有选中灰框回来）/ W15 笔记悬停与点击高亮 + 右键换色（标签色与高亮色同改）/ W16 点空白处清掉选区 / W17 排版不挤（讲次芯片徽标与讲号单行、笔记不被压扁、列表不横向溢出）/ W18 出处可点（单击「课件 p.N」打开原件第 N 页；拖选与点同一行别处不跳）/ W6 拖动。
