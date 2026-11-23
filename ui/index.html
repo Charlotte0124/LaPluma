@@ -11,6 +11,7 @@
   --ink:#171714; --sub:#6c6a63; --faint:#97948c;
   --chip:#fff; --chipon:#171714; --chipon-ink:#fff; --bub:#f3f2ee; --code:#f5f4f1;
   --ok:#2f7d4f; --red:#C8202C;
+  --cite-ink:#2f5d8a; --cite-bg:#eef4fa; --cite-line:#c9d8e6;
   --page:#fff; --page-ink:#171714; --page-sub:#6c6a63;
   --reader-bg:#eceae6; --shadow:0 1px 2px rgba(0,0,0,.04),0 10px 30px rgba(0,0,0,.05);
   --sheet-shadow:0 2px 6px rgba(0,0,0,.08),0 18px 40px rgba(0,0,0,.10);
@@ -20,6 +21,7 @@ html[data-theme="dark"]{
   --ink:#e9e7e2; --sub:#9c9992; --faint:#6f6c66;
   --chip:#22221f; --chipon:#f0eee9; --chipon-ink:#161614; --bub:#262623; --code:#141413;
   --ok:#57b87c; --red:#e2565c;
+  --cite-ink:#8fb8dd; --cite-bg:#1b2530; --cite-line:#2f4358;
   --page:#141413; --page-ink:#e6e4de; --page-sub:#9c9992;
   --reader-bg:#0d0d0c; --shadow:0 1px 2px rgba(0,0,0,.3),0 10px 30px rgba(0,0,0,.35);
   --sheet-shadow:0 2px 8px rgba(0,0,0,.5),0 20px 46px rgba(0,0,0,.55);
@@ -435,7 +437,7 @@ html,body{background:var(--bg)}
   box-shadow:inset 0 0 0 1px rgba(0,0,0,.05);animation:hlIn .18s ease-out both}
 #pdfhl .hl.pin{box-shadow:inset 0 0 0 2px var(--hlb,rgba(63,125,90,.85))}
 /* 2026-11-23 用户第 6 条：该有动画的地方补上（侧栏换页签、译文出来、菜单、页面切换） */
-#sideNotes,#sideTrans{animation:panelIn .2s ease}
+#sideNotes,#sideTrans,#sideChat{animation:panelIn .2s ease}
 @keyframes panelIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
 .tr-out:not(.empty){animation:panelIn .2s ease}
 .note-menu{animation:pop .14s ease}
@@ -508,6 +510,48 @@ html,body{background:var(--bg)}
   min-height:92px;font-size:12.5px;line-height:1.65;color:var(--ink);white-space:pre-wrap}
 .tr-out.empty{color:var(--faint);border-style:dashed}
 .tr-out .ph{font-size:12px;color:var(--faint)}
+/* 2026-11-23 用户：阅读侧栏第三个页签「会话」（设计稿 22-阅读侧栏-会话）。
+   一门课一个会话（记录走 /api/session）；提问走与整页会话同一条模型通道（/api/ask）；
+   回答下面的「课件 p.N」可点，跳这一讲原件的第 N 页（复用 jumpToCite）。
+   气泡照设计稿：我 = 灰底靠右，羽毛笔 = 白底带边框；输入框贴底，下面一行小字说明会话规则。 */
+#sideChat{display:flex;flex-direction:column;gap:8px;flex:1;min-height:0}
+#sideChat .sc-hd{display:flex;align-items:center;justify-content:space-between;gap:8px;
+  font-size:12px;color:var(--sub)}
+#sideChat .sc-hd b{font-size:12.5px;color:var(--ink);font-weight:600}
+#sideChat .sc-clear{border:1px solid var(--line);background:var(--card);color:var(--sub);
+  border-radius:7px;padding:2px 9px;font-size:11.5px;white-space:nowrap;transition:.16s}
+#sideChat .sc-clear:hover{border-color:var(--red);color:var(--red)}
+#sideChat .sc-log{display:flex;flex-direction:column;gap:8px;flex:1;min-height:120px;overflow:auto;
+  padding-right:2px}
+#sideChat .sc-empty{font-size:11.5px;color:var(--faint);line-height:1.8;padding:4px 2px}
+#sideChat .msg{border-radius:10px;padding:8px 10px;font-size:12px;line-height:1.62;
+  animation:fade .2s ease}
+#sideChat .msg.u{background:var(--bub);margin-left:26px}
+#sideChat .msg.a{border:1px solid var(--line2);background:var(--card);max-width:100%}
+#sideChat .msg .who{font-size:10.5px;color:var(--faint);margin-bottom:3px}
+#sideChat .msg.a.warn{background:var(--card2);color:var(--sub)}
+#sideChat .msg .cite{display:inline-block;margin:5px 4px 0 0;font-size:10px;color:var(--cite-ink);
+  border:1px solid var(--cite-line);background:var(--cite-bg);border-radius:5px;padding:0 5px;
+  font-family:Consolas,monospace;cursor:pointer;transition:filter .14s}
+#sideChat .msg .cite:hover{filter:brightness(.95);text-decoration:underline}
+#sideChat .sc-refs{margin-top:5px;font-size:11px;color:var(--faint);line-height:1.65}
+#sideChat .sc-refs summary{cursor:pointer;outline:none}
+#sideChat .sc-refs ol{margin:5px 0 0;padding-left:16px}
+#sideChat .sc-in{border-top:1px solid var(--line2);padding-top:9px;margin-top:auto}
+#sideChat .sc-in .row{display:flex;gap:6px}
+#sideChat .sc-in input[type=text]{flex:1;min-width:0;border:1px solid var(--line);border-radius:8px;
+  padding:7px 9px;font-size:12px;background:var(--card2);outline:none;transition:.16s}
+#sideChat .sc-in input[type=text]:focus{border-color:var(--ink);background:var(--card)}
+#sideChat .sc-in input::placeholder{color:var(--faint)}
+#sideChat .sc-in .go{border:1px solid var(--ink);background:var(--ink);color:var(--bg);
+  border-radius:8px;padding:7px 12px;font-size:12px;white-space:nowrap;transition:.16s}
+#sideChat .sc-in .go:disabled{opacity:.55;cursor:default}
+#sideChat .sc-cross{display:inline-flex;align-items:center;gap:5px;border:1px solid var(--line);
+  border-radius:999px;padding:2px 8px;font-size:10.5px;color:var(--sub);margin-top:6px;
+  cursor:pointer;user-select:none;transition:.14s}
+#sideChat .sc-cross:hover{border-color:var(--sub);color:var(--ink)}
+#sideChat .sc-cross input{width:11px;height:11px;margin:0;accent-color:var(--ink)}
+#sideChat .sc-in .tip{font-size:10.5px;color:var(--faint);margin-top:6px;line-height:1.5}
 .nitem .m{display:flex;gap:8px;font-size:11px;color:var(--faint);font-family:Consolas,monospace;margin-bottom:4px;border:0;padding:0}
 /* 2026-11-22：列表里带出这条笔记引用的原文（灰、小字），一眼看出它是拿哪段话起的 */
 .nitem .nq{font-size:11.5px;line-height:1.6;color:var(--faint);background:var(--card2);border-radius:6px;
@@ -925,6 +969,7 @@ body.win #appScroll{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden
           <div class="side-tabs">
             <button class="stab on" id="tabNotes">笔记 <span id="nCount">0</span></button>
             <button class="stab" id="tabTrans">翻译</button>
+            <button class="stab" id="tabChat">会话</button>
           </div>
           <div id="sideNotes">
             <!-- 2026-11-22 用户：「记笔记和引用记笔记也是在侧栏的，其实切了侧栏页面而已」——
@@ -977,6 +1022,25 @@ body.win #appScroll{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden
             <!-- 2026-11-23 用户：「最近五条翻译移动到最底下去（图2位置）」——历史放整块最下面，
                  翻完看结果时它不再挡在上面。 -->
             <div class="tr-hist" id="trHist"></div>
+          </div>
+          <!-- 2026-11-23 用户：第三个页签「会话」（设计稿 22-阅读侧栏-会话）。
+               文案按设计稿写死：标题「本课程会话」+「清除」、placeholder「只在本课程内提问…」、
+               chip「引用其他课件」、最下面一行小字说明会话规则。
+               记录按课程存在本机（%USERPROFILE%\.pluma\sessions\<课程>.json，跟 PLUMA_HOME 走），
+               关掉再开还在；提问才真的调模型，没 key 就照实说没发出去。 -->
+          <div id="sideChat" hidden>
+            <div class="sc-hd"><b>本课程会话</b>
+              <button class="sc-clear" id="scClear" title="清掉这门课的会话记录（只删本机这一份）">清除</button></div>
+            <div class="sc-log" id="scLog"></div>
+            <div class="sc-in">
+              <div class="row">
+                <input id="scQ" type="text" placeholder="只在本课程内提问…" autocomplete="off">
+                <button class="go" id="scGo">提问</button>
+              </div>
+              <label class="sc-cross" id="scCross" title="默认只检索本课程；勾上才同时检索其他课件">
+                <input type="checkbox" id="scCrossBox"> 引用其他课件</label>
+              <div class="tip">一门课一个会话；关掉再开还在。讲次范围在右侧选。</div>
+            </div>
           </div>
         </div>
       </div>
@@ -2360,6 +2424,8 @@ async function openReader(rel, name, code, goPage){
   applySide();
   $('#readerBox').innerHTML = '<div class="pdfmsg">正在打开 ' + esc(RD.name) + ' …</div>';
   await loadNotes();
+  // 2026-11-23：换了一份讲义/换了一门课，侧栏会话若正开着，跟着换到这门课的会话
+  if($('#sideChat') && !$('#sideChat').hidden && typeof loadSideChat === 'function') loadSideChat();
   try{
     const lib = await loadPdfjs();
     const task = lib.getDocument({ url: '/api/pdf?p=' + encodeURIComponent(rel) });
@@ -2688,12 +2754,17 @@ function citeAtPoint(x, y){
   return m2 ? citeNum(m2) : 0;
 }
 let CITE_BUSY = false;
-async function jumpToCite(page){
-  if(CITE_BUSY || !RD.rel) return;
+/* lesson 可选：侧栏「会话」里那一句出处可能来自**别的讲**（回答是按这门课检索出来的），
+   而当前开着的是另一份讲义——所以带上那一讲的讲号，服务端按讲号找原件（同一条 source_of）。
+   不给讲号时照旧按当前这份讲义反推（讲义正文里点出处就走这条）。 */
+async function jumpToCite(page, lesson){
+  if(CITE_BUSY) return;
+  if(!lesson && !RD.rel) return;
   CITE_BUSY = true;
   try{
     const j = await (await fetch('/api/orig-of?code=' + encodeURIComponent(RD.code || '')
-      + '&doc=' + encodeURIComponent(RD.rel))).json();
+      + '&doc=' + encodeURIComponent(RD.rel || '')
+      + (lesson ? '&no=' + encodeURIComponent(lesson) : ''))).json();
     if(!j.ok){ toast('这一段没找到原件：' + (j.error || '未知原因')); return; }
     // 出处页码超过原件的页数时不静默跳到最后一页：说一句「原件只有 N 页」，别让人以为跳对了
     let go = Math.max(1, page);
@@ -2888,12 +2959,16 @@ document.addEventListener('keydown', e => {
    要像笔记那样从右侧切出侧栏，参考 PDF 的那种）。
    原来弹的是一个盖住正文的对话框，现在改成侧栏里的一个页签。 */
 function sideTab(which){
-  const t = (which === 'trans') ? 'trans' : 'notes';
-  const n = $('#sideNotes'), s = $('#sideTrans');
+  // 2026-11-23：多了第三个页签「会话」——三块面板互斥，页签高亮跟着走。
+  const t = (which === 'trans' || which === 'chat') ? which : 'notes';
+  const n = $('#sideNotes'), s = $('#sideTrans'), c = $('#sideChat');
   if(n) n.hidden = (t !== 'notes');
   if(s) s.hidden = (t !== 'trans');
+  if(c) c.hidden = (t !== 'chat');
   if($('#tabNotes')) $('#tabNotes').classList.toggle('on', t === 'notes');
   if($('#tabTrans')) $('#tabTrans').classList.toggle('on', t === 'trans');
+  if($('#tabChat')) $('#tabChat').classList.toggle('on', t === 'chat');
+  if(t === 'chat' && typeof loadSideChat === 'function') loadSideChat();
 }
 function showSide(){
   SIDE_HIDDEN = false;
@@ -3001,6 +3076,139 @@ syncTrDir();
 if($('#trGo')) $('#trGo').onclick = () => transPage(TR.to);
 if($('#tabNotes')) $('#tabNotes').onclick = () => sideTab('notes');
 if($('#tabTrans')) $('#tabTrans').onclick = () => sideTab('trans');
+/* ---------- 阅读侧栏 · 会话（2026-11-23 用户：侧栏第三个页签） ----------
+   设计稿 22-阅读侧栏-会话。约定：
+     · 一门课一个会话：记录走 /api/session（%USERPROFILE%\.pluma\sessions\<课程>.json，
+       跟 PLUMA_HOME / USER_DIR 走），关掉再开还在；「清除」只清这门课那一份；
+     · 提问走 /api/ask——与整页「会话」同一条通道（engine\_ask.search 检索 + api\client.chat）；
+       没配 key 时接口回 need_key，这里照实说「没发给模型」，不给假答案；
+     · 讲次范围：带当前这份讲义（doc），服务端用 lesson_of_doc 认出讲号，只在这讲内检索；
+       认不出（合订本 / 附页 / 原件）就是整门课；
+     · 「课件 p.N」可点：复用 jumpToCite()（/api/orig-of → engine\_draft.source_of），
+       单击才跳；按下后移动超过 3px（在选字 / 滑动）松手不跳；
+     · 勾「引用其他课件」才跨课，与整页会话那个开关同义。 */
+const SC = { code:'', messages:[], busy:false, cross:false, loaded:false };
+function scCitePages(text){
+  const out = [], re = new RegExp(CITE_RE.source, 'g');
+  let m;
+  while((m = re.exec(String(text || ''))) !== null){
+    const n = citeNum(m);
+    if(n && out.indexOf(n) < 0) out.push(n);
+    if(m.index === re.lastIndex) re.lastIndex += 1;     // 空匹配保护
+  }
+  return out.slice(0, 3);                                // 一条回答最多三个出处片
+}
+function scRefs(m){
+  const refs = m.refs || [];
+  if(!refs.length) return '';
+  return '<details class="sc-refs"><summary>命中的片段（核对用）· ' + refs.length + ' 段</summary><ol>' +
+    refs.map(x => '<li>' + (x.lesson ? '[' + esc(x.lesson) + '] ' : '') + '§' + esc(x.sec) + ' ' +
+      esc(x.title) + (x.pages && x.pages.length ? ' · 课件 p.' + x.pages.join('、p.') : '') + '</li>').join('') +
+    '</ol></details>';
+}
+function bindCiteChip(el){
+  let down = false, moved = false, sx = 0, sy = 0;
+  el.addEventListener('pointerdown', e => { down = true; moved = false; sx = e.clientX; sy = e.clientY; });
+  el.addEventListener('pointermove', e => {
+    if(!down) return;
+    const dx = e.clientX - sx, dy = e.clientY - sy;
+    if(dx * dx + dy * dy > 9) moved = true;             // >3px：在拖选 / 滑动，不算点击
+  });
+  el.addEventListener('pointerup', () => { down = false; });
+  el.addEventListener('pointercancel', () => { down = false; moved = true; });
+  el.addEventListener('click', () => {
+    if(moved){ moved = false; return; }
+    jumpToCite(Number(el.dataset.cite), el.dataset.les || '');
+  });
+}
+function renderSideChat(){
+  const box = $('#scLog'); if(!box) return;
+  let html = SC.messages.map(m => {
+    const isUser = (m.role === 'user' || m.role === 'u');
+    if(isUser) return '<div class="msg u"><div class="who">我</div>' + esc(m.text) + '</div>';
+    const chips = scCitePages(m.text).map(p =>
+      '<span class="cite" data-cite="' + p + '" data-les="' + esc(m.lesson || '') +
+      '" title="点了打开原件 p.' + p + '（拖选不算点击）">课件 p.' + p + '</span>').join('');
+    // 命中的片段只在「没答出来」时给（服务端说片段可以直接看）；正常回答照设计稿只留气泡 + 出处片
+    return '<div class="msg a' + (m.warn ? ' warn' : '') + '"><div class="who">羽毛笔</div>' +
+      md(m.text) + chips + (m.warn ? scRefs(m) : '') + '</div>';
+  }).join('');
+  if(SC.busy) html += '<div class="msg a"><div class="who">羽毛笔</div>提问中…（一次模型调用）</div>';
+  box.innerHTML = html || ('<div class="sc-empty">在这门课里问一句：答案只依据本课程内容，并标出课件页码。' +
+    '<br>一门课一个会话，关掉再开还在。</div>');
+  box.scrollTop = box.scrollHeight;
+  box.querySelectorAll('[data-cite]').forEach(bindCiteChip);
+}
+async function loadSideChat(){
+  const code = RD.code;
+  if(!code) return;
+  if(SC.code !== code){ SC.code = code; SC.messages = []; }
+  renderSideChat();
+  try{
+    const j = await (await fetch('/api/session?code=' + encodeURIComponent(code))).json();
+    if(SC.code === code){ SC.messages = j.messages || []; SC.loaded = true; }
+  }catch(_){ SC.loaded = true; }
+  renderSideChat();
+}
+async function scSave(m){
+  return postJson('/api/session', { code: SC.code, action:'append', message: m });
+}
+async function askSide(){
+  if(SC.busy) return;
+  const q = ($('#scQ') && $('#scQ').value || '').trim();
+  if(q.length < 2){ toast('问题至少要 2 个字'); if($('#scQ')) $('#scQ').focus(); return; }
+  const code = RD.code;
+  if(!code){ toast('先打开一份讲义'); return; }
+  const history = SC.messages.slice(-4).map(m => ({
+    role: (m.role === 'user' || m.role === 'u') ? 'user' : 'a', text: m.text || '' }));
+  SC.busy = true;
+  SC.messages.push({ role:'user', text:q });
+  if($('#scQ')) $('#scQ').value = '';
+  if($('#scGo')) $('#scGo').disabled = true;
+  renderSideChat();
+  try{
+    const j = await postJson('/api/ask', { course: code, doc: RD.rel || '', lessons: [],
+      allow_cross: !!SC.cross, question: q, history });
+    if(j.ok){
+      const first = (j.refs && j.refs[0]) || {};
+      const meta = '出自 §' + (first.sec || '?') + (first.title ? ' ' + first.title : '') +
+        '｜' + ((j.scope && j.scope.lesson) || '全课') + '｜' + mname(j.model) + ' · ' + j.seconds + 's';
+      SC.messages.push({ role:'a', text: j.answer || '', lesson: first.lesson || '', refs: j.refs || [], meta });
+      // 只有真答出来了才落盘（与整页会话一致：没答案的问题不进会话记录，免得下次打开像丢了一半）
+      await scSave({ role:'user', text:q });
+      await scSave({ role:'a', text: j.answer || '', refs: j.refs || [], meta });
+      refreshUsage();
+    }else if(j.need_money){
+      moneyDialog(j);
+      SC.messages.push({ role:'a', warn:true, text:'（余额不足，这一问没发给模型；充值后重问一次即可。）' });
+    }else if(j.need_key){
+      SC.messages.push({ role:'a', warn:true,
+        text:'还没配置 API 密钥，这一问**没有发给模型**，所以也没有答案。到右上「设置」里填好 key 再问一次；' +
+             '下面这些片段是本机检索出来的，不发出去就不花钱。', refs: j.refs || [] });
+    }else{
+      SC.messages.push({ role:'a', warn:true,
+        text:'这一问没拿到回答：' + (j.error || '未知原因') + '（可以改一下再问一次。）', refs: j.refs || [] });
+    }
+  }catch(e){
+    SC.messages.push({ role:'a', warn:true, text:'请求失败：' + String(e) });
+  }finally{
+    SC.busy = false;
+    if($('#scGo')) $('#scGo').disabled = false;
+    renderSideChat();
+  }
+}
+if($('#tabChat')) $('#tabChat').onclick = () => { showSide(); sideTab('chat'); };
+if($('#scGo')) $('#scGo').onclick = () => askSide();
+if($('#scQ')) $('#scQ').addEventListener('keydown', e => {
+  if(e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); askSide(); }
+});
+if($('#scCrossBox')) $('#scCrossBox').onchange = e => { SC.cross = !!e.target.checked; };
+if($('#scClear')) $('#scClear').onclick = async () => {
+  const code = RD.code; if(!code) return;
+  const j = await postJson('/api/session', { code, action:'clear' });
+  if(j && j.ok){ SC.messages = []; renderSideChat(); toast('已清除本课程会话'); }
+  else toast('没清掉：' + ((j && j.error) || '未知原因'));
+};
 document.addEventListener('fullscreenchange', () => syncFsLabel());
 document.addEventListener('keydown', e=>{
   if(PAGE!=='read' || !RD.doc) return;

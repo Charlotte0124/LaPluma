@@ -185,7 +185,9 @@ def static_rows(root):
         rows.append((no, name, ok, detail))
 
     # 1 服务端接口 + 复用 source_of
-    of = block(srv, "def orig_of(course: str, doc: str) -> dict:", "def rel_out(")
+    # 2026-11-23：签名多了可选的第三个参数（阅读侧栏「会话」要按讲号找原件），
+    # 所以锚点只钉到参数表开头——判的仍是「这个函数在、且复用 source_of」，不是签名一字不差。
+    of = block(srv, "def orig_of(course: str, doc: str", "def rel_out(")
     add(1, "服务端 /api/orig-of", (
         '/api/orig-of' in srv
         and 'orig_of(q.get("code", [DEFAULT_COURSE])[0]' in srv

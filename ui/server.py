@@ -282,7 +282,10 @@ MODELS = [
 # ---------- 会话（一个课件一个会话） ----------
 # 2026-11-16：课程会话按课件隔离，存本机用户目录，不进仓库。
 # 存 %USERPROFILE%\.pluma\sessions\<课程代码>.json —— 换课件就是另一个文件，上下文不会串。
-SESS_DIR = os.path.join(os.path.expanduser("~"), ".pluma", "sessions")
+# 2026-11-23 修：这里以前写死 ~\.pluma，绕过了 PLUMA_HOME——自测（PLUMA_HOME=临时目录）造的
+#   会话会落进用户真实目录，和笔记目录 NOTES_DIR 当年是同一个坑（见 AGENTS.md §十二.4）。
+#   现在跟着 USER_DIR 走：PLUMA_HOME 设了就跟着它，没设才是 ~\.pluma。
+SESS_DIR = os.path.join(USER_DIR, "sessions")
 
 
 def _safe_code(code: str) -> str:
@@ -810,7 +813,7 @@ def lesson_of_doc(course: str, doc: str) -> str:
     return hit
 
 
-def orig_of(course: str, doc: str) -> dict:
+def orig_of(course: str, doc: str, no: str = "") -> dict:
     """讲义正文里「课件 p.N」的出处：这一讲的原件是哪一份、在哪、共几页（只读，不写盘）。
 
     2026-11-23 用户优化项 F：「讲义里的『课件 p.N』现在只是文字，点了不能跳到原件那一页」。
@@ -823,21 +826,31 @@ def orig_of(course: str, doc: str) -> dict:
          再认 meta 的「源课件」行，最后按标题/唯一原件兜底（**只复用这一处实现**，
          不在这里再写一遍「原件怎么找」）；
       ③ 认不出（合订本 / 附页 / 手动拷进来的 PDF）→ ok:false + 原因，界面照实提示。
+
+    2026-11-23 补（阅读侧栏「会话」）：回答里的「课件 p.N」可能来自**别的讲**，而当前开着的
+    是另一份讲义——所以允许显式给讲号 no，这条优先，不再从 doc 反推（① 那条也就让位给讲号）。
     """
     code = _safe_code((course or "").strip() or DEFAULT_COURSE)
+    want = str(no or "").strip()
+    if want:
+        avail = find_lesson(code)
+        if want not in avail:
+            return {"ok": False, "error": "本课程没有这一讲：%s（现有：%s）"
+                                          % (want, "、".join(avail) or "无")}
     parts = [p for p in (doc or "").replace("\\", "/").split("/") if p]
-    if not parts:
+    if not parts and not want:
         return {"ok": False, "error": "缺参数：doc（讲义相对路径）"}
-    if len(parts) >= 3 and _safe_code(parts[0]) == code and parts[1] == ORIG_DIR:
+    # ① 在看原件本身：就地翻页。只在没指定讲号时走——指定了讲号，要的是那一讲的原件
+    if not want and len(parts) >= 3 and _safe_code(parts[0]) == code and parts[1] == ORIG_DIR:
         full = safe_join(*parts)
         if os.path.isfile(full):
             return {"ok": True, "course": code, "no": "", "same": True,
                     "rel": "%s/%s/%s" % (code, ORIG_DIR, parts[-1]),
                     "name": parts[-1], "pages": _pages(full), "how": "原件本身"}
-    no = lesson_of_doc(code, parts[-1])
+    no = want or lesson_of_doc(code, parts[-1] if parts else "")
     if not no:
         return {"ok": False, "error": "这一份认不出是哪一讲（合订本 / 附页 / 手动放进来的 PDF）：%s"
-                                      % parts[-1]}
+                                      % (parts[-1] if parts else "")}
     try:
         full, name = _engine("_draft").source_of(code, no)
     except FileNotFoundError as e:
@@ -1529,8 +1542,10 @@ class Handler(BaseHTTPRequestHandler):
             if u.path == "/api/orig-of":
                 # 2026-11-23 用户优化项 F：讲义正文里的「课件 p.N」点了要能打开原件那一页。
                 # 只读：不解析 PDF 内容、不写盘，只回答「这一讲的原件是哪一份」。
+                # 2026-11-23：第三个数是可选讲号（侧栏「会话」的出处可能属于别的讲）
                 return self._json(orig_of(q.get("code", [DEFAULT_COURSE])[0],
-                                          q.get("doc", [""])[0]))
+                                          q.get("doc", [""])[0],
+                                          q.get("no", [""])[0]))
             if u.path == "/api/notes":
                 return self._json(dict(ok=True, **load_notes(q.get("code", [DEFAULT_COURSE])[0],
                                                              q.get("doc", [""])[0])))
@@ -2271,6 +2286,12 @@ class Handler(BaseHTTPRequestHandler):
                 allow_cross = bool(body.get("allow_cross"))
                 # 2026-11-16：讲次改成勾选多选（05），前端传 lessons 列表；空 = 整门课
                 only = [str(x).strip() for x in (body.get("lessons") or []) if str(x).strip()]
+                # 2026-11-23：阅读侧栏「会话」没有右侧讲次勾选，只带「当前这份讲义」。
+                # 讲号由 lesson_of_doc 认（只复用那一处映射）；认不出（合订本/附页/原件）就整门课。
+                if not only and not no and body.get("doc"):
+                    one = lesson_of_doc(code, str(body.get("doc")))
+                    if one:
+                        only = [one]
                 question = str(body.get("question") or "").strip()
                 history = body.get("history") or []
                 if not (2 <= len(question) <= 500):

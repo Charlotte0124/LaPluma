@@ -26,6 +26,9 @@ r"""真窗口自测：在羽毛笔**自己的 WebView2 窗口**里量窗口矩�
   W16 点空白处把选区清掉
   W17 排版不挤：讲次芯片的徽标/讲号单行，笔记条目不被 flex 压扁
   W18 出处可点：「课件 p.N」单击打开原件第 N 页；拖选、点同一行别处都不跳
+  W19 阅读侧栏「会话」：三页签切得过去、会话从本机读回来（气泡「我」灰底靠右 /「羽毛笔」带边框）、
+      回答下面的出处片单击打开原件第 N 页、没配 key 时只出「没发给模型」的提示（不给假答案）、
+      点「清除」只清这门课那一份
 
 注意：主脚本是 <script type="module">，函数不在 window 上——所以这里只点界面元素，
       不调页面函数；页面里只读 DOM、设选区。
@@ -118,6 +121,22 @@ def make_home():
     import json as _json
     (home / "api.json").write_text(_json.dumps(
         {"wizard_done": True, "model": "deepseek-flash", "save_dir": "out"}), encoding="utf-8")
+    # 2026-11-23（W19）：侧栏「会话」要判「气泡 / 出处片可点 / 关掉再开还在」，
+    #   所以预置一份这门课的会话记录——判据自己造数据，不去点真模型（没 key，也不花钱）。
+    #   出处写 p.3（原件 8 页，p.1 分不清「翻对页」与「永远停在第 1 页」）。
+    sess = home / "sessions"
+    sess.mkdir(parents=True, exist_ok=True)
+    (sess / "TDEMO.json").write_text(_json.dumps({
+        "code": "TDEMO", "updated": "2026-11-23 13:00",
+        "messages": [
+            {"role": "user", "text": "纺锤体在有丝分裂里起什么作用？", "at": "13:00"},
+            {"role": "a", "text": "纺锤体微管附着在着丝粒上，把姐妹染色单体拉开；"
+                                  "与减数分裂不同，有丝分裂只分裂一次（课件 p.3）。",
+             "lesson": "D01", "at": "13:00",
+             "refs": [{"course": "TDEMO", "lesson": "D01", "sec": "1", "title": "开篇",
+                       "kind": "lesson", "pages": [3], "text": "纺锤体……"}]},
+        ],
+    }, ensure_ascii=False), encoding="utf-8")
     py = course / "_lessons" / "D01.py"
     text = py.read_text(encoding="utf-8")
     text2 = re.sub(r"(LESSON\s*=\s*\{)", r'\1\n    "orig": "Sample 01",', text, count=1)
@@ -399,6 +418,7 @@ def main():
     env["PYTHONIOENCODING"] = "utf-8"
     log = open(str(home / "app.log"), "wb")
     env["PLUMA_TEST_DATA"] = str(home)
+    env["PLUMA_DISABLE_KEY"] = "1"   # 自测不许摸真 key（W19 要判「没 key 只提示」）
     proc = subprocess.Popen([sys.executable, str(HERE / "_win_launch.py"),
                              "--port", str(port), "--no-browser"],
                             cwd=str(ROOT), env=env, stdout=log, stderr=subprocess.STDOUT)
@@ -1214,6 +1234,156 @@ def main():
                                % (pick["text"][:18], t3, p3, toast[:24], selv[:12]))
                 except Exception as e:  # noqa: BLE001
                     bad("W18 出处可点", "没验成：%r" % (e,))
+
+            # ---- W19 阅读侧栏「会话」：三页签 / 气泡 / 出处片可点 / 没 key 不给假答案 ----
+            # 2026-11-23 用户：阅读侧栏加第三个页签「会话」（设计稿 22-阅读侧栏-会话）。
+            # 这一页最容易「静态判据全绿、真窗口里是另一回事」：页签切不过去、会话没从
+            # %USERPROFILE%\.pluma\sessions 读回来、出处片点了不跳、没 key 却给出一段像样的
+            # 回答。所以四件事各量一次，靶子取 p.3（p.1 分不清翻对页与永远第 1 页）。
+            if opened:
+                try:
+                    open_drawer(page, "TDEMO")
+                    open_reader_from_drawer(page)
+                    time.sleep(0.5)
+                    page.click("#tabChat")
+                    time.sleep(0.9)
+                    h0 = page.evaluate("""() => {
+                      const p = document.querySelector('#sideChat');
+                      const hd = p ? p.querySelector('.sc-hd b') : null;
+                      const tip = p ? p.querySelector('.sc-in .tip') : null;
+                      const q = document.getElementById('scQ');
+                      const u = document.querySelector('#sideChat .msg.u');
+                      const a = document.querySelector('#sideChat .msg.a');
+                      const cs = e => e ? getComputedStyle(e) : null;
+                      const cu = cs(u), ca = cs(a);
+                      return {
+                        hidden: p ? p.hidden : true,
+                        notesHidden: document.querySelector('#sideNotes').hidden,
+                        transHidden: document.querySelector('#sideTrans').hidden,
+                        tabs: [...document.querySelectorAll('.side-tabs .stab')].map(b => b.textContent.trim()),
+                        hd: hd ? hd.textContent.trim() : '',
+                        ph: q ? q.getAttribute('placeholder') : '',
+                        tip: tip ? tip.textContent.trim() : '',
+                        hasCross: !!document.getElementById('scCrossBox'),
+                        clearTxt: (document.getElementById('scClear')||{}).textContent,
+                        u: document.querySelectorAll('#sideChat .msg.u').length,
+                        a: document.querySelectorAll('#sideChat .msg.a').length,
+                        who: [...document.querySelectorAll('#sideChat .msg .who')].map(e => e.textContent.trim()),
+                        bgU: cu ? cu.backgroundColor : '',
+                        indentU: cu ? cu.marginLeft : '',
+                        borderA: ca ? ca.borderTopWidth : '',
+                        cites: [...document.querySelectorAll('#sideChat .msg .cite')].map(e => e.textContent.trim())
+                      };
+                    }""")
+                    if h0["hidden"] or not (h0["notesHidden"] and h0["transHidden"]):
+                        bad("W19 侧栏会话", "点「会话」没切到会话面板：%r" % (h0,))
+                    elif len(h0["tabs"]) != 3 or "会话" not in h0["tabs"][2] or "笔记" not in h0["tabs"][0]:
+                        bad("W19 侧栏会话", "页签不是「笔记 / 翻译 / 会话」三个：%r" % (h0["tabs"],))
+                    elif h0["hd"] != "本课程会话" or h0["ph"] != "只在本课程内提问…":
+                        bad("W19 侧栏会话", "标题/输入框文案对不上设计稿：%r / %r"
+                            % (h0["hd"], h0["ph"]))
+                    elif "一门课一个会话" not in h0["tip"]:
+                        bad("W19 侧栏会话", "底部说明小字不对：%r" % (h0["tip"],))
+                    elif not h0["hasCross"]:
+                        bad("W19 侧栏会话", "没有「引用其他课件」那个开关")
+                    elif h0["u"] < 1 or h0["a"] < 1 or h0["who"][:2] != ["我", "羽毛笔"]:
+                        bad("W19 侧栏会话", "会话没从本机读回来（气泡 %r / 说话人 %r）"
+                            % (h0["u"], h0["who"]))
+                    elif h0["bgU"] in ("rgba(0, 0, 0, 0)", "transparent") or h0["indentU"] in ("0px", ""):
+                        bad("W19 侧栏会话", "「我」的气泡不是灰底靠右：底色 %r / 左缩进 %r"
+                            % (h0["bgU"], h0["indentU"]))
+                    elif h0["borderA"] == "0px":
+                        bad("W19 侧栏会话", "「羽毛笔」的气泡没有边框（白底带边框）")
+                    elif not h0["cites"]:
+                        bad("W19 侧栏会话", "回答下面没有「课件 p.N」出处片")
+                    else:
+                        # 先测提问（这一份临时数据里没有 API key）：必须明说「没发给模型」，不许出答案。
+                        # 顺序上是「先提问、再点出处片」——一处失败不把另一处也带红，红的时候也看得清是哪件。
+                        api_rsp = {}
+
+                        def _on_resp(r):
+                            if "/api/ask" in r.url:
+                                try:
+                                    api_rsp.update(r.json())
+                                except Exception:  # noqa: BLE001
+                                    api_rsp["_raw"] = "（响应不是 JSON）"
+
+                        page.on("response", _on_resp)
+                        a_before = page.evaluate("document.querySelectorAll('#sideChat .msg.a').length")
+                        page.fill("#scQ", "W19 自测：没有 key 时这一问会怎样？")
+                        page.click("#scGo")
+                        try:
+                            page.wait_for_function(
+                                "document.querySelectorAll('#sideChat .msg.a.warn').length > 0",
+                                timeout=30000)
+                        except Exception:  # noqa: BLE001
+                            pass                       # 没出提示就往下量一次，红的理由里带上接口回了什么
+                        time.sleep(0.5)
+                        ask = page.evaluate("""() => {
+                          const w = document.querySelector('#sideChat .msg.a.warn');
+                          const all = [...document.querySelectorAll('#sideChat .msg.a')];
+                          return {warn: document.querySelectorAll('#sideChat .msg.a.warn').length,
+                                  warnText: w ? w.textContent : '',
+                                  aAll: all.length,
+                                  lastA: all.length ? all[all.length - 1].textContent : '',
+                                  toast: (document.querySelector('#toast')||{}).textContent || '',
+                                  goEnabled: !document.getElementById('scGo').disabled};
+                        }""")
+                        try:
+                            page.remove_listener("response", _on_resp)
+                        except Exception:  # noqa: BLE001
+                            pass
+                        if ask["warn"] < 1:
+                            bad("W19 侧栏会话", "没 key 提问后没有提示气泡（/api/ask 回 %r；"
+                                "最后一条气泡 %r；提示条 %r）"
+                                % (api_rsp, ask["lastA"][:60], ask["toast"][:40]))
+                        elif "没有发给模型" not in ask["warnText"]:
+                            bad("W19 侧栏会话", "没 key 的提示没把话说清：%r"
+                                % (ask["warnText"][:70],))
+                        elif ask["aAll"] != a_before + 1:
+                            bad("W19 侧栏会话", "除了提示还多出 %d 条回答（没 key 不该有答案）"
+                                % (ask["aAll"] - a_before - 1))
+                        else:
+                            # 出处片：单击 → 打开这一讲原件的那一页（p.3，原件 8 页里的第 3 页）
+                            page.click("#sideChat .msg .cite")
+                            try:
+                                page.wait_for_function(
+                                    "document.querySelector('#rTitle').textContent.indexOf('Sample 01') >= 0",
+                                    timeout=25000)
+                            except Exception:  # noqa: BLE001
+                                pass
+                            time.sleep(0.8)
+                            jp = page.evaluate("""() => ({
+                              title: document.querySelector('#rTitle').textContent.trim(),
+                              pg: document.querySelector('#pgVal').textContent.trim(),
+                              toast: (document.querySelector('#toast')||{}).textContent || ''
+                            })""")
+                            if "Sample 01" not in jp["title"] or jp["pg"] != "3 / 8":
+                                bad("W19 侧栏会话", "点出处片没打开原件 p.3：标题 %r、页码 %r（提示 %r）"
+                                    % (jp["title"], jp["pg"], jp["toast"][:40]))
+                            elif "打开原件" not in jp["toast"]:
+                                bad("W19 侧栏会话", "跳过去了但没提示：%r" % (jp["toast"],))
+                            else:
+                                # 清除：只清这门课那一份，清完列表空、回到空态提示
+                                page.click("#tabChat")
+                                time.sleep(0.4)
+                                page.click("#scClear")
+                                time.sleep(1.2)
+                                gone = page.evaluate("""() => ({
+                                  msgs: document.querySelectorAll('#sideChat .msg').length,
+                                  empty: !!document.querySelector('#sideChat .sc-empty')
+                                })""")
+                                if gone["msgs"] != 0 or not gone["empty"]:
+                                    bad("W19 侧栏会话", "点了「清除」还留着 %d 条消息（空态提示 %r）"
+                                        % (gone["msgs"], gone["empty"]))
+                                else:
+                                    ok("W19 侧栏会话",
+                                       "三页签（%s）；气泡「我」灰底靠右、「羽毛笔」带边框；"
+                                       "没 key 提问只出提示（%s）；出处片「%s」→ %s 的 %s；清除后归零"
+                                       % (" / ".join(h0["tabs"]), ask["warnText"][:20],
+                                          h0["cites"][0], jp["title"], jp["pg"]))
+                except Exception as e:  # noqa: BLE001
+                    bad("W19 侧栏会话", "没验成：%r" % (e,))
 
             # ---- W12 滚动条槽固定：有没有滚动条，内容宽度都不变 ----
             try:

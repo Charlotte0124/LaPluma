@@ -142,6 +142,11 @@ def load_config(explicit_key: str | None = None) -> dict:
     """按三级顺序取配置；全空则报错，不静默降级。"""
     cfg = {"provider": "DeepSeek", "base_url": DEFAULT_BASE, "model": DEFAULT_MODEL, "api_key": "", "source": ""}
 
+    if os.environ.get("PLUMA_DISABLE_KEY", "").strip() not in ("", "0"):
+        # 自测隔离（2026-11-23）：临时数据根里不该摸到真 key（含 PRTS secrets 回退）；
+        # 置空让调用方走「未配置」分支，测试不会真花钱。
+        return cfg
+
     env = os.environ.get("PLUMA_API_KEY", "").strip()
     if env:
         cfg["api_key"] = env
