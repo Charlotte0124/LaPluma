@@ -552,6 +552,19 @@ html,body{background:var(--bg)}
 #sideChat .sc-cross:hover{border-color:var(--sub);color:var(--ink)}
 #sideChat .sc-cross input{width:11px;height:11px;margin:0;accent-color:var(--ink)}
 #sideChat .sc-in .tip{font-size:10.5px;color:var(--faint);margin-top:6px;line-height:1.5}
+/* 2026-11-23 用户：「会话需要一条自己的页面滑动条，不然整个 app 只会一直被拉长」。
+   会话页签给侧栏一个定高（与阅读器同一口径），溢出只发生在 .sc-log 里；
+   窄屏（阅读器在上、侧栏在下）最多占 70vh，同样不会把整页撑长。 */
+.read-card.chat-on .side{height:calc(100vh - 190px);min-height:380px;max-height:calc(100vh - 190px);overflow:hidden}
+.read-card.chat-on #sideChat{height:auto}
+#sideChat .sc-log{scrollbar-gutter:stable;overscroll-behavior:contain}
+#sideChat .sc-log::-webkit-scrollbar{width:8px}
+#sideChat .sc-log::-webkit-scrollbar-track{background:transparent}
+#sideChat .sc-log::-webkit-scrollbar-thumb{background:var(--line);border-radius:4px}
+#sideChat .sc-log::-webkit-scrollbar-thumb:hover{background:var(--faint)}
+@media (max-width:980px){
+  .read-card.chat-on .side{height:min(70vh,560px);min-height:340px;max-height:70vh}
+}
 .nitem .m{display:flex;gap:8px;font-size:11px;color:var(--faint);font-family:Consolas,monospace;margin-bottom:4px;border:0;padding:0}
 /* 2026-11-22：列表里带出这条笔记引用的原文（灰、小字），一眼看出它是拿哪段话起的 */
 .nitem .nq{font-size:11.5px;line-height:1.6;color:var(--faint);background:var(--card2);border-radius:6px;
@@ -2962,6 +2975,9 @@ function sideTab(which){
   // 2026-11-23：多了第三个页签「会话」——三块面板互斥，页签高亮跟着走。
   const t = (which === 'trans' || which === 'chat') ? which : 'notes';
   const n = $('#sideNotes'), s = $('#sideTrans'), c = $('#sideChat');
+  // 2026-11-23 用户：会话一长整个应用被拉长——给「会话」页签一个定高容器（见 CSS .chat-on）
+  const card = document.querySelector('.read-card');
+  if(card) card.classList.toggle('chat-on', t === 'chat');
   if(n) n.hidden = (t !== 'notes');
   if(s) s.hidden = (t !== 'trans');
   if(c) c.hidden = (t !== 'chat');
@@ -3184,7 +3200,7 @@ async function askSide(){
     }else if(j.need_key){
       SC.messages.push({ role:'a', warn:true,
         text:'还没配置 API 密钥，这一问**没有发给模型**，所以也没有答案。到右上「设置」里填好 key 再问一次；' +
-             '下面这些片段是本机检索出来的，不发出去就不花钱。', refs: j.refs || [] });
+             '下面这些片段是本机检索出来的，不产生调用费用。', refs: j.refs || [] });
     }else{
       SC.messages.push({ role:'a', warn:true,
         text:'这一问没拿到回答：' + (j.error || '未知原因') + '（可以改一下再问一次。）', refs: j.refs || [] });
