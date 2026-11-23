@@ -176,6 +176,17 @@
 9. **表格补结构化文字**（2026-11-23）：`get_text("text")» 把表格拍平成一行行文字、列关系全丢。有真表（≥2 行 2 列）时 `_table_text()» 补一段「行1: a | b | c」；没有表格的页一个字都不加（实测 11 份真实课件只有 3 份有表、共 6 张）。
 
 **怎么验证它被执行**：`python tools\check\check-figure-pick.py» **5 项全绿** + `--selftest» 四个方向都变红；`python tools\check\check-draft-chunks.py» **3 项全绿** + `--selftest» 变红；真实课件复算：`生物学\Lecture 1» 57 页 → 45 页真图 → 导出 40 张（p.41–55 全部回来，10 个徽标页出局，另 5 页低分真图被点名）。
+## 十六、新功能先在截图覆盖表占位，推送前补齐（2026-11-23 用户定）
+
+**口径正本在 PRTS**：`PRTS\CONVENTIONS.md` §42 的 **R122**（2026-11-23 用户定：「以后检测有新功能 截图的那边就要增加一个空位留补 等推送的时候再截图」）；PRTS 侧 `template\toolchain\check\check-shot-coverage.ps1` 会遍历 `registry\ui-repos.json` 跑到本仓。本仓只留执行件，不复制正文。
+
+1. **登记表**：`docs\资产\截图覆盖.md`——功能总表里每条 ✅/🟡 一行；有图写 `界面-*.png` 文件名，没图写「待补 · 推送前」+ 原因。
+2. **判据**：`python tools\check\check-shot-coverage.py`（提交钩子自动跑；`--selftest` 三红两绿）。
+3. **推送前**把「待补」换成真图（PrintWindow，真窗口）；凑不出来的写清为什么，不许把「待补」留进 release。
+4. **截图脚本不进仓**（§十四）：拍照脚本在 PRTS `projects\课程\ops\lapluma\截图脚本-20261122\shots-real.py`，本仓只放图。
+
+**怎么验证它被执行**：`check-shot-coverage.py` 全绿 + `--selftest` 5/5；PRTS `prts.ps1 -Verify` 的「截图覆盖（R122）」一项。
+
 ## 十三、判据清单（谁是自动跑、谁是手动跑）
 
 | 判据 | 跑法 |
@@ -194,6 +205,7 @@
 | `check-citation-jump.py` | 提交钩子自动（讲义里的「课件 p.N」可点：/api/orig-of 认原件、只有单击才跳、翻到该页；6 项） |
 | `check-cite-verify.py` | 手动 + 生成时（`audit_lesson.py --content` 顺带跑）：出处标注可核——句与原件该页文字重合低于阈值就报「疑似标错」并给出更像的页；只报告不拦（8 项） |
 | `check-repo-clean.py` | 提交钩子自动（产品仓只放能跑的代码；courses.json 只留 DEMO） |
+| `check-shot-coverage.py` | 提交钩子自动（功能总表 ↔ 截图覆盖表 ↔ docs\资产 三边对上；新功能没占位 = 红） |
 | `check-rules-wired.py` | 提交钩子自动（本文件与 tools/check 对账） |
 | `check-error-guard.py` | 手动：`python tools\check\check-error-guard.py`（打 14 条坏请求验错误兜底） |
 | `check-fresh-install.py` | 手动：全新配置跑一遍首启流程 |

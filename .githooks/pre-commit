@@ -37,6 +37,9 @@ echo "[hook] 内联脚本语法 check-inline-js ..."
 python -X utf8 tools/check/check-inline-js.py || { echo "[hook] 界面内联脚本有语法错：提交已拦下"; exit 1; }
 echo "[hook] 产品仓只放代码 check-repo-clean ..."
 python -X utf8 tools/check/check-repo-clean.py || { echo "[hook] 仓里混进了后台资源/真课件：提交已拦下"; exit 1; }
+# 2026-11-23 用户：「以后检测有新功能 截图的那边就要增加一个空位留补 等推送的时候再截图」
+echo "[hook] 截图覆盖 check-shot-coverage ..."
+python -X utf8 tools/check/check-shot-coverage.py || { echo "[hook] 新功能没在截图覆盖表占位 / 登记了不存在的图：提交已拦下"; exit 1; }
 echo "[hook] 规矩接线 check-rules-wired ..."
 python -X utf8 tools/check/check-rules-wired.py || { echo "[hook] 规矩与判据没对上：提交已拦下"; exit 1; }
 echo "[hook] 通过"
