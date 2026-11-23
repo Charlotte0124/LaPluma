@@ -298,6 +298,11 @@ def load_lesson(course: str, no: str) -> dict:
     """按 <课程>/_lessons/<讲>.py 读数据（引擎的 builder.load 写死了 CS340，这里按课程走）。"""
     import importlib.util as ilu
     path = paths.data_or_res(course, "_lessons", no + ".py")
+    # 2026-11-23：英文档只有 <讲>.en.py 时（如 CS340/T01）也要能读；问答侧不再把这一讲丢掉。
+    if not os.path.isfile(path):
+        p_en = paths.data_or_res(course, "_lessons", no + ".en.py")
+        if os.path.isfile(p_en):
+            path = p_en
     if not os.path.isfile(path):
         raise FileNotFoundError(path)
     spec = ilu.spec_from_file_location("lesson_%s_%s" % (_safe_code(course), _safe_code(no)), path)
@@ -314,6 +319,20 @@ def find_lesson(course: str) -> list[str]:
         if os.path.isdir(d):
             names.update(x[:-3] for x in os.listdir(d)
                          if x.endswith(".py") and not x.endswith(".en.py"))
+    return sorted(names)
+
+
+def find_lesson_qa(course: str) -> list[str]:
+    """问答用讲次列表：在 find_lesson 之上再收 <讲>.en.py。
+
+    为什么单列：生成页只认 <讲>.py（英文档是中文讲的另一份，不能拿去生成）；
+    但问答/阅读侧栏要按 PDF 认讲，T01 这种只有 T01.en.py 的讲不能被当成「没有这一讲」。
+    """
+    names = set(find_lesson(course))
+    for root in (paths.DATA_ROOT, paths.RES_ROOT):
+        d = os.path.join(root, course, "_lessons")
+        if os.path.isdir(d):
+            names.update(x[:-6] for x in os.listdir(d) if x.endswith(".en.py"))
     return sorted(names)
 
 
@@ -796,7 +815,7 @@ def course_pdfs(code: str) -> list:
     return out
 
 
-def lesson_of_doc(course: str, doc: str) -> str:
+def lesson_of_doc(course: str, doc: str, names: list[str] | None = None) -> str:
     """这份讲义 PDF 属于哪一讲：从文件名前缀 <讲号>_ 认（'L01_进程' → L01，'T02-2_…' → T02-2）。
 
     为什么要从文件名反推：阅读页手里只有 RD.rel（<课程>/01_讲义/<文件名>），
@@ -806,7 +825,7 @@ def lesson_of_doc(course: str, doc: str) -> str:
     base = os.path.basename((doc or "").replace("\\", "/"))
     low = os.path.splitext(base)[0].lower()
     hit = ""
-    for no in find_lesson(course):
+    for no in (names if names is not None else find_lesson(course)):
         n = no.lower()
         if (low == n or low.startswith(n + "_")) and len(no) > len(hit):
             hit = no
@@ -2289,7 +2308,7 @@ class Handler(BaseHTTPRequestHandler):
                 # 2026-11-23：阅读侧栏「会话」没有右侧讲次勾选，只带「当前这份讲义」。
                 # 讲号由 lesson_of_doc 认（只复用那一处映射）；认不出（合订本/附页/原件）就整门课。
                 if not only and not no and body.get("doc"):
-                    one = lesson_of_doc(code, str(body.get("doc")))
+                    one = lesson_of_doc(code, str(body.get("doc")), find_lesson_qa(code))
                     if one:
                         only = [one]
                 question = str(body.get("question") or "").strip()
@@ -2299,7 +2318,7 @@ class Handler(BaseHTTPRequestHandler):
                 mod = load_ask_module()
                 if mod is None:
                     return self._json({"ok": False, "error": "缺少 engine/_ask.py"}, 500)
-                avail_all = find_lesson(code)
+                avail_all = find_lesson_qa(code)
                 # 2026-11-23 用户：在 L03 里问「L01 在说什么」拿不到 L01 的片段。
                 #   问题里点了讲号就按讲号走，而不是死守当前这份讲义。
                 if not no and question:
@@ -2332,7 +2351,7 @@ class Handler(BaseHTTPRequestHandler):
                         continue
                     if first is None:
                         first = lesson
-                    for r in mod.search(lesson, question, top_k=3):
+                    for r in mod.search(lesson, question, top_k=6):
                         r = dict(r)
                         r["course"], r["lesson"] = c, n
                         picked.append(r)
