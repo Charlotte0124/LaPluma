@@ -1191,6 +1191,18 @@ def load_translate_history() -> list:
     return [x for x in data if isinstance(x, dict)][:TRANS_HISTORY_MAX]
 
 
+def _lang_guess(text: str) -> str:
+    """粗判原文语言：汉字够多算中文，纯拉丁且够长算英文；判断不了就返回空。"""
+    t = text or ""
+    cjk = len(re.findall(r"[\u4e00-\u9fff]", t))
+    lat = len(re.findall(r"[A-Za-z]", t))
+    if cjk >= 4 and cjk * 3 >= lat:
+        return "zh"
+    if lat >= 12 and cjk == 0:
+        return "en"
+    return ""
+
+
 def push_translate_history(src: str, dst: str, to: str, page: int) -> list:
     try:
         page_n = max(1, int(page or 1))
@@ -2231,6 +2243,14 @@ class Handler(BaseHTTPRequestHandler):
                         return self._json({"ok": False, "error": "读不到这一页：%r" % (e,)}, 500)
                 if len(src) < 2:
                     return self._json({"ok": False, "error": "这一页没有文字层（扫描件/图片）"}, 400)
+                # 2026-11-23 用户：「没转换那个箭头」——原文语言和目标语言相同就直接说，
+                #   不再花一次模型调用换回一段空译文。
+                guessed = _lang_guess(src)
+                if guessed == to:
+                    return self._json({"ok": False, "suggest_to": ("zh" if guessed == "en" else "en"),
+                                       "source_lang": guessed,
+                                       "error": "原文看起来已经是%s，方向可能选反了；切换方向再翻译"
+                                                % ("英文" if guessed == "en" else "中文")}, 400)
                 cfg = load_cfg()
                 if api_client is None or not cfg.get("api_key"):
                     return self._json({"ok": False, "need_key": True, "error": "没配置 API 钥匙，不能翻译"}, 400)
@@ -2245,7 +2265,11 @@ class Handler(BaseHTTPRequestHandler):
                 except Exception as e:  # noqa: BLE001
                     return self._json({"ok": False, "error": "翻译失败：%s" % e}, 502)
                 log_usage(out.get("model") or cfg["model"], out.get("usage") or {})
-                text = out.get("text", "")
+                text = str(out.get("text") or "").strip()
+                if not text:
+                    return self._json({"ok": False,
+                                       "error": "模型没有返回译文（可能方向选反了，或这段没有可译内容）",
+                                       "suggest_to": ("zh" if guessed == "en" else "en") if guessed else ""}, 502)
                 # 2026-11-22：成功一次记一条历史（最多 5 条），随响应回给界面直接重画列表。
                 history = push_translate_history(src, text, to, page)
                 return self._json({"ok": True, "text": text, "page": page,

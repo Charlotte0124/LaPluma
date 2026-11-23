@@ -502,6 +502,17 @@ html,body{background:var(--bg)}
   margin:9px 0 9px}
 .tr-dir #trFrom,.tr-dir #trTo{min-width:34px;text-align:center}
 .tr-swap{padding:2px 9px;font-size:13px;line-height:1.2}
+/* 2026-11-23 用户：「没转换那个箭头，所以要自动检测询问是否要转换」——像浏览器翻译条 */
+.tr-lang{display:flex;flex-direction:column;gap:5px;margin:0 0 10px;padding:8px 10px;
+  background:var(--card2);border:1px solid var(--line);border-radius:10px}
+.tr-lang[hidden]{display:none}
+.tr-lang .tl-top{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.tr-lang b{font-size:12.5px;font-weight:600;line-height:1.4}
+.tr-lang span{font-size:10.5px;color:var(--sub);line-height:1.5}
+.tr-lang .tl-go{width:100%;padding:5px 10px;font-size:11.5px;margin-top:2px}
+.tr-lang .tl-x{border:0;background:transparent;color:var(--faint);font-size:15px;line-height:1;
+  padding:2px 3px;flex:0 0 auto}
+.tr-lang .tl-x:hover{color:var(--ink)}
 #sideTrans textarea#trSrc{width:100%;min-height:92px;margin:0;border:1px solid var(--line);background:var(--card2);
   border-radius:9px;padding:9px 11px;color:var(--ink);font:inherit;font-size:12.5px;resize:vertical;outline:none}
 #sideTrans textarea#trSrc:focus{border-color:var(--ink);background:var(--card)}
@@ -1033,6 +1044,13 @@ body.win #appScroll{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden
             <div class="tr-head">
               <h5>第 <span id="curP3">p.1</span> 页 · 翻译</h5>
               <button class="btn" id="trGo">翻译</button>
+            </div>
+            <!-- 2026-11-23 用户：方向忘记切换时，自动检测原文语言并问一句 -->
+            <div class="tr-lang" id="trLangHint" hidden>
+              <div class="tl-top"><b id="trLangTitle">说中文？</b>
+                <button class="tl-x" id="trLangClose" title="这次不切" aria-label="关掉">×</button></div>
+              <span id="trLangSub"></span>
+              <button class="btn tl-go" id="trLangSwap">切换方向</button>
             </div>
             <!-- 2026-11-22 用户：翻译要「两个框 + 中间一个 ↑↓」——上面只读输入，下面出译文；
                  出了译文，下面才出现「引用翻译记成笔记」。 -->
@@ -3059,21 +3077,68 @@ function transNote(text, page){
   const src = ($('#trSrc') && $('#trSrc').value || '').trim();
   openNotePage('【译文 p.' + page + '】' + String(text || '').trim(), 'trans', src);
 }
+/* 2026-11-23 用户：「没转换那个箭头，所以要自动检测询问是否要转换」。
+   先按汉字/拉丁字母比例猜原文语言；和当前目标语言相同就提示切换，不发注定翻反的请求。 */
+function trLangOf(text){
+  const t = String(text || '');
+  const cjk = (t.match(/[\u4e00-\u9fff]/g) || []).length;
+  const lat = (t.match(/[A-Za-z]/g) || []).length;
+  if(cjk >= 4 && cjk * 3 >= lat) return 'zh';
+  if(lat >= 12 && cjk === 0) return 'en';
+  return '';
+}
+function trHintKey(){
+  const txt = ($('#trSrc') && $('#trSrc').value || '').trim();
+  return TR.to + '|' + txt.slice(0, 80);
+}
+function hideTrLangHint(){
+  const box = $('#trLangHint');
+  if(box) box.hidden = true;
+}
+function showTrLangHint(srcLang){
+  const box = $('#trLangHint'); if(!box) return;
+  TR.hintLang = srcLang;
+  const zh = srcLang === 'zh';
+  const other = zh ? 'en' : 'zh';
+  if($('#trLangTitle')) $('#trLangTitle').textContent = zh ? '译成英文？' : '说中文？';
+  const from = TR.to === 'en' ? 'zh' : 'en';
+  if($('#trLangSub')) $('#trLangSub').textContent = '原文看起来是' + (zh ? '中文' : '英文') +
+    '；当前方向是 ' + LANG_NAME[from] + ' → ' + LANG_NAME[TR.to];
+  if($('#trLangSwap')) $('#trLangSwap').textContent = '切换为 ' + LANG_NAME[srcLang] + ' → ' + LANG_NAME[other];
+  box.hidden = false;
+}
+function updateTrLangHint(){
+  const txt = ($('#trSrc') && $('#trSrc').value || '').trim();
+  const guess = trLangOf(txt);
+  if(guess && guess === TR.to && TR.hintClosedKey !== trHintKey()){
+    showTrLangHint(guess);
+    return true;
+  }
+  hideTrLangHint();
+  return false;
+}
 function renderTransResult(text, page){
   const out = $('#trOut'); if(!out) return;
+  const body = String(text || '').trim();
+  // 2026-11-23 用户：方向反了时模型可能回空内容，界面不能再摆一对没用的复制按钮
+  if(!body){
+    out.classList.remove('empty');
+    out.innerHTML = '<div class="hint" style="border:0;color:var(--red)">模型没有返回译文（可能方向选反了），换方向或重试一次</div>';
+    return;
+  }
   // 2026-11-22 用户：出了译文，下面才出现「引用翻译记成笔记」
   out.classList.remove('empty');
-  out.innerHTML = '<div class="trans" id="trText">' + esc(text || '') + '</div>' +
+  out.innerHTML = '<div class="trans" id="trText">' + esc(body) + '</div>' +
     '<div class="acts" style="justify-content:flex-start">' +
       '<button class="btn ghost" id="trCopy">复制译文</button>' +
       '<button class="btn" id="trNote">引用翻译记成笔记</button></div>';
   const cp = $('#trCopy');
   if(cp) cp.onclick = async () => {
-    try{ await navigator.clipboard.writeText(text || ''); toast('译文已复制'); }
+    try{ await navigator.clipboard.writeText(body); toast('译文已复制'); }
     catch(e){ toast('复制失败，请手动选中'); }
   };
   const nn = $('#trNote');
-  if(nn) nn.onclick = () => transNote(text || '', page || RD.page);
+  if(nn) nn.onclick = () => transNote(body, page || RD.page);
 }
 /* 2026-11-22 用户：翻译页签顶部列「最近 5 条」，点一条回填 #trSrc 与译文。 */
 function renderTransHistory(items){
@@ -3109,10 +3174,34 @@ async function transPage(to){
   out.classList.remove('empty');
   out.innerHTML = '<div class="hint" style="border:0">翻译中…（一次模型调用）</div>';
   const typed = ($('#trSrc') && $('#trSrc').value || '').trim();
+  if(typed){
+    const guess = trLangOf(typed);
+    if(guess && guess === to){
+      TR.pendingTranslate = true;
+      showTrLangHint(guess);
+      out.innerHTML = '<div class="hint" style="border:0;color:var(--red)">原文看起来是' +
+        (guess === 'zh' ? '中文' : '英文') + '，方向和原文一样；先点上面的「切换为…」再译。</div>';
+      return;
+    }
+  }
   try{
     const j = await (await fetch('/api/translate',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify(typed ? {text: typed, to} : {rel:RD.rel, page:RD.page, to})})).json();
-    if(!j.ok){ out.innerHTML = '<div class="hint" style="border:0;color:var(--red)">' + esc(j.error||'翻译失败') + '</div>'; return; }
+    if(!j.ok){
+      if(j.suggest_to){
+        TR.pendingTranslate = true;
+        showTrLangHint(j.suggest_to);
+        out.innerHTML = '<div class="hint" style="border:0">原文看起来是' +
+          (j.suggest_to === 'zh' ? '中文' : '英文') + '，方向可能反了；点上面的「切换为…」再译。</div>';
+        return;
+      }
+      out.innerHTML = '<div class="hint" style="border:0;color:var(--red)">' + esc(j.error||'翻译失败') + '</div>';
+      return;
+    }
+    if(!String(j.text || '').trim()){
+      out.innerHTML = '<div class="hint" style="border:0;color:var(--red)">模型没有返回译文（可能方向选反了），换方向或重试一次</div>';
+      return;
+    }
     renderTransResult(j.text || '', atPage);
     if(j.history) renderTransHistory(j.history);
   }catch(e){ out.innerHTML = '<div class="hint" style="border:0;color:var(--red)">请求失败：' + esc(String(e)) + '</div>'; }
@@ -3124,7 +3213,8 @@ $('#btnTrans').onclick = () => {
   if($('#curP3')) $('#curP3').textContent = p;
 };
 /* 2026-11-22 用户：翻译两个框 + 中间一个 ↑↓；上面输入、下面出结果，方向点 ↑↓ 交换。 */
-const TR = { to: 'en' };          // to = 目标语言；zh→en 或 en→zh
+const TR = { to: 'en', hintLang: '', hintClosedKey: '', pendingTranslate: false, hintTimer: 0 };
+// to = 目标语言；hintLang = 检测到的原文语言；hintClosedKey = 用户关掉过哪一条提示
 const LANG_NAME = { zh: '中文', en: '英文' };
 function syncTrDir(){
   const from = TR.to === 'en' ? 'zh' : 'en';
@@ -3136,6 +3226,8 @@ function syncTrDir(){
 }
 if($('#trSwap')) $('#trSwap').onclick = () => {
   TR.to = TR.to === 'en' ? 'zh' : 'en';
+  TR.hintClosedKey = ''; TR.pendingTranslate = false;
+  hideTrLangHint();
   syncTrDir();
   // 交换时把已有结果挪到上面，直接可以「反向再翻」
   const out = $('#trText');
@@ -3146,6 +3238,23 @@ if($('#trSwap')) $('#trSwap').onclick = () => {
   }
   toast('方向：' + ($('#trFrom').textContent) + ' → ' + ($('#trTo').textContent));
 };
+if($('#trLangSwap')) $('#trLangSwap').onclick = () => {
+  const src = TR.hintLang; if(!src) return;
+  TR.to = src === 'zh' ? 'en' : 'zh';
+  TR.hintClosedKey = '';
+  hideTrLangHint();
+  syncTrDir();
+  const again = TR.pendingTranslate; TR.pendingTranslate = false;
+  if(again) transPage(TR.to);
+};
+if($('#trLangClose')) $('#trLangClose').onclick = () => {
+  TR.hintClosedKey = trHintKey();
+  hideTrLangHint();
+};
+if($('#trSrc')) $('#trSrc').addEventListener('input', () => {
+  clearTimeout(TR.hintTimer);
+  TR.hintTimer = setTimeout(updateTrLangHint, 220);
+});
 syncTrDir();
 if($('#trGo')) $('#trGo').onclick = () => transPage(TR.to);
 if($('#tabNotes')) $('#tabNotes').onclick = () => sideTab('notes');
