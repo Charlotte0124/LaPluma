@@ -2299,10 +2299,23 @@ class Handler(BaseHTTPRequestHandler):
                 mod = load_ask_module()
                 if mod is None:
                     return self._json({"ok": False, "error": "缺少 engine/_ask.py"}, 500)
-                targets = [(code, no)] if no else [(code, x) for x in find_lesson(code)]
+                avail_all = find_lesson(code)
+                # 2026-11-23 用户：在 L03 里问「L01 在说什么」拿不到 L01 的片段。
+                #   问题里点了讲号就按讲号走，而不是死守当前这份讲义。
+                if not no and question:
+                    named = [x for x in avail_all
+                             if re.search(r'(?<![0-9A-Za-z])' + re.escape(x) + r'(?![0-9A-Za-z-])',
+                                          question, re.I)]
+                    if named:
+                        only = named
+                targets = [(code, no)] if no else [(code, x) for x in avail_all]
                 if only and not no:
-                    avail = set(find_lesson(code))
-                    targets = [(code, x) for x in only if x in avail] or targets
+                    avail = set(avail_all)
+                    hit = [(code, x) for x in only if x in avail]
+                    if hit:
+                        targets = hit
+                    elif len(only) == 1:
+                        return self._json({"ok": False, "error": "这一讲还没有可检索的数据：%s" % only[0]}, 400)
                 if allow_cross:
                     for c in discover_courses():
                         if c["code"] != code:
