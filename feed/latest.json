@@ -1,28 +1,26 @@
 {
   "schema": "lapluma-feed-v1",
   "product": "LaPluma",
-  "latest": "1.9.9",
-  "title": "v1.9.9 · 更新源从 2 个变 4 个并并行读取，发版后能立刻拿到新",
-  "released": "2026-11-17",
-  "summary": "更新源从 2 个变 4 个并并行读取，发版后能立刻拿到新版，不会因为某个 CDN 缓存被降级",
+  "latest": "1.9.18",
+  "title": "v1.9.18 · 翻译加离线语言包（侧栏「管理」常驻）",
+  "released": "2026-11-24",
+  "summary": "翻译加离线语言包（侧栏「管理」常驻）；默认在线优先、缺 key/断网/在线失败自动离线；状态条翻一次收起",
   "notes": [
-    "更新源加到四个、并行读：raw 与 jsDelivr 之外再加 githack 与 statically",
-    "代价说清楚：每次检查更新最多 4 个 HTTP 请求（并发），比原来多，但单次就零点几秒"
+    "离线翻译：阅读侧栏「翻译」新增常驻的「管理」——点开在侧栏里选三档引擎（自动 / 仅在线 / 仅离线），并可下载 / 检查更新 / 删除离线语言包（opus-mt 中英双向，下载 139 MB、装好占",
+    "状态条翻一次就收起：引擎 / 离线包状态条只在第一次翻译前露一下，翻完写 localStorage 收起",
+    "首次下载自动装推理依赖：ctranslate2 + sentencepiece（约 24 MB），不装 argostranslate——它 1.11 会拉 stanza + spacy（连带 torc",
+    "离线只当兜底：实测会翻错术语（Biomolecules→生物多分子、免疫→immunogeny、泌尿→urin），不要改成「仅离线」当默认",
+    "窗口模式不再静默变浏览器：启动器补上 pywebview 检查并自动安装",
+    "应用内更新恢复可用：v1.9.15 改文件夹版后，更新清单一直停在 1.9.9、apply_update 只认 .exe，所以卡片不出现、出现也装不上"
   ],
-  "page": "https://github.com/Charlotte0124/LaPluma/releases/tag/v1.9.9",
+  "page": "https://github.com/Charlotte0124/LaPluma/releases/tag/v1.9.18",
   "assets": {
-    "exe": {
-      "url": "https://github.com/Charlotte0124/LaPluma/releases/download/v1.9.9/LaPluma.exe",
-      "size": 119631354,
-      "sha256": "878b324f95b8a3dfc2904b5950d037c5ba18dd6eff1ece65dfdf0505457f5c5a",
-      "name": "LaPluma.exe"
-    },
-    "res": {
-      "url": "https://github.com/Charlotte0124/LaPluma/releases/download/v1.9.9/LaPluma-res.zip",
-      "size": 6025500,
-      "sha256": "7afc70fb3db7f9ee78896c421e19c7f2a2b5dc57875dde1bbefa5f6e5e9ef93f",
-      "name": "LaPluma-res.zip"
+    "app": {
+      "url": "https://github.com/Charlotte0124/LaPluma/releases/download/v1.9.18/LaPluma-1.9.18.zip",
+      "size": 13117477,
+      "sha256": "c3f6f9e29762de85992419ebb26eb78655098bac95748dff93e018485db8cbf9",
+      "name": "LaPluma-1.9.18.zip"
     }
   },
-  "_generated": "2026-11-17 13:59:38"
+  "_generated": "2026-11-24 23:34:33"
 }
