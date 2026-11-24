@@ -37,6 +37,7 @@ import threading
 import time
 import urllib.parse
 import urllib.request
+import zipfile
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 try:
@@ -413,6 +414,97 @@ def run_checks(raise_on_fail: bool = False) -> int:
                 app3.terminate()
             except Exception:  # noqa: BLE001
                 pass
+        # --- 9 文件夹版：app 资产 → 下载 zip → 覆盖程序文件、保留用户数据 ---
+        froot = os.path.join(tmp, "folder-app")
+        os.makedirs(os.path.join(froot, "ui"))
+        os.makedirs(os.path.join(froot, "数学", "01_讲义"))
+        open(os.path.join(froot, "ui", "server.py"), "w", encoding="utf-8").write(
+            'VERSION = "1.9.4"' + chr(10))
+        open(os.path.join(froot, "一键启动.ps1"), "w", encoding="utf-8").write("# old" + chr(10))
+        open(os.path.join(froot, "courses.json"), "w", encoding="utf-8").write(
+            '{"DEMO": {}}' + chr(10))
+        open(os.path.join(froot, "courses.local.json"), "w", encoding="utf-8").write(
+            '{"数学": {}}' + chr(10))
+        open(os.path.join(froot, "数学", "01_讲义", "L01.pdf"), "wb").write(b"USER-PDF")
+        zpath = os.path.join(pub, "LaPluma-9.9.8.zip")
+        with zipfile.ZipFile(zpath, "w", zipfile.ZIP_DEFLATED) as z:
+            z.writestr("ui/server.py", 'VERSION = "9.9.8"' + chr(10))
+            z.writestr("一键启动.ps1", "# new" + chr(10))
+            # 包里故意带一个不同的 courses.json：现有文件必须不被覆盖
+            z.writestr("courses.json", '{"DEMO": {}, "不应覆盖": {}}' + chr(10))
+            z.writestr("feed/latest.json", "{}")
+        zb = open(zpath, "rb").read()
+        feed_app = {
+            "schema": "lapluma-feed-v1", "product": "LaPluma", "latest": "9.9.8",
+            "title": "v9.9.8 · 文件夹版", "summary": "文件夹版整包",
+            "notes": ["覆盖程序文件，用户数据不动"], "page": "",
+            "assets": {"app": {"url": pub_base + "/LaPluma-9.9.8.zip",
+                               "size": len(zb), "sha256": hashlib.sha256(zb).hexdigest(),
+                               "name": "LaPluma-9.9.8.zip"}},
+        }
+        open(os.path.join(pub, "feed_app.json"), "w", encoding="utf-8").write(
+            json.dumps(feed_app, ensure_ascii=False))
+        home_f = os.path.join(tmp, "home_folder")
+        portf = free_port()
+        basef = "http://127.0.0.1:%d" % portf
+        appf = start_app(portf, {"PLUMA_HOME": home_f,
+                                 "PLUMA_FEED_URLS": pub_base + "/feed_app.json",
+                                 "PLUMA_APPLY_ROOT": froot,
+                                 "PLUMA_NO_RELAUNCH": "1",
+                                 "PLUMA_NO_IMPORT": "1",
+                                 "PLUMA_UPDATE_URL": "http://127.0.0.1:1/nope"},
+                         os.path.join(tmp, "appf.log"))
+        try:
+            if not wait_up(basef):
+                note(False, "文件夹版更新：服务没起来")
+                red += 1
+            else:
+                jf = http_json(basef + "/api/update?force=1")
+                rf = http_json(basef + "/api/update/download", {"asset": "exe"})
+                state = ""
+                end = time.time() + 60
+                while time.time() < end:
+                    p = http_json(basef + "/api/update/progress")
+                    state = p.get("state")
+                    if state in ("done", "error"):
+                        break
+                    time.sleep(0.3)
+                raf = http_json(basef + "/api/update/apply", {"asset": "exe"})
+                end = time.time() + 60
+                while time.time() < end:
+                    try:
+                        if 'VERSION = "9.9.8"' in open(
+                                os.path.join(froot, "ui", "server.py"), encoding="utf-8").read():
+                            break
+                    except OSError:
+                        pass
+                    time.sleep(0.5)
+                time.sleep(1.2)
+                newv = 'VERSION = "9.9.8"' in open(
+                    os.path.join(froot, "ui", "server.py"), encoding="utf-8").read()
+                keep_pdf = (open(os.path.join(froot, "数学", "01_讲义", "L01.pdf"), "rb").read()
+                            == b"USER-PDF")
+                keep_cfg = (open(os.path.join(froot, "courses.json"), encoding="utf-8").read()
+                            == '{"DEMO": {}}' + chr(10))
+                logf = os.path.join(home_f, "update", "apply.log")
+                logtxt = open(logf, encoding="utf-8").read() if os.path.isfile(logf) else ""
+                baks = ([d for d in os.listdir(os.path.join(home_f, "update"))
+                         if d.startswith("backup-")] if os.path.isdir(os.path.join(home_f, "update")) else [])
+                okf = (jf.get("ok") and ((jf.get("assets") or {}).get("exe"))
+                       and rf.get("ok") and state == "done" and raf.get("ok")
+                       and newv and keep_pdf and keep_cfg
+                       and "folder apply ok" in logtxt and bool(baks))
+                note(okf, "文件夹版应用内更新（app 资产 → 覆盖程序 → 用户数据/课程不被覆盖 → 留备份）",
+                     "newer=%s exe别名=%s state=%s apply=%s 新版=%s 课程=%s courses.json=%s 备份=%s 日志=%r"
+                     % (jf.get("newer"), bool((jf.get("assets") or {}).get("exe")), state,
+                        raf.get("ok"), newv, keep_pdf, keep_cfg, baks, logtxt[-180:]))
+                red += 0 if okf else 1
+        finally:
+            try:
+                appf.terminate()
+            except Exception:  # noqa: BLE001
+                pass
+
     finally:
         for p in (app, need.get("app")):
             try:
@@ -441,7 +533,7 @@ def main() -> int:
     if red:
         print("\n结论：%d 条红" % red)
         return 1
-    print("\n结论：十一项全绿")
+    print("\n结论：十二项全绿")
     return 0
 
 

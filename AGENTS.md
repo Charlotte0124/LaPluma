@@ -217,3 +217,16 @@
 | `check-update.py` | 手动：应用内更新逻辑 |
 | `check-window-real.py` | 手动：真窗口量测 19 项（全屏矩形 / 选中框对位 / 成稿隐藏 / 右键菜单 / 出处可点 / 侧栏会话），`--drag` 含真实鼠标拖动；约 3 分钟 |
 | `_win_launch.py` | 不是判据：自测启动器（`PLUMA_TEST_DATA` 指临时数据根），只给 `check-window-real.py` 用 |
+
+## 十七、分发与升级（2026-11-24 用户定）
+
+**为什么有这条**：用户在三件事上同时踩坑——① 另一台设备打开 v1.9.17 是浏览器页，不是软件窗口（启动器只查 `pymupdf`，`import webview` 失败后静默退回浏览器）；② 应用内更新卡片不再出现（v1.9.15 改文件夹版后 `feed/latest.json` 停在 1.9.9，且 `apply_update` 只认 `.exe`）；③ 下载 1.9.17 后 1.9.16 的课程不在了（文件夹版的数据根就是程序目录，新目录自然没有旧课程）。
+
+1. **窗口组件是启动器的责任**：`一键启动.ps1` 必须检查 `pywebview`，缺了自动 `pip install pywebview`；`ui\server.py` 在窗口起不来时**先弹窗说明**（缺什么、怎么装、日志路径），不许静默打开浏览器。只有 `--no-window` 或用户明确点「先用浏览器」才走浏览器。
+2. **每次发版必须重生成更新清单**：`python tools\build\make-zip.py --version X` → `python tools\build\make-feed.py --version X --app dist\LaPluma-X.zip`；清单里的 `assets.app` 指向文件夹版整包，`sha256` 必须与上传到 Release 的 zip 一致。`make-zip.py` 剔除 `feed/latest.json`，所以「改清单」不会改变发布包 sha256。
+3. **文件夹版升级只覆盖程序文件**：`tools\upgrade\apply_folder.py` 等旧进程退出后覆盖 `ui` / `engine` / `tools` / `docs` 等，用户数据（`courses.local.json`、课程目录、`out`、`_logs`、`_trash`）一个都不动；`courses.json` 已存在时不覆盖；被覆盖的旧文件先备份到 `%USERPROFILE%\.pluma\update\backup-*`，失败自动回滚。
+4. **新目录首次启动要导入旧课程**：`upgrade.py` 按 `install.json` → 同级目录 → Downloads / Desktop 找旧数据根，只补目标缺的文件；旧目录原样保留。禁止用「让用户自己拷」当默认。
+5. **卸载旧版被占用**：先关窗口，再 `python upgrade.py --stop-old --kill` 结束占用 8765–8775 的旧实例；日志与命令写进 `docs\使用\10-怎么更新.md`。
+
+**怎么验证它被执行**：`python tools\check\check-distribution.py`（启动器必须有 `pywebview` 安装与 WebView2 提示、升级件齐全、make-feed 支持 `--app`）＋ `python tools\check\check-update.py`（第十二项：app 资产 → 下载 zip → 覆盖程序、保留课程、留备份、写 `folder apply ok`）。两项都由提交钩子或手动跑；不绿就是没接上。
+

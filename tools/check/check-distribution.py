@@ -50,6 +50,21 @@ def main() -> int:
         bt = boot.read_bytes().decode("utf-8-sig", "replace")
         if "pythonw" not in bt.lower() or "pymupdf" not in bt:
             fails.append("红 C: 一键启动.ps1 缺 pythonw 启动或 pymupdf 检查")
+        # v1.9.18 用户实测：另一台设备打开是浏览器页，根因是启动器只查 pymupdf。
+        if "pywebview" not in bt or "pip install" not in bt:
+            fails.append("红 D: 一键启动.ps1 没检查/安装 pywebview（窗口会退回浏览器）")
+        if "WebView2" not in bt:
+            fails.append("红 D: 一键启动.ps1 没提示 WebView2 运行时")
+    for rel, why in (
+        ("upgrade.py", "旧课程导入 / 关旧实例"),
+        ("tools/upgrade/apply_folder.py", "文件夹版应用内更新落地"),
+        ("tools/build/make-zip.py", "发布包构建"),
+    ):
+        if not (ROOT / rel).is_file():
+            fails.append("红 E: 缺升级件 %s（%s）" % (rel, why))
+    feedmaker = ROOT / "tools" / "build" / "make-feed.py"
+    if feedmaker.is_file() and "--app" not in feedmaker.read_text(encoding="utf-8"):
+        fails.append("红 E: make-feed.py 不支持 --app（文件夹版整包）")
     if fails:
         for f in fails:
             print(f)

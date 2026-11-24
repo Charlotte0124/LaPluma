@@ -92,8 +92,9 @@
 下载仓库压缩包（或 `git clone`）解压后，双击目录里的 `启动羽毛笔.cmd`：
 打开独立窗口（标题栏显示版本号），关闭窗口即退出。**不再提供单文件 exe**——exe 每次启动要先解包到临时目录，部分机器上会直接失败；文件夹版没有这一步。
 
-- 需要 Python 3.12（安装时勾上 Add python.exe to PATH）；其它依赖只有 `pymupdf`
+- 需要 Python 3.12（安装时勾上 Add python.exe to PATH）；依赖 `pymupdf` 与 `pywebview`（启动器会自动装；窗口还要系统 WebView2 运行时）
 - 导入的课程、生成的 PDF 与日志均位于**仓库目录**；配置在 `%USERPROFILE%\.pluma`
+- **升级**：把新压缩包解到任意新目录，首次启动会自动从旧目录导入课程（旧目录不动）；手动用法 `python upgrade.py --from <旧目录>`，细节见 [怎么更新](docs/使用/10-怎么更新.md)
 - 自带示例课程 `DEMO`（2 讲），内容数据齐备，**不配密钥也能出 PDF**；要换成自己的课，在仓库目录建 `<课程代码>\_lessons\` 并在 `courses.json` 里登记
 - 需要本机 Chrome 或 Edge（打印 PDF 用），无需另装
 
@@ -106,7 +107,7 @@ cd LaPluma
 ```
 
 - 双击 `启动羽毛笔.cmd`；**不要直接双击 `.ps1`**（默认设置下它会被记事本打开，不运行）
-- 需要 Python 3.12（脚本会检查版本并提示），依赖只有 `pymupdf`——缺了会**弹窗**：点「是」自动装，点「否」打开下载页
+- 需要 Python 3.12（脚本会检查版本并提示），依赖 `pymupdf` 与 `pywebview`——缺了会**弹窗**：点「是」自动装，点「否」打开下载页
 - 自动安装失败时参见 [用 CMD 装依赖](docs/使用/07-装依赖-用CMD.md)（三步，粘贴两行命令）
 - 需要本机 Chrome 或 Edge（用于打印 PDF，无需另行安装）
 - **仓库自带示例课程 `DEMO`**：无需准备任何教材，即可完整走一遍「数据 → 讲义 → PDF → 三道门」：
@@ -123,7 +124,7 @@ python engine\_make.py D01
 
 ## 一键启动
 
-`启动羽毛笔.cmd`（它调 `一键启动.ps1 -Windowed`）做三件事：查 Python 3.12 → 查 `pymupdf`（缺了弹窗安装 / 打开下载页）→ 启动界面（默认开原生窗口）。想看每一步用 `一键启动.ps1`，只查环境用 `-CheckOnly`，回浏览器页用 `-NoWindow`。**默认仅监听 127.0.0.1，不对外网开放。**
+`启动羽毛笔.cmd`（它调 `一键启动.ps1 -Windowed`）做四件事：查 Python 3.12 → 查 `pymupdf` → 查 `pywebview`（缺了弹窗安装）→ 启动界面（默认开原生窗口；缺 WebView2 会提示下载页）。想看每一步用 `一键启动.ps1`，只查环境用 `-CheckOnly`，回浏览器页用 `-NoWindow`。**默认仅监听 127.0.0.1，不对外网开放。**
 
 ```powershell
 .\一键启动.ps1
@@ -292,9 +293,9 @@ python tools\setup-hooks.py
 
 ## 依赖
 
-**文件夹版**：需要 Python 3.12 和 `pymupdf`；Chrome / Edge 用系统自带的。
+**文件夹版**：需要 Python 3.12、`pymupdf`、`pywebview`；Chrome / Edge 与 WebView2 用系统自带的。
 
-**从源码跑**：Python 3.12、`pymupdf`、本机 Chrome 或 Edge。无前端构建、无 npm、无服务端数据库、无第三方 Web 框架。
+**从源码跑**：Python 3.12、`pymupdf`、`pywebview`、本机 Chrome 或 Edge。无前端构建、无 npm、无服务端数据库、无第三方 Web 框架。
 
 ## 致谢
 

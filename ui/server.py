@@ -31,6 +31,17 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 #   仓根不在 sys.path 上，得自己挂一下；冻结后 __file__ 在解包目录，同样成立。
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import paths  # noqa: E402
+# 2026-11-24：文件夹版的数据根就是程序目录；把新压缩包解到新文件夹时，旧课程不会跟过来。
+#   这里在首次启动时自动从旧目录导入（见仓根 upgrade.py）；被 check-* 当模块 import
+#   时 __name__ 不是 __main__，一行都不会动用户的盘。
+import upgrade  # noqa: E402
+_IMPORT_REPORT = None
+if __name__ == "__main__":
+    try:
+        _IMPORT_REPORT = upgrade.auto_import(paths.DATA_ROOT)
+    except Exception as _imp_e:  # noqa: BLE001
+        _IMPORT_REPORT = {"ok": False,
+                          "error": "%s: %s" % (type(_imp_e).__name__, _imp_e)}
 
 # 2026-11-24：离线语言包（阅读侧栏「管理」里下载）。它是可选依赖——ctranslate2 /
 #   sentencepiece 没装时 import 会抛，这里兜住：在线翻译照常，只是「离线」那档不可用。
@@ -2694,7 +2705,7 @@ def _norm_assets(raw) -> dict:
     out = {}
     if not isinstance(raw, dict):
         return out
-    for key in ("exe", "res"):
+    for key in ("app", "exe", "res"):
         a = raw.get(key)
         if not isinstance(a, dict) or not a.get("url"):
             continue
@@ -2703,6 +2714,10 @@ def _norm_assets(raw) -> dict:
                     "sha256": str(a.get("sha256") or "").lower(),
                     "name": str(a.get("name") or
                                 os.path.basename(urllib.parse.urlparse(url).path) or key)}
+    # 旧界面只认 assets.exe：文件夹版整包放在 app，这里补一个同内容的 exe 别名，
+    # 不改界面也能让「立即更新」出现（start_download 会把 exe 映射回 app）。
+    if "app" in out and "exe" not in out:
+        out["exe"] = dict(out["app"], kind="folder")
     return out
 
 
@@ -2770,9 +2785,19 @@ def _fetch_github() -> dict:
     assets = {}
     for a in body.get("assets") or []:
         nm = str(a.get("name") or "")
-        if nm.lower() == "lapluma.exe" and a.get("browser_download_url"):
-            assets["exe"] = {"url": str(a["browser_download_url"]),
-                             "size": int(a.get("size") or 0), "sha256": "", "name": nm}
+        url = str(a.get("browser_download_url") or "")
+        if not url:
+            continue
+        low = nm.lower()
+        if low == "lapluma.exe":
+            assets["exe"] = {"url": url, "size": int(a.get("size") or 0),
+                             "sha256": "", "name": nm}
+        elif low.startswith("lapluma-") and low.endswith(".zip") and "res" not in low:
+            # v1.9.15 起发布物是文件夹版整包；GitHub 没给 sha256，应用只校验字节数
+            assets["app"] = {"url": url, "size": int(a.get("size") or 0),
+                             "sha256": "", "name": nm}
+    if "app" in assets and "exe" not in assets:
+        assets["exe"] = dict(assets["app"], kind="folder")
     return {"ok": True, "channel": "github", "current": VERSION, "latest": latest,
             "newer": _ver_num(latest) > _ver_num(VERSION),
             "title": str(body.get("name") or ("v" + latest)),
@@ -2826,6 +2851,15 @@ def check_update(force: bool = False, channel: str = "auto") -> dict:
         data = dict(feed)
     else:
         data = dict(gh)
+    # 同一个版本可能只有一个渠道带得动下载（feed 有 sha256、GitHub 只有 zip 大小）；
+    #   把另一边的资产补过来，界面上的「立即更新」才不会因为走错渠道而消失。
+    other = gh if data.get("channel") == "feed" else feed
+    if other and _ver_num(other.get("latest")) == _ver_num(data.get("latest")):
+        oa = other.get("assets") or {}
+        da = data.setdefault("assets", {})
+        for _k in ("app", "exe", "res"):
+            if _k not in da and _k in oa:
+                da[_k] = oa[_k]
     data["sources"] = {k: v["latest"] for k, v in got.items()}
     data["newer"] = _ver_num(data.get("latest")) > _ver_num(VERSION)
     data["current"] = VERSION
@@ -2879,6 +2913,7 @@ def _download_worker(url: str, dst: str, size_hint: int, sha: str, asset: str, v
             UPD_RES.update(path=dst, ver=ver)
         else:
             UPD_EXE.update(path=dst, ver=ver)
+            UPD.update(kind="folder" if dst.lower().endswith(".zip") else "exe")
     except Exception as e:  # noqa: BLE001
         try:
             if os.path.exists(tmp):
@@ -2895,7 +2930,14 @@ def start_download(asset: str = "exe") -> dict:
     data = check_update()
     if not data.get("ok"):
         return {"ok": False, "error": data.get("error") or "拿不到更新信息"}
-    a = (data.get("assets") or {}).get(asset)
+    assets = data.get("assets") or {}
+    key = asset
+    if asset in ("exe", "app"):
+        # 旧界面只认 exe；文件夹版把整包放在 app，这里做一次别名
+        key = "app" if assets.get("app") else "exe"
+        a = assets.get(key)
+    else:
+        a = assets.get(asset)
     if not a:
         return {"ok": False, "error": "这一版没有可下载的 %s（去 GitHub 看）" % asset}
     if not _safe_url(a["url"]):
@@ -2909,8 +2951,8 @@ def start_download(asset: str = "exe") -> dict:
                at=time.strftime("%H:%M:%S"))
     threading.Thread(target=_download_worker,
                      args=(a["url"], dst, int(a.get("size") or 0), a.get("sha256") or "",
-                           asset, ver), daemon=True).start()
-    return {"ok": True, "started": True, "ver": ver, "asset": asset,
+                           key, ver), daemon=True).start()
+    return {"ok": True, "started": True, "ver": ver, "asset": key,
             "size": int(a.get("size") or 0)}
 
 
@@ -2999,11 +3041,85 @@ def _quit_self() -> None:
     os._exit(0)
 
 
+def _apply_folder_update(zip_path: str, ver: str) -> dict:
+    """文件夹版：解压到暂存目录，交给 tools/upgrade/apply_folder.py 等本进程退出后覆盖。
+
+    为什么不在这里直接覆盖：本进程还开着 ui/server.py，Windows 不允许覆盖正在运行的文件；
+    所以起一个独立进程（先复制到 %USERPROFILE%/.pluma/update，避免自己覆盖自己），
+    它等本 PID 消失后再动文件。用户数据（课程 / out / _logs / _trash）不在发布包里，天然不动。
+    """
+    root = os.environ.get("PLUMA_APPLY_ROOT") or paths.DATA_ROOT
+    stage_parent = os.path.join(UPDATE_DIR, "v" + _ver_num_str(ver), "stage")
+    if os.path.isdir(stage_parent):
+        shutil.rmtree(stage_parent, ignore_errors=True)
+    os.makedirs(stage_parent, exist_ok=True)
+    try:
+        from pathlib import PurePosixPath
+        with zipfile.ZipFile(zip_path) as z:
+            for info in z.infolist():
+                name = info.filename
+                parts = PurePosixPath(name).parts
+                if name.startswith("/") or ".." in parts or name.startswith(chr(92)):
+                    raise RuntimeError("压缩包里有非法路径：%r" % name)
+                z.extract(info, stage_parent)
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "error": "解压失败：%s" % e}
+    stage = stage_parent
+    # 兼容「zip 里还套一层目录」的打包方式
+    if not os.path.isfile(os.path.join(stage, "ui", "server.py")):
+        subs = [d for d in os.listdir(stage) if os.path.isdir(os.path.join(stage, d))]
+        if len(subs) == 1 and os.path.isfile(
+                os.path.join(stage, subs[0], "ui", "server.py")):
+            stage = os.path.join(stage, subs[0])
+    if not os.path.isfile(os.path.join(stage, "ui", "server.py")):
+        return {"ok": False, "error": "下载的包里没有 ui/server.py，不是文件夹版"}
+    if not os.path.isfile(os.path.join(stage, "一键启动.ps1")):
+        return {"ok": False, "error": "下载的包里没有 一键启动.ps1，不是完整文件夹版"}
+    try:
+        got = ""
+        with open(os.path.join(stage, "ui", "server.py"), encoding="utf-8") as f:
+            for line in f:
+                if line.startswith("VERSION = "):
+                    got = line.split("=", 1)[1].strip().strip('"').strip("'")
+                    break
+        if ver and got and got != ver:
+            return {"ok": False, "error": "包里的版本是 %s，清单写的是 %s" % (got, ver)}
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "error": "读不到包里的版本：%s" % e}
+    src = paths.res("tools", "upgrade", "apply_folder.py")
+    dst = os.path.join(UPDATE_DIR, "apply_folder.py")
+    try:
+        os.makedirs(UPDATE_DIR, exist_ok=True)
+        shutil.copy2(src, dst)
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "error": "更新器缺失：%s" % e}
+    pyw = sys.executable
+    cand = os.path.join(os.path.dirname(pyw), "pythonw.exe")
+    if os.path.isfile(cand):
+        pyw = cand
+    args = [pyw, dst, "--staged", stage, "--root", os.path.abspath(root),
+            "--ver", ver, "--pid", str(os.getpid())]
+    if os.environ.get("PLUMA_NO_RELAUNCH") == "1":
+        args.append("--no-relaunch")
+    try:
+        subprocess.Popen(args, cwd=UPDATE_DIR, close_fds=True,
+                         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                         stderr=subprocess.DEVNULL, creationflags=0x00000008)
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "error": "起不到更新器：%s" % e}
+    threading.Timer(1.2, _quit_self).start()
+    return {"ok": True, "restart": True, "kind": "folder", "ver": ver,
+            "root": os.path.abspath(root), "stage": stage, "from": zip_path}
+
+
 def apply_update(asset: str = "exe") -> dict:
     """把下好的包换上并重启。只接本机请求（局域网里的人不能替你重启程序）。"""
     exe_path = UPD_EXE.get("path") or ""
     if not exe_path or not os.path.isfile(exe_path):
         return {"ok": False, "error": "还没下好程序本体（当前状态：%s）" % UPD.get("state")}
+    # 文件夹版（v1.9.15 起）：下到的是整包 zip，交给独立更新器覆盖程序文件。
+    if exe_path.lower().endswith(".zip"):
+        return _apply_folder_update(exe_path, UPD_EXE.get("ver") or UPD.get("ver") or "")
     # 防呆：换上去的必须是本体。真机整程揭过一个 bug——资源包（zip）被当成 exe 换了。
     if os.path.getsize(exe_path) < 64 * 1024:
         return {"ok": False, "error": "下到的本体只有 %d 字节，不是程序，已拒绝" % os.path.getsize(exe_path)}
@@ -3455,6 +3571,16 @@ def _enable_resize() -> None:
         threading.Thread(target=later, daemon=True).start()
 
 
+def _msgbox(text: str, title: str = "", yes_no: bool = False) -> bool:
+    """原生消息框（pywebview 不可用时也能把原因说清楚）。返回是否点了「是」。"""
+    try:
+        flags = (0x00000004 if yes_no else 0x00000000) | 0x00000030 | 0x00040000
+        r = ctypes.windll.user32.MessageBoxW(None, str(text), title or APP_NAME, flags)
+        return r == 6
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def run_window(url: str) -> int:
     """把界面放进一个原生窗口（Windows 上走 WebView2 / Edge）。
 
@@ -3526,6 +3652,22 @@ def main() -> int:
         pass
     # 冻结后（exe）先把两根与 engine\ tools\print\ api\ 挂上 sys.path；源码下是幂等的
     paths.bootstrap()
+    try:
+        upgrade.record_install(paths.DATA_ROOT)
+    except Exception:  # noqa: BLE001
+        pass
+    # 新目录首次启动导入了旧课程时，用系统对话框说一声（不是界面改动，不弹在页面里）
+    if (_IMPORT_REPORT and _IMPORT_REPORT.get("items")
+            and "--no-window" not in argv and not os.environ.get("PLUMA_TEST")):
+        if _IMPORT_REPORT.get("ok"):
+            names = [x.get("name") for x in _IMPORT_REPORT.get("items") or []]
+            _msgbox("已从旧版本导入 %d 项课程数据：\n%s\n\n旧目录保持原样，可以留着备份。"
+                    % (len(names), "、".join(names[:8]) + ("…" if len(names) > 8 else "")),
+                    APP_NAME)
+        else:
+            _msgbox("从旧版本导入课程没完成：%s\n\n旧目录未动，日志见 %s。"
+                    % (_IMPORT_REPORT.get("error") or "未知原因",
+                       os.path.join(paths.DATA_ROOT, "_logs")), APP_NAME)
     # 2026-11-17 见文件上方「启动自保」：先摘遮蔽目录，再碰 webview（webview 后面才导入）
     for _d, _f in _strip_shadowed():
         _log_write("startup.log", "%s 摘掉遮蔽目录 %s（含 %s）"
@@ -3579,7 +3721,18 @@ def main() -> int:
     if use_window:
         try:
             import webview  # noqa: F401
-        except Exception:  # noqa: BLE001
+        except Exception as e:  # noqa: BLE001
+            # 2026-11-24 用户实测：另一台设备打开 1.9.17 是浏览器页，不是软件窗口。
+            #   根因是那台机器没装 pywebview（启动器当时只查 pymupdf），这里不再
+            #   静默降级：说清楚缺什么，让用户选「先用浏览器」或退出。
+            _log_write("startup.log", "%s 缺少 pywebview：%r"
+                       % (time.strftime("%Y-%m-%d %H:%M:%S"), e))
+            text = ("软件窗口组件 pywebview 没装上（%s）。\n\n"
+                    "双击 启动羽毛笔.cmd 会自动安装；也可以在命令行跑：\n"
+                    "python -m pip install pywebview\n\n"
+                    "现在先用浏览器打开吗？" % e)
+            if "--no-browser" in argv or not _msgbox(text, APP_NAME, yes_no=True):
+                return 4
             use_window = False
     local = "http://127.0.0.1:%d/" % PORT
     print("羽毛笔 La Pluma v%s · 界面已启动" % VERSION)
@@ -3607,8 +3760,15 @@ def main() -> int:
             _log_write("startup.log", "%s 窗口开不了，改用浏览器：%r\n%s"
                        % (time.strftime("%Y-%m-%d %H:%M:%S"), e, _tb.format_exc()))
             print("  窗口开不了（%s），改用浏览器。" % e, flush=True)
-            if "--no-browser" not in argv:
-                webbrowser.open(local)
+            logp = _log_write("startup.log", "%s 窗口开不了：%r\n%s"
+                              % (time.strftime("%Y-%m-%d %H:%M:%S"), e, _tb.format_exc()))
+            text = ("软件窗口打不开：%s\n\n"
+                    "常见原因：缺 WebView2 运行时，或 pywebview 没装好。\n"
+                    "记录：%s\n\n现在先用浏览器打开吗？") % (e, logp or "（日志写不进去）")
+            if "--no-browser" in argv or not _msgbox(text, APP_NAME, yes_no=True):
+                srv.server_close()
+                return 1
+            webbrowser.open(local)
             try:
                 srv.serve_forever()
             except KeyboardInterrupt:

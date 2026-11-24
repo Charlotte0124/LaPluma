@@ -48,7 +48,23 @@ python -c "import pymupdf; print(pymupdf.__version__)"
 > `python` 认不出来时，把命令里的 `python` 换成 `py -3.12`：
 > `py -3.12 -m pip install pymupdf -i https://pypi.tuna.tsinghua.edu.cn/simple`
 
-## 3. 回到软件
+## 3. 装窗口组件 pywebview（缺了会打开浏览器页）
+
+1. 同样在 cmd 里粘这一行：
+
+```
+python -m pip install pywebview -i https://pypi.tuna.tsinghua.edu.cn/simple
+```
+
+2. 验证：
+
+```
+python -c "import webview; print('ok')"
+```
+
+3. 窗口还要系统里的 **WebView2 运行时**。没装时启动器会弹窗给官方下载页；Win10/11 一般自带。
+
+## 4. 回到软件
 
 双击 `启动羽毛笔.cmd`。窗口里应依次看到：
 
@@ -69,6 +85,6 @@ Python 3.12.x   (…)
 | `SSL` / `certificate` | 系统证书或 VPN 中间人 | 关掉抓包 / VPN 再装，或加 `--trusted-host pypi.tuna.tsinghua.edu.cn` |
 | `ERROR: pip's dependency resolver` | 不影响 pymupdf 本身 | 只要最后有 `Successfully installed pymupdf` 就继续 |
 
-## 为什么只有这一个依赖
+## 为什么是这两个依赖
 
-出 PDF 要数页、回填目录页码、把笔记追加成附页，这些都靠 PyMuPDF（`import pymupdf`）。其余全部是 Python 标准库，不需要 npm、不需要前端构建、不需要数据库。
+出 PDF 要数页、回填目录页码、把笔记追加成附页，这些靠 PyMuPDF（`import pymupdf`）；把界面放进原生窗口靠 pywebview（`import webview`）。其余全部是 Python 标准库，不需要 npm、不需要前端构建、不需要数据库。

@@ -1,15 +1,20 @@
 # -*- coding: utf-8 -*-
-"""生成在线更新清单 feed\\latest.json（2026-11-17 用户：「不跳 GitHub，一步下完」）。
+"""生成在线更新清单 feed/latest.json（2026-11-17 立；2026-11-24 改文件夹版）。
 
-    python tools\\build\\make-feed.py --version 1.9.5 --exe dist\\LaPluma.exe
-    python tools\\build\\make-feed.py --version 1.9.6 --exe dist\\LaPluma.exe --res dist\\LaPluma-res.zip
+    python tools/build/make-feed.py --version 1.9.18 --app dist/LaPluma-1.9.18.zip
+    python tools/build/make-feed.py --version 1.9.5  --exe dist/LaPluma.exe --res dist/LaPluma-res.zip
 
-为什么要自己发一份清单：GitHub 的 Release API 只告诉你「有新版 + 页面地址」，
+为什么要有这份清单：GitHub 的 Release API 只告诉你「有新版 + 页面地址」，
 给不出「包多大、校验值是多少」——而没有这两样，应用内下载就不敢替用户换程序。
-清单里同时放 exe 与资源包（assets.exe / assets.res），以后资源包单独更新时，
-用户只下几 MB 的 res，不必重下 114 MB 的 exe。
+v1.9.15 起分发是文件夹压缩包：assets.app 是整包（解压后覆盖程序文件，用户数据不动），
+assets.res 仍在位，留给以后只换文档/示例的资源包；assets.exe 只为旧版兼容保留。
 
-清单随仓库发布，应用按 raw → jsDelivr 两个源依次取（见 ui\\server.py 的 FEED_URLS）。
+发版流程（维护者）：
+    python tools/build/make-zip.py --version 1.9.18     # 从 HEAD 造 dist/LaPluma-1.9.18.zip
+    python tools/build/make-feed.py --version 1.9.18 --app dist/LaPluma-1.9.18.zip
+    # 把 zip 传到 GitHub Release，提交 feed/latest.json —— 顺序不能反：
+    # 清单里的 sha256 必须就是上传的那个 zip。
+
 摘要与条目直接从 CHANGELOG.md 的 `## vX.Y.Z` 小节抽，不另写一份（一份事实只存一处）。
 """
 from __future__ import annotations
@@ -59,7 +64,7 @@ def section(version: str) -> tuple:
         t = ln.strip()
         if not t.startswith(("-", "*")):
             continue
-        s = re.sub(r"\*\*|`", "", t.lstrip("-* ").strip())
+        s = t.lstrip("-* ").strip().replace("**", "").replace(chr(96), "")
         # 去掉「（用户：「…」）」这类引语：清单是给最终用户看的，不是开发记录
         s = re.sub(r"（用户：「[^」]*」）", "", s)
         s = re.split(r"[。；;]", s)[0][:100]
@@ -68,38 +73,47 @@ def section(version: str) -> tuple:
     return summary, notes[:6]
 
 
+def asset_of(path: str, ver: str) -> dict:
+    p = os.path.abspath(path)
+    sha, size = sha256_of(p)
+    return {"url": "https://github.com/%s/releases/download/v%s/%s" % (
+                REPO, ver, os.path.basename(p)),
+            "size": size, "sha256": sha, "name": os.path.basename(p)}
+
+
 def main(argv: list | None = None) -> int:
     for s in (sys.stdout, sys.stderr):
         if hasattr(s, "reconfigure"):
             s.reconfigure(encoding="utf-8")
     ap = argparse.ArgumentParser(description="生成 feed/latest.json（在线更新清单）")
-    ap.add_argument("--version", required=True, help="这次发布的版本，如 1.9.5")
-    ap.add_argument("--exe", required=True, help="exe 路径，如 dist\\LaPluma.exe")
-    ap.add_argument("--res", default="", help="资源包路径（可选，如 dist\\LaPluma-res.zip）")
+    ap.add_argument("--version", required=True, help="这次发布的版本，如 1.9.18")
+    ap.add_argument("--app", default="", help="文件夹版整包 zip（v1.9.15 起的正常形态）")
+    ap.add_argument("--exe", default="", help="旧单文件 exe（已退役，仅旧版兼容）")
+    ap.add_argument("--res", default="", help="资源包路径（可选，如 dist/LaPluma-res.zip）")
     ap.add_argument("--out", default=os.path.join(ROOT, "feed", "latest.json"))
     ap.add_argument("--date", default=time.strftime("%Y-%m-%d"))
     a = ap.parse_args(argv)
 
     ver = a.version.lstrip("vV")
-    exe = os.path.abspath(a.exe)
-    if not os.path.isfile(exe):
-        print("找不到 exe：%s" % exe, file=sys.stderr)
+    if not (a.app or a.exe):
+        print("至少给一个包：--app（文件夹版）或 --exe（旧单文件版）", file=sys.stderr)
         return 2
-    sha, size = sha256_of(exe)
-    assets = {"exe": {
-        "url": "https://github.com/%s/releases/download/v%s/%s" % (
-            REPO, ver, os.path.basename(exe)),
-        "size": size, "sha256": sha, "name": os.path.basename(exe)}}
-    if a.res:
-        rp = os.path.abspath(a.res)
-        if not os.path.isfile(rp):
-            print("找不到资源包：%s" % rp, file=sys.stderr)
+    assets = {}
+    if a.app:
+        if not os.path.isfile(a.app):
+            print("找不到整包：%s" % a.app, file=sys.stderr)
             return 2
-        rsha, rsize = sha256_of(rp)
-        assets["res"] = {
-            "url": "https://github.com/%s/releases/download/v%s/%s" % (
-                REPO, ver, os.path.basename(rp)),
-            "size": rsize, "sha256": rsha, "name": os.path.basename(rp)}
+        assets["app"] = asset_of(a.app, ver)
+    if a.exe:
+        if not os.path.isfile(a.exe):
+            print("找不到 exe：%s" % a.exe, file=sys.stderr)
+            return 2
+        assets["exe"] = asset_of(a.exe, ver)
+    if a.res:
+        if not os.path.isfile(a.res):
+            print("找不到资源包：%s" % a.res, file=sys.stderr)
+            return 2
+        assets["res"] = asset_of(a.res, ver)
 
     summary, notes = section(ver)
     if not summary:
@@ -123,12 +137,13 @@ def main(argv: list | None = None) -> int:
         f.write("\n")
     # 写完回查：文件要真在、真能读回
     back = json.load(open(a.out, encoding="utf-8"))
-    assert back.get("latest") == ver and back["assets"]["exe"]["size"] == size
+    assert back.get("latest") == ver
+    assert all(v.get("size") for v in back["assets"].values())
     print("已写 %s（%d 字节）" % (a.out, os.path.getsize(a.out)))
-    print("  版本 %s · exe %.1f MB · sha256 %s… · %d 条说明"
-          % (ver, size / 1048576, sha[:12], len(notes)))
-    if a.res:
-        print("  资源包 %.1f MB" % (assets["res"]["size"] / 1048576))
+    for k, v in assets.items():
+        print("  %-4s %6.1f MB · sha256 %s… · %s"
+              % (k, v["size"] / 1048576, v["sha256"][:12], v["name"]))
+    print("  %d 条说明" % len(notes))
     return 0
 
 

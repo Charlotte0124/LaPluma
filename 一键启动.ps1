@@ -97,7 +97,6 @@ if (-not $hasPdf -and $CheckOnly) {
 if ($hasPdf -and $CheckOnly) {
     Write-Host "pymupdf: 有"
     Write-Host "python: $verRaw ($pyExe)"
-    exit 0
 }
 
 if (-not $hasPdf) {
@@ -120,7 +119,62 @@ if (-not $hasPdf) {
     if ($Windowed) { Show-Msg "pymupdf 装好了，继续启动。" "羽毛笔 La Pluma" "info" }
 }
 
-# ---------- 3. 起界面 ----------
+# ---------- 3. pywebview（软件窗口） ----------
+# 2026-11-24 用户实测：另一台设备打开 v1.9.17 是浏览器页，不是软件窗口。
+#   根因是那台机器没装 pywebview——当时的启动器只查 pymupdf，import webview 失败后
+#   server.py 静默退回浏览器。这里补上依赖检查与自动安装。
+& $pyExe @pyArgs -c "import webview" 2>$null
+$hasView = ($LASTEXITCODE -eq 0)
+Log-Step ("pywebview=" + $hasView)
+
+if ($CheckOnly) {
+    Write-Host ("pywebview: " + $(if ($hasView) { "有" } else { "缺（窗口模式需要）" }))
+    if (-not $hasView) { exit 4 }
+}
+
+if (-not $hasView) {
+    $installView = $true
+    $msgView = "缺少窗口组件 pywebview（打开软件窗口要用）。" + [Environment]::NewLine + [Environment]::NewLine + "现在自动安装吗？点「是」开始装（要联网，几十秒）。"
+    if ($Windowed) {
+        $installView = Ask-YesNo $msgView "缺 pywebview"
+        if (-not $installView) { Start-Process "https://pywebview.flowrl.com/" }
+    } else {
+        Write-Host "缺窗口组件 pywebview，正在自动安装（要联网，几十秒）..." -ForegroundColor DarkGray
+    }
+    if ($installView) {
+        & $pyExe @pyArgs -m pip install --quiet --disable-pip-version-check -i https://pypi.tuna.tsinghua.edu.cn/simple pywebview
+        & $pyExe @pyArgs -c "import webview" 2>$null
+        $hasView = ($LASTEXITCODE -eq 0)
+    }
+    if (-not $hasView) {
+        $cmdline = '"' + $pyExe + '" -m pip install pywebview -i https://pypi.tuna.tsinghua.edu.cn/simple'
+        $msgFail = "pywebview 没装上（大概率网络 / pip 源）。" + [Environment]::NewLine + [Environment]::NewLine + "在命令行里跑这一行再试：" + [Environment]::NewLine + $cmdline + [Environment]::NewLine + [Environment]::NewLine + "装好后重新双击 启动羽毛笔.cmd。"
+        Fail-Exit $msgFail 4
+    }
+    if ($Windowed) { Show-Msg "pywebview 装好了，继续启动。" "羽毛笔 La Pluma" "info" }
+}
+
+# WebView2 运行时：窗口靠它显示。只提醒并打开官方页，不擅自装系统组件。
+$wv2 = @()
+try {
+    $pf86 = [Environment]::GetFolderPath("ProgramFilesX86")
+    $base = Join-Path $pf86 "Microsoft\EdgeWebView\Application"
+    if (Test-Path $base) {
+        $wv2 = @(Get-ChildItem $base -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -match '^\d+\.' })
+    }
+} catch { }
+Log-Step ("webview2=" + ($wv2.Count -gt 0))
+if ($CheckOnly) {
+    Write-Host ("WebView2 运行时: " + $(if ($wv2.Count -gt 0) { "有" } else { "没检测到（窗口可能打不开）" }))
+    exit 0
+}
+if ($wv2.Count -eq 0 -and $Windowed) {
+    $msgWv = "没检测到 WebView2 运行时（软件窗口靠它显示）。" + [Environment]::NewLine + [Environment]::NewLine + "现在打开微软官方下载页吗？装完重新双击 启动羽毛笔.cmd。"
+    $go = Ask-YesNo $msgWv "缺 WebView2 运行时"
+    if ($go) { Start-Process "https://developer.microsoft.com/microsoft-edge/webview2/" }
+}
+
+# ---------- 4. 起界面 ----------
 $flags = @()
 if ($Lan) { $flags += "--lan" }
 if ($NoWindow) { $flags += "--no-window" }
