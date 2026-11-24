@@ -32,6 +32,17 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import paths  # noqa: E402
 
+# 2026-11-24：离线语言包（阅读侧栏「管理」里下载）。它是可选依赖——ctranslate2 /
+#   sentencepiece 没装时 import 会抛，这里兜住：在线翻译照常，只是「离线」那档不可用。
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+try:
+    import offline_mt  # noqa: E402
+except Exception as _off_e:  # noqa: BLE001
+    offline_mt = None
+    _OFFLINE_IMPORT_ERR = "%s: %s" % (type(_off_e).__name__, _off_e)
+else:
+    _OFFLINE_IMPORT_ERR = ""
+
 ROOT = paths.DATA_ROOT          # 可写数据：课程、生成物、日志（冻结后 = exe 旁边）
 RES = paths.RES_ROOT            # 只读资源：ui\ api\ engine\ tools\（冻结后 = 解包目录）
 UI_DIR = paths.res("ui")
@@ -82,7 +93,7 @@ HOST, PORT = "127.0.0.1", 8765
 #   每次打开/刷新阅读器都全量重传（本机无感，平板走 WiFi 明显）。
 #   index.html 必须仍走 no-store（改完界面要能立刻看到新版）。
 _STATIC_ETAG = {}
-VERSION = "1.9.17"
+VERSION = "1.9.18"
 # v1.9.15 起分发只走文件夹（仓库目录 + 启动羽毛笔.cmd）；单文件 exe 已退役，见 AGENTS.md 六。
 APP_NAME = "羽毛笔 La Pluma"
 
@@ -539,6 +550,9 @@ def load_cfg():
         # 2026-11-21：界面偏好（主题 / 形态 / 语言 / 上次的课程）跟着配置一起读出来。
         #   注意这里是个白名单字典——不在这里列出来的键读一次就没了。
         "ui": cfg.get("ui") if isinstance(cfg.get("ui"), dict) else {},
+        # 2026-11-24：翻译引擎三档。auto = 在线优先，缺 key / 断网 / 在线失败时用离线包。
+        "translate_engine": cfg.get("translate_engine") if cfg.get("translate_engine") in
+                            ("auto", "online", "offline") else "auto",
     }
     # 2026-11-16 实际撞到：某个写入环节把「讲义」写成了 ??，之后每次生成都往 CS340/01_?? 里放。
     # 路径里出现问号就认为被编码破坏，退回默认目录并在界面上说明。
@@ -1584,6 +1598,13 @@ class Handler(BaseHTTPRequestHandler):
                 # 2026-11-22：阅读页翻译页签顶部「最近 5 条」只读这里；写入在 /api/translate 成功时。
                 return self._json({"ok": True, "items": load_translate_history(),
                                    "max": TRANS_HISTORY_MAX})
+            if u.path == "/api/translate/packs":
+                # 2026-11-24：阅读侧栏「管理」读这一份——离线包装没装、多大、下载到哪一步。
+                _eng = load_cfg().get("translate_engine", "auto")
+                if offline_mt is None:
+                    return self._json({"ok": False, "engine": _eng, "deps_error": _OFFLINE_IMPORT_ERR,
+                                       "installed": False, "packs": {}, "download": {}}, 500)
+                return self._json(dict(ok=True, engine=_eng, **offline_mt.status()))
             if u.path == "/favicon.ico":
                 # 2026-11-17：以前回 204（空图标）——用户「软件图标还没有整上去」。
                 # 现在直接给 exe 那张 assets\lapluma.ico，标签页与书签都用它。
@@ -1608,6 +1629,13 @@ class Handler(BaseHTTPRequestHandler):
                     "deps": dep_state(),
                     # 界面偏好（主题 / 成品形态 / 讲义语言 …）：存本机配置，换端口也不丢。
                     "ui": cfg.get("ui") or {},
+                    # 2026-11-24：翻译引擎与离线包状态（阅读侧栏「管理」直接读这一份）
+                    "translate": {"engine": cfg.get("translate_engine", "auto"),
+                                  "packs": (offline_mt.status() if offline_mt else
+                                            {"ok": False, "deps_error": _OFFLINE_IMPORT_ERR,
+                                             "installed": False, "packs": {},
+                                             "total_bytes": 0, "bytes": 0,
+                                             "dir": "", "download": {}})},
                     "courses": discover_courses(), "usage": usage_summary(),
                 })
             if u.path == "/api/balance":
@@ -2111,6 +2139,11 @@ class Handler(BaseHTTPRequestHandler):
                 #   黑夜模式的）」。界面偏好原来只存 localStorage，而 localStorage 是按
                 #   http://127.0.0.1:<端口> 分家的——端口一变（上一个实例还占着 8765）就全丢。
                 #   现在跟模型/保存目录一起存进本机配置，端口换了一样在。
+                if body.get("translate_engine"):
+                    eng = str(body["translate_engine"]).strip().lower()
+                    if eng not in ("auto", "online", "offline"):
+                        return self._json({"ok": False, "error": "翻译引擎只能是 auto / online / offline"}, 400)
+                    cfg["translate_engine"] = eng
                 if isinstance(body.get("ui"), dict):
                     ui = dict(cfg.get("ui") or {})
                     for k, v in body["ui"].items():
@@ -2218,6 +2251,20 @@ class Handler(BaseHTTPRequestHandler):
                     return self._json({"ok": False, "error": "打不开文件夹：%r" % (e,)}, 500)
                 return self._json({"ok": True, "opened": target})
 
+            if u.path == "/api/translate/packs/download":
+                # 2026-11-24：开始下载离线包（后台线程；界面轮询 /api/translate/packs 看进度）
+                if offline_mt is None:
+                    return self._json({"ok": False, "error": "离线模块没加载：%s" % _OFFLINE_IMPORT_ERR}, 500)
+                r = offline_mt.start_download(body.get("langs"))
+                return self._json(r, 200 if r.get("ok") else 400)
+
+            if u.path == "/api/translate/packs/delete":
+                # 删掉本机语言包（只动 %USERPROFILE%\.pluma\models，不动别的）
+                if offline_mt is None:
+                    return self._json({"ok": False, "error": "离线模块没加载"}, 500)
+                offline_mt.remove_packs()
+                return self._json({"ok": True})
+
             if u.path == "/api/translate":
                 # 阅读器「译」按钮：把当前页 PDF 文字翻成中文/英文（一次调用，会花钱）
                 rel = str(body.get("rel") or "").strip()
@@ -2252,7 +2299,39 @@ class Handler(BaseHTTPRequestHandler):
                                        "error": "原文看起来已经是%s，方向可能选反了；切换方向再翻译"
                                                 % ("英文" if guessed == "en" else "中文")}, 400)
                 cfg = load_cfg()
-                if api_client is None or not cfg.get("api_key"):
+                # 2026-11-24：翻译引擎三档。auto（默认）= 在线优先；没 key / 在线失败时用离线包。
+                #   离线包只当兜底：术语与长句明显不如在线模型（实测 Biomolecules→生物多分子）。
+                engine = str(body.get("engine") or cfg.get("translate_engine") or "auto").lower()
+                if engine not in ("auto", "online", "offline"):
+                    engine = "auto"
+                has_key = bool(api_client is not None and cfg.get("api_key"))
+                need_pack = "en_zh" if to == "zh" else "zh_en"
+                packs_ok = bool(offline_mt and offline_mt.pack_installed(need_pack))
+
+                def _offline(reason=""):
+                    if offline_mt is None:
+                        return {"ok": False, "need_key": not has_key,
+                                "error": "离线模块没加载：%s" % _OFFLINE_IMPORT_ERR}
+                    if not packs_ok:
+                        return {"ok": False, "need_key": not has_key,
+                                "error": ("没装离线语言包，也没配 API 钥匙；到翻译页签「管理」里下载语言包"
+                                          if not has_key else
+                                          "没装离线语言包；到翻译页签「管理」里下载，或配好 key 走在线")}
+                    try:
+                        off = offline_mt.translate(src, to)
+                    except Exception as e:  # noqa: BLE001
+                        return {"ok": False, "error": "离线翻译失败：%s" % e}
+                    hist = push_translate_history(src, off["text"], to, page)
+                    return {"ok": True, "text": off["text"], "page": page, "to": to,
+                            "chars": len(src), "seconds": off.get("seconds"),
+                            "engine": "offline", "fallback": bool(reason), "reason": reason,
+                            "history": hist}
+
+                if engine == "offline":
+                    return self._json(_offline())
+                if engine == "auto" and not has_key:
+                    return self._json(_offline("no-key"))
+                if not has_key:
                     return self._json({"ok": False, "need_key": True, "error": "没配置 API 钥匙，不能翻译"}, 400)
                 sysmsg = ("你是专业译者。把给定 PDF 页文本翻译成英文，保留中文专有名称（药名/方剂名）原样。"
                           "只输出译文，不要解释。" if to == "en" else
@@ -2263,10 +2342,15 @@ class Handler(BaseHTTPRequestHandler):
                                            {"role": "user", "content": src[:6000]}],
                                           model=cfg["model"], temperature=0.2, max_tokens=2400)
                 except Exception as e:  # noqa: BLE001
+                    # auto：在线挂了就试离线（同一页、同一方向），失败才把在线错误抛出来
+                    if engine == "auto" and packs_ok:
+                        return self._json(_offline("online-error"))
                     return self._json({"ok": False, "error": "翻译失败：%s" % e}, 502)
                 log_usage(out.get("model") or cfg["model"], out.get("usage") or {})
                 text = str(out.get("text") or "").strip()
                 if not text:
+                    if engine == "auto" and packs_ok:
+                        return self._json(_offline("empty"))
                     return self._json({"ok": False,
                                        "error": "模型没有返回译文（可能方向选反了，或这段没有可译内容）",
                                        "suggest_to": ("zh" if guessed == "en" else "en") if guessed else ""}, 502)
@@ -2274,7 +2358,7 @@ class Handler(BaseHTTPRequestHandler):
                 history = push_translate_history(src, text, to, page)
                 return self._json({"ok": True, "text": text, "page": page,
                                    "to": to, "chars": len(src), "seconds": out.get("seconds"),
-                                   "history": history})
+                                   "engine": "online", "history": history})
 
             if u.path == "/api/generate":
                 no = str(body.get("lesson", "")).strip()

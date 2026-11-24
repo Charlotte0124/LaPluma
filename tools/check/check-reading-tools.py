@@ -227,6 +227,18 @@ def check(root):
         and ok_hist is True
     ), detail or "历史函数没跑通")
 
+    # 13 离线语言包（2026-11-24）：管理常驻、状态条翻完收起、服务端三档引擎
+    add(13, "离线语言包接在侧栏", (
+        "offline_mt" in srv and "/api/translate/packs" in srv
+        and "start_download" in srv and "remove_packs" in srv
+        and '"translate_engine"' in srv and 'engine == "offline"' in srv
+        and 'engine == "auto" and not has_key' in srv
+        and 'id="trMgrBtn"' in idx and 'id="trStrip"' in idx
+        and 'id="trBadge"' in idx and 'id="trEngine"' in idx
+        and "pluma.trStripHidden" in idx and "hideTrStrip(true)" in idx
+        and ".tr-strip{" in idx and ".mgr{" in idx
+    ), "「管理」常驻（翻多少次都在）、状态条翻一次写 localStorage 收起、三档引擎与下载/删除都接上")
+
     return rows
 
 
@@ -279,6 +291,8 @@ def selftest():
             ("颜色表被改名", 11, IDX, "const NC = {", "const NCOLOR = {"),
             ("笔记又允许被压扁", 12, IDX, ".nlist > .nitem{flex:0 0 auto}", ".nlist > .nitem{flex:1 1 auto}"),
             ("译文框样式又变成全局", 12, IDX, ".tr-out .trans{white-space:pre-wrap;font-size:13px;line-height:1.8", ".trans{white-space:pre-wrap;font-size:13px;line-height:1.8"),
+            ("管理按钮被拿掉", 13, IDX, 'id="trMgrBtn"', 'id="trMgrBtnX"'),
+            ("状态条不再收起", 13, IDX, "hideTrStrip(true)", "hideTrStrip(false)"),
         ]
         all_ok = True
         for label, no, rel, old, new in defects:

@@ -521,6 +521,42 @@ html,body{background:var(--bg)}
   min-height:92px;font-size:12.5px;line-height:1.65;color:var(--ink);white-space:pre-wrap}
 .tr-out.empty{color:var(--faint);border-style:dashed}
 .tr-out .ph{font-size:12px;color:var(--faint)}
+/* 2026-11-24 离线语言包（设计稿 26-离线翻译语言包）
+   用户：「翻译旁边要加一个管理按钮 常驻的」「状态条翻译一次之后就隐藏掉」。
+   - 管理按钮常驻在翻译左边；点开在侧栏里展开，不弹窗。
+   - 状态条只在第一次翻译前露一下，翻完写 localStorage 收起。
+   - 走离线时标题旁挂「离线」小标。 */
+.tr-head .hd-act{display:flex;align-items:center;gap:6px}
+.tr-head .hd-act .btn{padding:5px 12px;font-size:12px}
+.tr-head .hd-act .btn.ghost{padding:5px 10px}
+.tr-badge{display:inline-block;font-size:10.5px;line-height:1.6;letter-spacing:.06em;padding:1px 7px;
+  border-radius:999px;border:1px solid #b07d1f;color:#8a6417;background:rgba(176,125,31,.08);
+  margin-left:6px;vertical-align:1px}
+.tr-badge[hidden]{display:none}
+.tr-strip{display:flex;flex-direction:column;gap:3px;border:1px solid var(--line2);border-radius:9px;
+  background:var(--card2);padding:7px 9px;margin:0 0 9px;font-size:11.5px;color:var(--sub)}
+.tr-strip[hidden]{display:none}
+.tr-strip .row{display:flex;align-items:center;gap:6px}
+.tr-strip .row b{font-weight:500;color:var(--ink)}
+.tr-strip .row .btn{margin-left:auto;padding:3px 10px;font-size:11px}
+.mgr{border:1px solid var(--line);border-radius:10px;background:var(--card);padding:10px 11px;margin:0 0 9px;
+  box-shadow:0 8px 20px rgba(20,18,14,.07)}
+.mgr[hidden]{display:none}
+.mgr .mh{display:flex;align-items:center;gap:8px;margin:0 0 7px;font-size:12px;font-weight:600}
+.mgr .mh .x{position:static;margin-left:auto;border:0;background:transparent;color:var(--faint);
+  font-size:15px;line-height:1;padding:2px 3px}
+.mgr .mh .x:hover{color:var(--ink)}
+.mgr .lbl2{font-size:11px;color:var(--faint);margin:8px 0 4px}
+.mgr select{width:100%;border:1px solid var(--line);background:var(--card2);border-radius:8px;
+  padding:6px 8px;font-size:11.5px;color:var(--ink);outline:none}
+.mgr select:focus{border-color:var(--ink);background:var(--card)}
+.mgr .krow{display:flex;align-items:center;margin-top:8px;font-size:11.5px;color:var(--sub)}
+.mgr .krow b{margin-left:auto;color:var(--ink);font-family:Consolas,monospace;font-size:11px;font-weight:500}
+.mgr .acts2{display:flex;gap:6px;margin-top:8px}
+.mgr .acts2 .btn{padding:4px 10px;font-size:11px}
+.mgr .bar{height:6px;border-radius:999px;background:var(--line2);overflow:hidden;margin:7px 0 1px}
+.mgr .bar[hidden]{display:none}
+.mgr .bar i{display:block;height:100%;width:0;background:var(--ink);border-radius:999px;transition:width .25s}
 /* 2026-11-23 用户：阅读侧栏第三个页签「会话」（设计稿 22-阅读侧栏-会话）。
    一门课一个会话（记录走 /api/session）；提问走与整页会话同一条模型通道（/api/ask）；
    回答下面的「课件 p.N」可点，跳这一讲原件的第 N 页（复用 jumpToCite）。
@@ -1041,9 +1077,28 @@ body.win #appScroll{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden
           <div id="sideTrans" hidden>
             <!-- 2026-11-23 用户：「这个（英文 ↑↓ 中文）就不可以放在两个方块中间吗，然后翻译再重新找一个位置」
                  —— 方向切换挪到两个框中间（正好表示「上面翻成下面」），翻译按钮挪到标题那一行的右边。 -->
+            <!-- 2026-11-24 用户：「翻译旁边要加一个管理按钮 常驻的」——「管理」一直在，
+                 点开在侧栏里展开引擎三档与离线包下载 / 删除；状态条只在第一次翻译前露一下。 -->
             <div class="tr-head">
-              <h5>第 <span id="curP3">p.1</span> 页 · 翻译</h5>
-              <button class="btn" id="trGo">翻译</button>
+              <h5>第 <span id="curP3">p.1</span> 页 · 翻译<span class="tr-badge" id="trBadge" hidden
+                title="本次用离线语言包：术语与长句可能不准">离线</span></h5>
+              <div class="hd-act">
+                <button class="btn ghost" id="trMgrBtn" title="翻译引擎与离线语言包">管理</button>
+                <button class="btn" id="trGo">翻译</button>
+              </div>
+            </div>
+            <div class="tr-strip" id="trStrip" hidden></div>
+            <div class="mgr" id="trMgr" hidden>
+              <div class="mh">翻译设置<button class="x" id="trMgrX" title="收起" aria-label="收起">×</button></div>
+              <div class="lbl2">引擎</div>
+              <select id="trEngine">
+                <option value="auto">自动：在线优先，缺 key 或断网用离线</option>
+                <option value="online">仅在线模型（最准，会花钱）</option>
+                <option value="offline">仅离线语言包（免费，术语差一些）</option>
+              </select>
+              <div class="krow"><span>离线包</span><b id="trPackState">读取中…</b></div>
+              <div class="bar" id="trDlBar" hidden><i></i></div>
+              <div class="acts2" id="trPackActs"></div>
             </div>
             <!-- 2026-11-23 用户：方向忘记切换时，自动检测原文语言并问一句 -->
             <div class="tr-lang" id="trLangHint" hidden>
@@ -3203,6 +3258,11 @@ async function transPage(to){
       return;
     }
     renderTransResult(j.text || '', atPage);
+    // 2026-11-24：这一次走的是哪条路——离线时标题旁挂「离线」；状态条翻完就收起。
+    const badge = $('#trBadge');
+    if(badge) badge.hidden = (j.engine !== 'offline');
+    hideTrStrip(true);
+    if(j.fallback) toast('在线没成功，这次用离线语言包（术语可能不准）');
     if(j.history) renderTransHistory(j.history);
   }catch(e){ out.innerHTML = '<div class="hint" style="border:0;color:var(--red)">请求失败：' + esc(String(e)) + '</div>'; }
 }
@@ -3257,6 +3317,107 @@ if($('#trSrc')) $('#trSrc').addEventListener('input', () => {
 });
 syncTrDir();
 if($('#trGo')) $('#trGo').onclick = () => transPage(TR.to);
+
+/* ---------- 2026-11-24 离线语言包（设计稿 26）----------
+   用户：「翻译旁边要加一个管理按钮 常驻的」；状态条「翻译一次之后就隐藏掉」。
+   数据走 /api/translate/packs；下载在服务端后台线程里跑，这里每秒轮询一次。 */
+const TRP = { packs: null, timer: 0, engine: 'auto' };
+function fmtMB(n){ return Math.max(1, Math.round(Number(n || 0) / 1048576)) + ' MB'; }
+function trStripHidden(){ try{ return localStorage.getItem('pluma.trStripHidden') === '1'; }catch(_){ return false; } }
+function hideTrStrip(forever){
+  if($('#trStrip')) $('#trStrip').hidden = true;
+  if(forever){ try{ localStorage.setItem('pluma.trStripHidden', '1'); }catch(_){ } }
+}
+function trEngineText(e){
+  return e === 'online' ? '仅在线模型' : e === 'offline' ? '仅离线语言包' : '自动 · 在线优先';
+}
+function renderTrPacks(st){
+  if(!st) return;
+  TRP.packs = st;
+  if(typeof st.engine === 'string') TRP.engine = st.engine;
+  const sel = $('#trEngine'); if(sel && sel.value !== TRP.engine) sel.value = TRP.engine;
+  const installed = !!st.installed;
+  const dl = st.download || {};
+  const busy = !!dl.active;
+  const strip = $('#trStrip');
+  if(strip){
+    if(trStripHidden() || ($('#trMgr') && !$('#trMgr').hidden)){ strip.hidden = true; }
+    else {
+      strip.hidden = false;
+      const pct = busy && dl.total ? Math.round(dl.done / dl.total * 100) : 0;
+      const right = busy ? ('下载中 ' + pct + '%') : installed ? ('已装 ' + fmtMB(st.bytes)) : ('未安装 ' + fmtMB(st.total_bytes));
+      strip.innerHTML = '<div class="row"><span>引擎</span><b>' + trEngineText(TRP.engine) + '</b></div>' +
+        '<div class="row"><span>离线包</span><b>' + right + '</b>' +
+        '<button class="btn" id="trStripGo">' + (installed || busy ? '管理' : '下载') + '</button></div>';
+      const go = $('#trStripGo');
+      if(go) go.onclick = (installed || busy) ? openTrMgr : downloadTrPacks;
+    }
+  }
+  const state = $('#trPackState'), acts = $('#trPackActs'), bar = $('#trDlBar');
+  if(state){
+    if(busy) state.textContent = dl.phase === 'deps' ? '安装推理依赖…' : ('下载中 ' + fmtMB(dl.done) + ' / ' + fmtMB(dl.total));
+    else if(installed) state.textContent = '已装 ' + fmtMB(st.bytes);
+    else if(st.deps_error) state.textContent = '缺推理依赖';
+    else state.textContent = '未安装 ' + fmtMB(st.total_bytes);
+  }
+  if(bar){
+    if(busy && dl.phase !== 'deps' && dl.total){ bar.hidden = false; bar.querySelector('i').style.width = Math.round(dl.done / dl.total * 100) + '%'; }
+    else bar.hidden = true;
+  }
+  if(acts){
+    acts.innerHTML = '';
+    const mk = (t, cls, fn) => { const b = document.createElement('button'); b.className = 'btn ' + (cls || '');
+      b.textContent = t; b.onclick = fn; acts.appendChild(b); };
+    if(busy) mk('下载在后台继续', 'ghost', () => { toast('可以关掉这一页，装完会自动停'); });
+    else if(installed){ mk('检查更新', 'ghost', downloadTrPacks); mk('删除', 'ghost', deleteTrPacks); }
+    else mk('下载语言包', '', downloadTrPacks);
+  }
+}
+async function loadTrPacks(){
+  try{
+    const j = await (await fetch('/api/translate/packs')).json();
+    renderTrPacks(j);
+    const busy = !!(j && j.download && j.download.active);
+    if(busy && !TRP.timer){ TRP.timer = setInterval(loadTrPacks, 1000); }
+    if(!busy && TRP.timer){ clearInterval(TRP.timer); TRP.timer = 0; }
+  }catch(_){ }
+}
+async function downloadTrPacks(){
+  const j = await (await fetch('/api/translate/packs/download', { method:'POST',
+    headers:{'Content-Type':'application/json'}, body:'{}' })).json();
+  if(!j.ok){ toast(j.error || '下载没开始'); return; }
+  toast('开始下载离线语言包（139 MB）');
+  setTimeout(loadTrPacks, 800);
+}
+async function deleteTrPacks(){
+  if(!confirm('删除本机的离线语言包？只删软件数据目录里的 models，在线翻译不受影响。')) return;
+  await fetch('/api/translate/packs/delete', { method:'POST',
+    headers:{'Content-Type':'application/json'}, body:'{}' });
+  toast('已删除离线语言包'); loadTrPacks();
+}
+function openTrMgr(){
+  const m = $('#trMgr'); if(m) m.hidden = false;
+  // 展开管理时状态条让位（同一份信息不摆两遍）；收起且还没被「翻完收起」时再露回来
+  if($('#trStrip')) $('#trStrip').hidden = true;
+  loadTrPacks();
+}
+function closeTrMgr(){
+  const m = $('#trMgr'); if(m) m.hidden = true;
+  if(!trStripHidden()) loadTrPacks();
+}
+if($('#trMgrBtn')) $('#trMgrBtn').onclick = () => {
+  const m = $('#trMgr'); if(!m) return;
+  if(m.hidden) openTrMgr(); else closeTrMgr();
+};
+if($('#trMgrX')) $('#trMgrX').onclick = closeTrMgr;
+if($('#trEngine')) $('#trEngine').onchange = async () => {
+  TRP.engine = $('#trEngine').value;
+  const j = await (await fetch('/api/config', { method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ translate_engine: TRP.engine }) })).json();
+  toast(j.ok ? '翻译引擎已改' : ('保存失败：' + (j.error || '')));
+  if(j.ok && TRP.packs) renderTrPacks(Object.assign({}, TRP.packs, { engine: TRP.engine }));
+};
+loadTrPacks();
 if($('#tabNotes')) $('#tabNotes').onclick = () => sideTab('notes');
 if($('#tabTrans')) $('#tabTrans').onclick = () => sideTab('trans');
 /* ---------- 阅读侧栏 · 会话（2026-11-23 用户：侧栏第三个页签） ----------
