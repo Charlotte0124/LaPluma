@@ -3847,8 +3847,7 @@ function wizard(step){
         <b>${esc(m.name)}</b><small>${esc(m.note)}</small></div>`).join('')}</div>`;
   }else if(step===1){
     body = `<h4>填写 API 密钥</h4>
-      <p class="note-s">仅保存在本机（%USERPROFILE%\\.pluma\\api.json），不进入仓库。可先跳过，稍后在设置中补充。</p>
-      <p class="note-s">还没有密钥？<a href="/doc?p=使用/08-怎么拿到API密钥.md" target="_blank" style="color:var(--ok);text-decoration:underline">怎么拿到 API 密钥（手把手教程）</a></p>
+      <p class="note-s">仅保存在本机（%USERPROFILE%\\.pluma\\api.json），不进入仓库，可先跳过。还没有密钥？<a href="/doc?p=使用/08-怎么拿到API密钥.md" target="_blank" style="color:var(--ok);text-decoration:underline">怎么拿到 API 密钥（手把手教程）</a></p>
       <input type="password" id="wKey" placeholder="sk-…" autocomplete="off">`;
   }else if(step===2){
     body = `<h4>选择保存目录</h4>
