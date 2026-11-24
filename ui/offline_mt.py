@@ -217,8 +217,17 @@ def start_download(langs: list[str] | None = None) -> dict:
 
 
 def remove_packs() -> dict:
-    if os.path.isdir(MODELS_DIR):
-        shutil.rmtree(MODELS_DIR, ignore_errors=True)
+    """只删自己装的那两个包（以及下载残留），不动 models 目录里的其它东西。"""
+    for lang in PACKS:
+        d = pack_dir(lang)
+        if os.path.isdir(d):
+            shutil.rmtree(d, ignore_errors=True)
+        z = os.path.join(MODELS_DIR, PACKS[lang]["zip"])
+        if os.path.isfile(z):
+            try:
+                os.remove(z)
+            except OSError:
+                pass
     with _lock:
         _cache.clear()
     return {"ok": True}
