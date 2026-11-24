@@ -82,7 +82,7 @@ HOST, PORT = "127.0.0.1", 8765
 #   每次打开/刷新阅读器都全量重传（本机无感，平板走 WiFi 明显）。
 #   index.html 必须仍走 no-store（改完界面要能立刻看到新版）。
 _STATIC_ETAG = {}
-VERSION = "1.9.16"
+VERSION = "1.9.17"
 # v1.9.15 起分发只走文件夹（仓库目录 + 启动羽毛笔.cmd）；单文件 exe 已退役，见 AGENTS.md 六。
 APP_NAME = "羽毛笔 La Pluma"
 

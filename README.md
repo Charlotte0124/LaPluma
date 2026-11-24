@@ -17,7 +17,7 @@
 
 <div align="center">
 
-<a href="https://github.com/Charlotte0124/LaPluma/archive/refs/heads/main.zip"><img src="https://img.shields.io/badge/⬇_下载_v1.9.16-C8202C?style=for-the-badge&logo=windows&logoColor=white" height="40" alt="下载"></a>
+<a href="https://github.com/Charlotte0124/LaPluma/releases/download/v1.9.17/LaPluma-1.9.17.zip"><img src="https://img.shields.io/badge/⬇_下载_v1.9.17-C8202C?style=for-the-badge&logo=windows&logoColor=white" height="40" alt="下载"></a>
 &nbsp;
 <a href="一键启动.ps1"><img src="https://img.shields.io/badge/▶_一键启动-2F7D4F?style=for-the-badge&logo=powershell&logoColor=white" height="40" alt="一键启动"></a>
 &nbsp;
@@ -32,7 +32,7 @@
 ![license](https://img.shields.io/badge/license-MIT-171714?style=flat-square)
 ![content](https://img.shields.io/badge/示例内容-CC_BY--NC_4.0-171714?style=flat-square)
 ![python](https://img.shields.io/badge/python-3.12-171714?style=flat-square)
-![version](https://img.shields.io/badge/version-1.9.16-171714?style=flat-square)
+![version](https://img.shields.io/badge/version-1.9.17-171714?style=flat-square)
 ![gates](https://img.shields.io/badge/三道门-绿才出门-C8202C?style=flat-square)
 ![offline](https://img.shields.io/badge/出_PDF-不需要密钥-2F7D4F?style=flat-square)
 
@@ -251,6 +251,7 @@ A/B/C 三层可离线运行；仅「让模型撰写新内容」时才需要 D �
 <!-- 最近更新:begin（由 tools/sync-readme.py 生成，别手改） -->
 | 版本 | 日期 | 这一版做了什么 |
 |:--|:--|:--|
+| **v1.9.17** | 11-24 | 阅读侧栏加「会话」页签（带出处、按讲次限定）；会话回复正常排版；讲号定位兜底；翻译自动判方向；密钥步骤灰注并成一条 |
 | **v1.9.16** | 11-23 | 讲义里的「课件 p.N」可点开原件；补图不再拿徽标页凑数；桌面快捷方式直连 powershell；补管理员入口与项目简介 |
 | **v1.9.15** | 11-21 | 三道门文案并入标题；分发改文件夹版，不再打 exe |
 | **v1.9.14** | 11-19 | 导入后自动判断更像哪门课并询问是否搬；生成须知移到三道门下面；生成完成从批次里移除 |
