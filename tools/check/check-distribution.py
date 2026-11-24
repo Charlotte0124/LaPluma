@@ -65,6 +65,22 @@ def main() -> int:
     feedmaker = ROOT / "tools" / "build" / "make-feed.py"
     if feedmaker.is_file() and "--app" not in feedmaker.read_text(encoding="utf-8"):
         fails.append("红 E: make-feed.py 不支持 --app（文件夹版整包）")
+
+    # 2026-11-25 用户：「主要是设定好那个库是在哪吧 要么就加上个检测到有以前版本的 是否要导入？」
+    #   库位置与「先问再导入」是 v1.9.19 的主线，接线断了就等于又回到「换版本课程消失」。
+    lib_files = {
+        "paths.py": ("library_root", "LIBRARY_CUSTOM"),
+        "upgrade.py": ("def set_library", "def pending_for"),
+        "ui/server.py": ("/api/library", "_pending_library"),
+        "ui/index.html": ("课程库位置", "libAsk"),
+    }
+    for rel, needles in lib_files.items():
+        fp = ROOT / rel
+        text = fp.read_text(encoding="utf-8") if fp.is_file() else ""
+        for needle in needles:
+            if needle not in text:
+                fails.append("红 F: %s 缺 %s（课程库位置 / 先问再导入的接线断了）" % (rel, needle))
+
     if fails:
         for f in fails:
             print(f)

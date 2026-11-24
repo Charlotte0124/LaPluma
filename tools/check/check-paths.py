@@ -119,7 +119,9 @@ def run_checks(break_it: bool = False) -> tuple[int, list]:
         runner = os.path.join(tmp, "run_frozen.py")
         with open(runner, "w", encoding="utf-8") as f:
             f.write(RUNNER)
-        env = dict(os.environ, PLUMA_FULL="" if QUICK else "1", PYTHONIOENCODING="utf-8")
+        env = dict(os.environ, PLUMA_FULL="" if QUICK else "1", PYTHONIOENCODING="utf-8",
+                   # 库位置是用户配置：判据不能被开发机 ~\.pluma 里的 library_root 带偏
+                   PLUMA_NO_LIBRARY="1")
         p = subprocess.run([sys.executable, runner, res, data], cwd=data, capture_output=True,
                            text=True, encoding="utf-8", errors="replace", timeout=600, env=env)
         blob = [l for l in (p.stdout or "").splitlines() if l.startswith("@@JSON@@")]
@@ -159,6 +161,79 @@ def run_checks(break_it: bool = False) -> tuple[int, list]:
         shutil.rmtree(tmp, ignore_errors=True)
 
 
+
+LIB_RUNNER = r'''
+import json, sys
+import paths
+print("@@LIB@@" + json.dumps({"data": paths.DATA_ROOT, "custom": paths.LIBRARY_CUSTOM,
+      "ignored": paths.LIBRARY_IGNORED, "default": paths.LIBRARY_DEFAULT}, ensure_ascii=False))
+'''
+
+
+def run_library_checks() -> list:
+    """课程库位置（v1.9.19）：配置生效 / 找不到时回退 / PLUMA_DATA 优先 / 默认不变。"""
+    tmp = tempfile.mkdtemp(prefix="pluma-libchk-")
+    home = os.path.join(tmp, "home")
+    os.makedirs(home)
+    lib = os.path.join(tmp, "library")
+    os.makedirs(os.path.join(lib, "数学", "01_讲义"))
+    other = os.path.join(tmp, "other")
+    os.makedirs(other)
+    state = os.path.join(home, "install.json")
+    missing = os.path.join(tmp, "不在的库")
+
+    def run(extra=None):
+        env = dict(os.environ, PLUMA_HOME=home, PYTHONPATH=ROOT,
+                   PYTHONIOENCODING="utf-8")
+        env.pop("PLUMA_DATA", None)
+        env.pop("PLUMA_NO_LIBRARY", None)
+        env.update(extra or {})
+        p = subprocess.run([sys.executable, "-X", "utf8", "-c", LIB_RUNNER], cwd=ROOT,
+                           capture_output=True, text=True, encoding="utf-8",
+                           errors="replace", timeout=120, env=env)
+        blob = [l for l in (p.stdout or "").splitlines() if l.startswith("@@LIB@@")]
+        if not blob:
+            return {"error": (p.stderr or "")[:300]}
+        return json.loads(blob[0][len("@@LIB@@"):])
+
+    def write_state(obj):
+        with open(state, "w", encoding="utf-8") as f:
+            json.dump(obj, f, ensure_ascii=False)
+
+    checks = []
+
+    def chk(name, ok, detail=""):
+        checks.append((name, bool(ok), detail))
+
+    low = lambda s: os.path.normcase(os.path.abspath(s))  # noqa: E731
+    try:
+        write_state({"library_root": lib})
+        got = run()
+        chk("8 库位置配置生效（数据根 = 配置的文件夹）",
+            low(got.get("data", "")) == low(lib) and got.get("custom") is True,
+            got.get("error") or got.get("data"))
+
+        write_state({"library_root": missing})
+        got = run()
+        chk("9 库文件夹不存在时回退程序目录并记下原因",
+            low(got.get("data", "")) == low(ROOT) and low(got.get("ignored", "")) == low(missing),
+            got.get("error") or "%s / %s" % (got.get("data"), got.get("ignored")))
+
+        write_state({"library_root": lib})
+        got = run({"PLUMA_DATA": other})
+        chk("10 PLUMA_DATA 优先于配置（检查器独立）",
+            low(got.get("data", "")) == low(other), got.get("error") or got.get("data"))
+
+        write_state({})
+        got = run()
+        chk("11 没配置时仍是程序目录（老行为不变）",
+            low(got.get("data", "")) == low(ROOT) and got.get("custom") is False,
+            got.get("error") or got.get("data"))
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+    return checks
+
+
 def report(checks: list) -> None:
     for name, ok, detail in checks:
         print(("  OK  " if ok else "  ✗   ") + name + ("  ← " + str(detail) if detail and not ok else ""))
@@ -175,22 +250,26 @@ def main() -> int:
     if "--selftest" in ARGS:
         print("--- 造坏一遍（数据根指到只读解包目录），它必须红 ---")
         rc_bad, checks_bad = run_checks(break_it=True)
-        report(checks_bad)
-        expect = rc_bad == 1 and not checks_bad[1][1]   # 第 2 项「数据根」必须红
+        lib_bad = run_library_checks()
+        report(checks_bad + lib_bad)
+        expect = (rc_bad == 1 and not checks_bad[1][1]   # 第 2 项「数据根」必须红
+                  and all(c[1] for c in lib_bad))
         print("造坏结果：%s（期望：退出 1 且第 2 项红）" % ("符合预期" if expect else "不符合预期"))
         if not expect:
             return 1
         print("\n--- 还原后真跑一遍，它必须绿 ---")
         rc_ok, checks_ok = run_checks()
-        report(checks_ok)
-        if rc_ok != 0:
+        lib_ok = run_library_checks()
+        report(checks_ok + lib_ok)
+        if rc_ok != 0 or not all(c[1] for c in lib_ok):
             return 1
         print("\n自测通过：同一个判据在造坏时红、在正常时绿。")
         return 0
 
     rc, checks = run_checks()
+    checks += run_library_checks()
     report(checks)
-    return rc
+    return 1 if (rc or any(not c[1] for c in checks)) else 0
 
 
 if __name__ == "__main__":

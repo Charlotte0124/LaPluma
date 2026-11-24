@@ -225,8 +225,9 @@
 1. **窗口组件是启动器的责任**：`一键启动.ps1` 必须检查 `pywebview`，缺了自动 `pip install pywebview`；`ui\server.py` 在窗口起不来时**先弹窗说明**（缺什么、怎么装、日志路径），不许静默打开浏览器。只有 `--no-window` 或用户明确点「先用浏览器」才走浏览器。
 2. **每次发版必须重生成更新清单**：`python tools\build\make-zip.py --version X` → `python tools\build\make-feed.py --version X --app dist\LaPluma-X.zip`；清单里的 `assets.app` 指向文件夹版整包，`sha256` 必须与上传到 Release 的 zip 一致。`make-zip.py` 剔除 `feed/latest.json`，所以「改清单」不会改变发布包 sha256。
 3. **文件夹版升级只覆盖程序文件**：`tools\upgrade\apply_folder.py` 等旧进程退出后覆盖 `ui` / `engine` / `tools` / `docs` 等，用户数据（`courses.local.json`、课程目录、`out`、`_logs`、`_trash`）一个都不动；`courses.json` 已存在时不覆盖；被覆盖的旧文件先备份到 `%USERPROFILE%\.pluma\update\backup-*`，失败自动回滚。
-4. **新目录首次启动要导入旧课程**：`upgrade.py` 按 `install.json` → 同级目录 → Downloads / Desktop 找旧数据根，只补目标缺的文件；旧目录原样保留。禁止用「让用户自己拷」当默认。
-5. **卸载旧版被占用**：先关窗口，再 `python upgrade.py --stop-old --kill` 结束占用 8765–8775 的旧实例；日志与命令写进 `docs\使用\10-怎么更新.md`。
+4. **课程库位置可独立于程序目录**（2026-11-25 用户：「主要是设定好那个库是在哪吧」）：库 = `courses.local.json` + 课程目录 + `out` / `_logs` / `_trash`。默认仍是程序目录；「设置 → 课程库位置」可改到任意文件夹，记录在 `%USERPROFILE%\.pluma\install.json` 的 `library_root`，**重启生效**。改库位置时「复制过去」只补目标缺的文件，旧库不动。改库后 `paths.bootstrap()` 不得把库目录插到 `sys.path` 前面（会遮住新程序的模块）。
+5. **检测到旧版本要先问，不许偷偷导入**（用户：「要么就加上个检测到有以前版本的 是否要导入？」）：`upgrade.pending_for()` 只列候选（`install.json` 记的数据根 → 同级目录 → Downloads / Desktop），界面给「直接改用 / 复制到当前目录 / 不用」三个选择；「不用」写进 `import_declined`，不再反复问。`upgrade.py --from` 保留为手动入口。
+6. **卸载旧版被占用**：先关窗口，再 `python upgrade.py --stop-old --kill` 结束占用 8765–8775 的旧实例；日志与命令写进 `docs\使用\10-怎么更新.md`。卸载前用 `--where` 看库在不在旧程序目录里。
 
-**怎么验证它被执行**：`python tools\check\check-distribution.py`（启动器必须有 `pywebview` 安装与 WebView2 提示、升级件齐全、make-feed 支持 `--app`）＋ `python tools\check\check-update.py`（第十二项：app 资产 → 下载 zip → 覆盖程序、保留课程、留备份、写 `folder apply ok`）。两项都由提交钩子或手动跑；不绿就是没接上。
+**怎么验证它被执行**：`python tools\check\check-distribution.py`（启动器必须有 `pywebview` 安装与 WebView2 提示、升级件齐全、make-feed 支持 `--app`、`/api/library` 与「课程库位置」接线在）＋ `python tools\check\check-paths.py`（第 8–11 项：库配置生效 / 目录缺失回退 / `PLUMA_DATA` 优先 / 默认行为不变；`--selftest` 要求造坏会红）＋ `python tools\check\check-update.py`（第十二项：app 资产 → 下载 zip → 覆盖程序、保留课程、留备份、写 `folder apply ok`）。三项都由提交钩子或手动跑；不绿就是没接上。
 

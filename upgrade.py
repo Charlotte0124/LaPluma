@@ -10,11 +10,17 @@ r"""升级与数据迁移（v1.9.18，2026-11-24）。
 
   1 import_from(src, dst)  把旧目录里的「用户数据」搬到新目录：courses.local.json、
      真实课程目录、out / _logs / _trash、根目录下的 PDF。目标已存在的文件不覆盖。
-  2 auto_import(root)      新目录首次启动时自动找旧目录（%USERPROFILE%\.pluma\install.json
-     记的上一次数据根、同级目录、Downloads / Desktop 里名字像 LaPluma 的目录），
-     找到且新目录还没有用户数据时才导入；返回一份报告给界面弹窗。
+  2 pending_for(root)      新目录首次启动时找旧目录（install.json 记的上一次数据根、
+     同级目录、Downloads / Desktop 里名字像 LaPluma 的目录），只**列出来给界面问**，
+     不再偷偷导入（v1.9.19 用户：「要么就加上个检测到有以前版本的 是否要导入？」）。
+
+课程库位置（v1.9.19）
+    set_library(path) / clear_library() 把「库」定在任意文件夹（install.json 的
+    library_root），换新版本只换程序、课程留在库里。命令行 --where / --set-library。
 
 命令行：
+    python upgrade.py --where
+    python upgrade.py --set-library "D:\我的羽毛笔库"
     python upgrade.py --list
     python upgrade.py --from "D:\旧版\LaPluma" --dry-run
     python upgrade.py --from "D:\旧版\LaPluma"
@@ -218,21 +224,103 @@ def _write_report(report: dict) -> str:
         return ""
 
 
-def record_install(root: str) -> None:
-    """记下这次用的数据根，下一次在别处启动时能找到旧课程。"""
+def _write_state(st: dict) -> bool:
     try:
         os.makedirs(PLUMA_HOME, exist_ok=True)
-        old = _read_json(STATE, {})
-        if not isinstance(old, dict):
-            old = {}
-        old.update({"last_data_root": os.path.abspath(root),
-                    "updated": time.strftime("%Y-%m-%d %H:%M:%S")})
         tmp = STATE + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(old, f, ensure_ascii=False, indent=2)
+            json.dump(st, f, ensure_ascii=False, indent=2)
         os.replace(tmp, STATE)
+        return True
     except Exception:  # noqa: BLE001
-        pass
+        return False
+
+
+def record_install(root: str) -> None:
+    """记下这次用的数据根，下一次在别处启动时能找到旧课程。"""
+    old = _read_json(STATE, {})
+    if not isinstance(old, dict):
+        old = {}
+    old.update({"last_data_root": os.path.abspath(root),
+                "updated": time.strftime("%Y-%m-%d %H:%M:%S")})
+    _write_state(old)
+
+
+# ---------- 课程库位置（v1.9.19） ----------
+def library_status() -> dict:
+    """当前库：root 实际用的数据根；config 配置里写的；ignored 配置了但找不到的。"""
+    try:
+        import paths
+    except Exception:  # noqa: BLE001
+        return {"root": ROOT, "default": ROOT, "custom": False,
+                "config": "", "ignored": ""}
+    return {"root": paths.DATA_ROOT, "default": paths.LIBRARY_DEFAULT,
+            "custom": paths.LIBRARY_CUSTOM, "config": paths.LIBRARY_CONFIG,
+            "ignored": paths.LIBRARY_IGNORED}
+
+
+def _inside(child: str, parent: str) -> bool:
+    c = os.path.normcase(os.path.abspath(child))
+    p = os.path.normcase(os.path.abspath(parent))
+    return c == p or c.startswith(p.rstrip(os.sep) + os.sep)
+
+
+def set_library(path: str) -> dict:
+    """把课程库定在 path（必须已存在）。下次启动生效，调用方负责提示重启。"""
+    p = os.path.abspath(os.path.expanduser(str(path or "").strip()))
+    if not str(path or "").strip():
+        return {"ok": False, "error": "没有给文件夹"}
+    if not os.path.isdir(p):
+        return {"ok": False, "error": "这个文件夹不存在：%s" % p}
+    st = _read_json(STATE, {})
+    if not isinstance(st, dict):
+        st = {}
+    st.update({"library_root": p,
+               "library_set": time.strftime("%Y-%m-%d %H:%M:%S")})
+    if not _write_state(st):
+        return {"ok": False, "error": "写不进安装状态：%s" % STATE}
+    return {"ok": True, "library": p}
+
+
+def clear_library() -> dict:
+    """恢复默认：库 = 程序目录。"""
+    st = _read_json(STATE, {})
+    if not isinstance(st, dict):
+        st = {}
+    st.pop("library_root", None)
+    st["library_cleared"] = time.strftime("%Y-%m-%d %H:%M:%S")
+    if not _write_state(st):
+        return {"ok": False, "error": "写不进安装状态：%s" % STATE}
+    return {"ok": True}
+
+
+def declined_paths() -> list:
+    raw = _read_json(STATE, {}).get("import_declined") or []
+    return [os.path.abspath(x) for x in raw if isinstance(x, str) and x.strip()]
+
+
+def decline(path: str) -> None:
+    """用户点了「不用」：记住这个旧目录，下次启动不再拿它问。"""
+    p = os.path.abspath(path)
+    st = _read_json(STATE, {})
+    if not isinstance(st, dict):
+        st = {}
+    keep = [x for x in (st.get("import_declined") or []) if isinstance(x, str)
+            and os.path.normcase(x) != os.path.normcase(p)]
+    keep.append(p)
+    st["import_declined"] = keep[-20:]
+    _write_state(st)
+
+
+def pending_for(root: str) -> list:
+    """首次启动「要不要导入」的候选。当前库已有用户数据、或用户明确拒绝过，就不再问。"""
+    if os.environ.get("PLUMA_NO_IMPORT") == "1":
+        return []
+    root = os.path.abspath(root)
+    if _has_user_data(root):
+        return []
+    no = {os.path.normcase(x) for x in declined_paths()}
+    return [c for c in find_candidates(root) if os.path.normcase(c["path"]) not in no]
 
 
 def _has_user_data(root: str) -> bool:
@@ -272,32 +360,18 @@ def find_candidates(current: str) -> list:
                 add(os.path.join(parent, name), "同级目录")
     except OSError:
         pass
-    for base in (os.path.join(HOME, "Downloads"), os.path.join(HOME, "Desktop")):
-        try:
-            for name in os.listdir(base):
-                if name.lower().startswith(("lapluma", "羽毛笔")) and ".bak-" not in name.lower():
-                    add(os.path.join(base, name), os.path.basename(base))
-        except OSError:
-            pass
+    # 截图 / 判据里不该翻开发机自己的 Downloads、Desktop（会混进真实课程名）；
+    #   只在这一档关掉，正常启动不设这个变量。
+    if os.environ.get("PLUMA_NO_HOME_SCAN") != "1":
+        for base in (os.path.join(HOME, "Downloads"), os.path.join(HOME, "Desktop")):
+            try:
+                for name in os.listdir(base):
+                    if name.lower().startswith(("lapluma", "羽毛笔")) and ".bak-" not in name.lower():
+                        add(os.path.join(base, name), os.path.basename(base))
+            except OSError:
+                pass
     out.sort(key=lambda x: (-x["items"], -x["mtime"]))
     return out
-
-
-def auto_import(root: str) -> dict | None:
-    """新目录首次启动时自动导入。返回报告；没有可导入的就返回 None。"""
-    if os.environ.get("PLUMA_NO_IMPORT") == "1":
-        return None
-    root = os.path.abspath(root)
-    record_install(root)
-    if _has_user_data(root):
-        return None
-    cands = find_candidates(root)
-    if not cands:
-        return None
-    best = cands[0]
-    report = import_from(best["path"], root)
-    report["candidate"] = best
-    return report
 
 
 # ---------- 旧实例（卸载旧版被「正在占用」挡住时用） ----------
@@ -353,10 +427,13 @@ def main(argv=None) -> int:
         sys.stdout.reconfigure(encoding="utf-8")
     except Exception:  # noqa: BLE001
         pass
-    ap = argparse.ArgumentParser(description="羽毛笔升级：导入旧课程 / 关闭旧实例")
+    ap = argparse.ArgumentParser(description="羽毛笔升级：课程库位置 / 导入旧课程 / 关闭旧实例")
     ap.add_argument("--from", dest="src", default="", help="旧版目录")
-    ap.add_argument("--to", dest="dst", default=ROOT, help="当前目录（默认本脚本所在目录）")
+    ap.add_argument("--to", dest="dst", default="", help="导入目标（默认当前课程库）")
     ap.add_argument("--list", action="store_true", help="列出可能含旧课程的目录")
+    ap.add_argument("--where", action="store_true", help="显示当前课程库位置")
+    ap.add_argument("--set-library", dest="lib", default="", help="把课程库定在这个文件夹（下次启动生效）")
+    ap.add_argument("--clear-library", action="store_true", help="课程库恢复为程序目录")
     ap.add_argument("--dry-run", action="store_true", help="只看会复制什么，不写盘")
     ap.add_argument("--stop-old", action="store_true", help="列出占用端口的旧实例")
     ap.add_argument("--kill", action="store_true", help="配合 --stop-old：结束旧实例")
@@ -364,18 +441,36 @@ def main(argv=None) -> int:
 
     if a.stop_old:
         return stop_old(a.kill)
+    if a.where:
+        print(json.dumps(library_status(), ensure_ascii=False, indent=2))
+        return 0
+    if a.lib:
+        res = set_library(a.lib)
+        print(json.dumps(res, ensure_ascii=False, indent=2))
+        if res.get("ok"):
+            print("已记录。关闭软件重新打开后生效；课程留在原文件夹，不复制。")
+        return 0 if res.get("ok") else 1
+    if a.clear_library:
+        res = clear_library()
+        print(json.dumps(res, ensure_ascii=False, indent=2))
+        if res.get("ok"):
+            print("已恢复默认（课程库 = 程序目录）。关闭软件重新打开后生效。")
+        return 0 if res.get("ok") else 1
+    dst = os.path.abspath(a.dst) if a.dst else library_status()["root"]
     if a.list:
-        cands = find_candidates(a.dst)
+        cands = find_candidates(dst)
+        no = {os.path.normcase(x) for x in declined_paths()}
         if not cands:
             print("没找到含用户数据的旧目录。")
             return 0
         for c in cands:
-            print("%-60s  项目 %d  ·  %s" % (c["path"], c["items"], c["why"]))
+            mark = "（问过，用户选了不用）" if os.path.normcase(c["path"]) in no else ""
+            print("%-60s  项目 %d  ·  %s%s" % (c["path"], c["items"], c["why"], mark))
         return 0
     if not a.src:
         ap.print_help()
         return 2
-    rep = import_from(a.src, a.dst, dry_run=a.dry_run)
+    rep = import_from(a.src, dst, dry_run=a.dry_run)
     print(json.dumps(rep, ensure_ascii=False, indent=2)[:4000])
     return 0 if rep.get("ok") else 1
 

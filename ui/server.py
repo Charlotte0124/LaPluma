@@ -32,16 +32,34 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import paths  # noqa: E402
 # 2026-11-24：文件夹版的数据根就是程序目录；把新压缩包解到新文件夹时，旧课程不会跟过来。
-#   这里在首次启动时自动从旧目录导入（见仓根 upgrade.py）；被 check-* 当模块 import
-#   时 __name__ 不是 __main__，一行都不会动用户的盘。
+#   2026-11-25 用户：「主要是设定好那个库是在哪吧 要么就加上个检测到有以前版本的
+#   是否要导入？」——库位置可在「设置」里指定（见 paths.py），首次启动也只把旧目录
+#   **列出来问**，不再偷偷导入（见仓根 upgrade.py）。
+#   被 check-* 当模块 import 时 __name__ 不是 __main__，下面一行都不会动用户的盘。
 import upgrade  # noqa: E402
-_IMPORT_REPORT = None
-if __name__ == "__main__":
-    try:
-        _IMPORT_REPORT = upgrade.auto_import(paths.DATA_ROOT)
-    except Exception as _imp_e:  # noqa: BLE001
-        _IMPORT_REPORT = {"ok": False,
-                          "error": "%s: %s" % (type(_imp_e).__name__, _imp_e)}
+_PENDING_LIBRARY = None      # 启动时算一次；用户选完（导入/拒绝）后清掉
+
+
+def _pending_library(force: bool = False) -> list:
+    """首次启动要不要导入旧课程：只算一次，避免每次 /api/bootstrap 都扫盘。"""
+    global _PENDING_LIBRARY
+    if _PENDING_LIBRARY is None or force:
+        try:
+            _PENDING_LIBRARY = upgrade.pending_for(paths.DATA_ROOT)
+        except Exception as e:  # noqa: BLE001
+            _log_error("pending-library", e)
+            _PENDING_LIBRARY = []
+    return _PENDING_LIBRARY
+
+
+def _library_payload() -> dict:
+    st = upgrade.library_status()
+    return {"root": st.get("root") or paths.DATA_ROOT,
+            "default": st.get("default") or paths.LIBRARY_DEFAULT,
+            "custom": bool(st.get("custom")),
+            "config": st.get("config") or "",
+            "ignored": st.get("ignored") or "",
+            "pending": _pending_library()}
 
 # 2026-11-24：离线语言包（阅读侧栏「管理」里下载）。它是可选依赖——ctranslate2 /
 #   sentencepiece 没装时 import 会抛，这里兜住：在线翻译照常，只是「离线」那档不可用。
@@ -104,7 +122,7 @@ HOST, PORT = "127.0.0.1", 8765
 #   每次打开/刷新阅读器都全量重传（本机无感，平板走 WiFi 明显）。
 #   index.html 必须仍走 no-store（改完界面要能立刻看到新版）。
 _STATIC_ETAG = {}
-VERSION = "1.9.18"
+VERSION = "1.9.19"
 # v1.9.15 起分发只走文件夹（仓库目录 + 启动羽毛笔.cmd）；单文件 exe 已退役，见 AGENTS.md 六。
 APP_NAME = "羽毛笔 La Pluma"
 
@@ -1637,6 +1655,8 @@ class Handler(BaseHTTPRequestHandler):
                     "save_dir": cfg["save_dir"], "save_dir_abs": os.path.abspath(os.path.join(ROOT, cfg["save_dir"])),
                     "save_dir_fixed": cfg.get("save_dir_fixed", False),
                     "data_root": paths.DATA_ROOT,
+                    # 2026-11-25：课程库位置（可独立于程序目录）+ 首次启动的旧目录候选
+                    "library": _library_payload(),
                     "deps": dep_state(),
                     # 界面偏好（主题 / 成品形态 / 讲义语言 …）：存本机配置，换端口也不丢。
                     "ui": cfg.get("ui") or {},
@@ -2130,6 +2150,61 @@ class Handler(BaseHTTPRequestHandler):
                 if not p:
                     return self._json({"ok": False, "canceled": True})
                 return self._json({"ok": True, "path": p})
+            if u.path == "/api/library":
+                # 2026-11-25：课程库位置。只接本机（远程平板改运行电脑的库路径太危险）。
+                if self.client_address[0] not in ("127.0.0.1", "::1"):
+                    return self._json({"ok": False,
+                                       "error": "只能在运行软件的那台电脑上改课程库位置"}, 403)
+                act = str(body.get("action") or "").strip()
+                src = str(body.get("path") or "").strip()
+                global _PENDING_LIBRARY
+                if act == "skip":
+                    if src:
+                        upgrade.decline(src)
+                    _PENDING_LIBRARY = []
+                    return self._json({"ok": True})
+                if act == "import":
+                    if not src or not os.path.isdir(src):
+                        return self._json({"ok": False, "error": "旧目录不存在：%s" % src}, 400)
+                    if os.path.normcase(os.path.abspath(src)) == os.path.normcase(
+                            os.path.abspath(paths.DATA_ROOT)):
+                        return self._json({"ok": False, "error": "这就是当前的课程库，不用导入"}, 400)
+                    rep = upgrade.import_from(src, paths.DATA_ROOT)
+                    _PENDING_LIBRARY = []
+                    return self._json({"ok": bool(rep.get("ok")), "report": rep,
+                                       "courses": discover_courses()})
+                if act == "use":
+                    if not src or not os.path.isdir(src):
+                        return self._json({"ok": False, "error": "文件夹不存在：%s" % src}, 400)
+                    tgt = os.path.abspath(src)
+                    now = os.path.abspath(paths.DATA_ROOT)
+                    rep = None
+                    if body.get("copy_current") and os.path.normcase(tgt) != os.path.normcase(now):
+                        # 目标不能在现有库里面（会复制到自己），现有库也不能在目标里面（会把程序/旧数据卷进来）
+                        def _under(a, b):
+                            a, b = os.path.normcase(a), os.path.normcase(b)
+                            return a == b or a.startswith(b.rstrip(os.sep) + os.sep)
+                        if _under(tgt, now) or _under(now, tgt):
+                            return self._json({"ok": False,
+                                               "error": "两个文件夹有包含关系，不能这样搬：%s ↔ %s"
+                                                        % (now, tgt)}, 400)
+                        rep = upgrade.import_from(now, tgt)
+                        if not rep.get("ok"):
+                            return self._json({"ok": False, "error": "复制没完成，库位置未改",
+                                               "report": rep}, 500)
+                    res = upgrade.set_library(tgt)
+                    if not res.get("ok"):
+                        return self._json(res, 500)
+                    _PENDING_LIBRARY = []
+                    return self._json({"ok": True, "restart": True, "library": tgt,
+                                       "copied": bool(rep), "report": rep})
+                if act == "reset":
+                    res = upgrade.clear_library()
+                    if not res.get("ok"):
+                        return self._json(res, 500)
+                    return self._json({"ok": True, "restart": True,
+                                       "library": paths.LIBRARY_DEFAULT})
+                return self._json({"ok": False, "error": "不认识的 action：%s" % act}, 400)
             if u.path == "/api/config":
                 cfg = load_cfg()
                 for k in ("model", "save_dir", "base_url", "provider"):
@@ -3656,18 +3731,13 @@ def main() -> int:
         upgrade.record_install(paths.DATA_ROOT)
     except Exception:  # noqa: BLE001
         pass
-    # 新目录首次启动导入了旧课程时，用系统对话框说一声（不是界面改动，不弹在页面里）
-    if (_IMPORT_REPORT and _IMPORT_REPORT.get("items")
-            and "--no-window" not in argv and not os.environ.get("PLUMA_TEST")):
-        if _IMPORT_REPORT.get("ok"):
-            names = [x.get("name") for x in _IMPORT_REPORT.get("items") or []]
-            _msgbox("已从旧版本导入 %d 项课程数据：\n%s\n\n旧目录保持原样，可以留着备份。"
-                    % (len(names), "、".join(names[:8]) + ("…" if len(names) > 8 else "")),
-                    APP_NAME)
-        else:
-            _msgbox("从旧版本导入课程没完成：%s\n\n旧目录未动，日志见 %s。"
-                    % (_IMPORT_REPORT.get("error") or "未知原因",
-                       os.path.join(paths.DATA_ROOT, "_logs")), APP_NAME)
+    # 2026-11-25：库位置配了但找不到（移动硬盘没插 / 文件夹被删）时，课程会看起来「全没了」。
+    #   在窗口起来之前先说明白，免得用户以为软件把课程弄丢了。
+    if (paths.LIBRARY_IGNORED and "--no-window" not in argv
+            and not os.environ.get("PLUMA_TEST")):
+        _msgbox("上次设的课程库找不到了：\n%s\n\n这次先用程序目录（%s）。"
+                "接上那块盘、或到「设置 → 课程库位置」里重新选一下即可。"
+                % (paths.LIBRARY_IGNORED, paths.DATA_ROOT), APP_NAME)
     # 2026-11-17 见文件上方「启动自保」：先摘遮蔽目录，再碰 webview（webview 后面才导入）
     for _d, _f in _strip_shadowed():
         _log_write("startup.log", "%s 摘掉遮蔽目录 %s（含 %s）"
