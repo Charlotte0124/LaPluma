@@ -68,11 +68,12 @@ def main() -> int:
 
     # 2026-11-25 用户：「主要是设定好那个库是在哪吧 要么就加上个检测到有以前版本的 是否要导入？」
     #   库位置与「先问再导入」是 v1.9.19 的主线，接线断了就等于又回到「换版本课程消失」。
+    #   v1.9.20「默认不要在 c 盘」：自动挑盘 + C 盘库的挪库询问，任何一处断了都退回默认 C。
     lib_files = {
-        "paths.py": ("library_root", "LIBRARY_CUSTOM"),
-        "upgrade.py": ("def set_library", "def pending_for"),
-        "ui/server.py": ("/api/library", "_pending_library"),
-        "ui/index.html": ("课程库位置", "libAsk"),
+        "paths.py": ("library_root", "LIBRARY_CUSTOM", "_pick_auto_dir", "羽毛笔库", "LIBRARY_AUTO"),
+        "upgrade.py": ("def set_library", "def pending_for", "def decline_off_c"),
+        "ui/server.py": ("/api/library", "_pending_library", "suggest_library", "off_c_decline"),
+        "ui/index.html": ("课程库位置", "libAsk", "libAskC", "on_system_drive"),
     }
     for rel, needles in lib_files.items():
         fp = ROOT / rel

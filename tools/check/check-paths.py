@@ -20,6 +20,9 @@
   6 生成产物落在 data\\DEMO\\01_讲义，且 res 里的文件一个没变（没往只读目录写）
   7 数据根有同名课程时优先用数据根（用户把自己的课件放 exe 旁边覆盖示例）
 
+另有课程库 4 项（8–11，配置生效 / 回退 / PLUMA_DATA / 默认）与
+默认不在 C 盘 2 项（12–13，挑盘规则 / 首次运行只挑一次并写进 install.json）。
+
 退出码：0 = 全绿；1 = 有红；2 = 没查（环境缺 Chrome 等，会明说哪项没查）。
 """
 from __future__ import annotations
@@ -226,12 +229,92 @@ def run_library_checks() -> list:
 
         write_state({})
         got = run()
+        # 状态文件已存在（不是首次运行），所以自动挑盘不会介入：仍是程序目录
         chk("11 没配置时仍是程序目录（老行为不变）",
             low(got.get("data", "")) == low(ROOT) and got.get("custom") is False,
             got.get("error") or got.get("data"))
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     return checks
+
+AUTO_RUNNER = r'''
+import json, os, sys, tempfile
+os.environ["PLUMA_NO_LIBRARY"] = "1"   # 导入时别让 paths 自己去挑盘（本机程序也可能在 C:）
+import paths
+del os.environ["PLUMA_NO_LIBRARY"]     # 下面要测的 _auto_library 自己会看这个变量
+
+yes = lambda p: True
+no_d = lambda p: not str(p).upper().startswith("D:")
+
+tmp = tempfile.mkdtemp(prefix="pluma-auto-")
+paths.STATE_PATH = os.path.join(tmp, "install.json")
+paths.PROGRAM_DIR = r"C:\app"
+paths.SYSTEM_DRIVE = "C:"
+paths._fixed_drives = lambda: ["D:\\"]
+paths._usable_library = lambda p: True
+
+out = {
+    "pick_d": paths._pick_auto_dir(r"C:\app", "C:", ["D:\\", "E:\\"], yes),
+    "pick_prog_on_d": paths._pick_auto_dir(r"D:\app", "C:", ["E:\\"], yes),
+    "pick_skip_unusable": paths._pick_auto_dir(r"C:\app", "C:", ["D:\\", "E:\\"], no_d),
+    "pick_only_system": paths._pick_auto_dir(r"C:\app", "C:", ["C:\\"], yes),
+    "auto": paths._auto_library(),
+}
+st = json.load(open(paths.STATE_PATH, encoding="utf-8"))
+out["state_root"] = st.get("library_root")
+out["state_auto"] = bool(st.get("library_auto"))
+out["second"] = paths._auto_library()   # 已经挑过一次：不再改
+p2 = os.path.join(tmp, "install2.json")
+paths.STATE_PATH = p2
+with open(p2, "w", encoding="utf-8") as f:
+    json.dump({"library_cleared": "2026-11-25"}, f)
+out["after_clear"] = paths._auto_library()   # 用户点过「恢复默认」：不自动搬
+p3 = os.path.join(tmp, "install3.json")
+paths.STATE_PATH = p3
+paths._program_has_data = lambda: True
+out["with_data"] = paths._auto_library()     # 程序目录里有课程：不自动搬
+print("@@AUTO@@" + json.dumps(out, ensure_ascii=False))
+'''
+
+
+def run_auto_checks() -> list:
+    """默认不在 C 盘（v1.9.20）：挑盘规则 + 首次运行只挑一次并写进 install.json。"""
+    tmp = tempfile.mkdtemp(prefix="pluma-autochk-")
+    try:
+        env = dict(os.environ, PLUMA_HOME=os.path.join(tmp, "home"),
+                   PYTHONPATH=ROOT, PYTHONIOENCODING="utf-8")
+        for k in ("PLUMA_DATA", "PLUMA_NO_LIBRARY", "PLUMA_NO_HOME_SCAN"):
+            env.pop(k, None)
+        p = subprocess.run([sys.executable, "-X", "utf8", "-c", AUTO_RUNNER], cwd=ROOT,
+                           capture_output=True, text=True, encoding="utf-8",
+                           errors="replace", timeout=120, env=env)
+        blob = [l for l in (p.stdout or "").splitlines() if l.startswith("@@AUTO@@")]
+        if not blob:
+            return [("12 挑盘规则", False, (p.stderr or "")[:300]),
+                    ("13 首次运行自动放别的盘", False, (p.stderr or "")[:300])]
+        got = json.loads(blob[0][len("@@AUTO@@"):])
+        d_lib = os.path.join("D:\\", "羽毛笔库")
+        e_lib = os.path.join("E:\\", "羽毛笔库")
+        checks = []
+
+        def chk(name, ok, detail=""):
+            checks.append((name, bool(ok), detail))
+
+        chk("12 挑盘规则：只挑非系统盘、跳过不能写的、程序不在 C 就不动",
+            (os.path.normcase(got.get("pick_d") or "") == os.path.normcase(d_lib)
+             and got.get("pick_prog_on_d") == ""
+             and os.path.normcase(got.get("pick_skip_unusable") or "") == os.path.normcase(e_lib)
+             and got.get("pick_only_system") == ""),
+            json.dumps(got, ensure_ascii=False))
+        chk("13 首次运行自动放 D:\\羽毛笔库 并写进状态，之后不再改",
+            (os.path.normcase(got.get("auto") or "") == os.path.normcase(d_lib)
+             and os.path.normcase(got.get("state_root") or "") == os.path.normcase(d_lib)
+             and got.get("state_auto") is True and got.get("second") == ""
+             and got.get("after_clear") == "" and got.get("with_data") == ""),
+            json.dumps(got, ensure_ascii=False))
+        return checks
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
 
 
 def report(checks: list) -> None:
@@ -251,23 +334,26 @@ def main() -> int:
         print("--- 造坏一遍（数据根指到只读解包目录），它必须红 ---")
         rc_bad, checks_bad = run_checks(break_it=True)
         lib_bad = run_library_checks()
-        report(checks_bad + lib_bad)
+        auto_bad = run_auto_checks()
+        report(checks_bad + lib_bad + auto_bad)
         expect = (rc_bad == 1 and not checks_bad[1][1]   # 第 2 项「数据根」必须红
-                  and all(c[1] for c in lib_bad))
+                  and all(c[1] for c in lib_bad) and all(c[1] for c in auto_bad))
         print("造坏结果：%s（期望：退出 1 且第 2 项红）" % ("符合预期" if expect else "不符合预期"))
         if not expect:
             return 1
         print("\n--- 还原后真跑一遍，它必须绿 ---")
         rc_ok, checks_ok = run_checks()
         lib_ok = run_library_checks()
-        report(checks_ok + lib_ok)
-        if rc_ok != 0 or not all(c[1] for c in lib_ok):
+        auto_ok = run_auto_checks()
+        report(checks_ok + lib_ok + auto_ok)
+        if rc_ok != 0 or not all(c[1] for c in lib_ok) or not all(c[1] for c in auto_ok):
             return 1
         print("\n自测通过：同一个判据在造坏时红、在正常时绿。")
         return 0
 
     rc, checks = run_checks()
     checks += run_library_checks()
+    checks += run_auto_checks()
     report(checks)
     return 1 if (rc or any(not c[1] for c in checks)) else 0
 

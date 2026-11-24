@@ -54,11 +54,21 @@ def _pending_library(force: bool = False) -> list:
 
 def _library_payload() -> dict:
     st = upgrade.library_status()
-    return {"root": st.get("root") or paths.DATA_ROOT,
+    root = st.get("root") or paths.DATA_ROOT
+    # 2026-11-25 用户：「那么默认不要在 c 盘可以吗」——新装自动放别的固定盘；
+    #   已经在 C 盘的旧库不静默搬，界面问一次（suggest + has_data）。
+    on_sys = bool(paths.SYSTEM_DRIVE) and paths.drive_of(root) == paths.SYSTEM_DRIVE
+    return {"root": root,
             "default": st.get("default") or paths.LIBRARY_DEFAULT,
             "custom": bool(st.get("custom")),
+            "auto": bool(getattr(paths, "LIBRARY_AUTO", False)),
             "config": st.get("config") or "",
             "ignored": st.get("ignored") or "",
+            "system_drive": paths.SYSTEM_DRIVE,
+            "on_system_drive": on_sys,
+            "suggest": (paths.suggest_library() if on_sys else ""),
+            "has_data": upgrade.has_user_data(root),
+            "off_c_declined": upgrade.off_c_declined(),
             "pending": _pending_library()}
 
 # 2026-11-24：离线语言包（阅读侧栏「管理」里下载）。它是可选依赖——ctranslate2 /
@@ -122,7 +132,7 @@ HOST, PORT = "127.0.0.1", 8765
 #   每次打开/刷新阅读器都全量重传（本机无感，平板走 WiFi 明显）。
 #   index.html 必须仍走 no-store（改完界面要能立刻看到新版）。
 _STATIC_ETAG = {}
-VERSION = "1.9.19"
+VERSION = "1.9.20"
 # v1.9.15 起分发只走文件夹（仓库目录 + 启动羽毛笔.cmd）；单文件 exe 已退役，见 AGENTS.md 六。
 APP_NAME = "羽毛笔 La Pluma"
 
@@ -2173,10 +2183,21 @@ class Handler(BaseHTTPRequestHandler):
                     _PENDING_LIBRARY = []
                     return self._json({"ok": bool(rep.get("ok")), "report": rep,
                                        "courses": discover_courses()})
+                if act == "off_c_decline":
+                    upgrade.decline_off_c()
+                    return self._json({"ok": True})
                 if act == "use":
-                    if not src or not os.path.isdir(src):
-                        return self._json({"ok": False, "error": "文件夹不存在：%s" % src}, 400)
-                    tgt = os.path.abspath(src)
+                    tgt = os.path.abspath(os.path.expanduser(src)) if src else ""
+                    if not src:
+                        return self._json({"ok": False, "error": "没有给文件夹"}, 400)
+                    if not os.path.isdir(tgt):
+                        # 「挪到建议的位置」时那个文件夹还不存在：允许按需创建（create=1）
+                        if not body.get("create"):
+                            return self._json({"ok": False, "error": "文件夹不存在：%s" % tgt}, 400)
+                        try:
+                            os.makedirs(tgt, exist_ok=True)
+                        except Exception as e:  # noqa: BLE001
+                            return self._json({"ok": False, "error": "建不了这个文件夹：%s" % e}, 500)
                     now = os.path.abspath(paths.DATA_ROOT)
                     rep = None
                     if body.get("copy_current") and os.path.normcase(tgt) != os.path.normcase(now):

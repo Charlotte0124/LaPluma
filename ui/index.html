@@ -1352,9 +1352,12 @@ async function boot(){
   const ok = B.configured;
   $('#dot').className = 'dot ' + (ok?'ok':'no');
   $('#status').textContent = ok ? ('模型已配置 · '+mname(B.model)) : '未配置模型（不影响出 PDF）';
-  if(!B.wizard_done) setTimeout(()=>wizard(0), 500);
-  // 2026-11-25：检测到旧课程库就先问一句，不再偷偷导入
-  if(B.wizard_done && B.library && (B.library.pending||[]).length) setTimeout(libAsk, 600);
+  if(!B.wizard_done){ setTimeout(()=>wizard(0), 500); return; }
+  if(libAsked) return;
+  // 2026-11-25：检测到旧课程库就先问一句，不再偷偷导入；库在 C 盘也问一次要不要挪
+  if(B.library && (B.library.pending||[]).length){ libAsked = true; setTimeout(libAsk, 600); }
+  else if(B.library && B.library.on_system_drive && B.library.suggest && B.library.has_data
+          && !B.library.off_c_declined){ libAsked = true; setTimeout(libAskC, 700); }
 }
 
 /* ---------- 课程 ---------- */
@@ -4039,7 +4042,8 @@ function wizard(step){
     body = `<h4>可以开始了</h4>
       <div class="kv"><span>模型</span><b>${esc(W.model?mname(W.model):mname(MODEL))}</b></div>
       <div class="kv"><span>API 密钥</span><b>${W.key?'已填写':'未填写（不影响生成 PDF）'}</b></div>
-      <div class="kv"><span>保存目录</span><b>${esc(W.dir||B.save_dir||'')}</b></div>`;
+      <div class="kv"><span>保存目录</span><b>${esc(W.dir||B.save_dir||'')}</b></div>
+      <div class="kv"><span>课程库</span><b>${esc((B.library&&B.library.root)||B.data_root||'')}</b></div>`;
   }
   $('#dlg').innerHTML = `<div class="eb">首次配置</div>${steps}${depWarn}${body}
     <div class="acts">${step>0?'<button class="btn ghost" id="wBack">上一步</button>':''}
@@ -4084,6 +4088,7 @@ function openSettings(){
     <p class="pickfine" id="sLibNote"></p>
     <div class="dirline" style="border:0;background:none;padding:0">
       <button class="pickbtn" id="sLibPick">📁 换一个文件夹…</button>
+      <button class="pickbtn" id="sLibMove" style="display:none">挪到别的盘…</button>
       <button class="pickbtn" id="sLibReset" style="display:none">恢复默认（程序目录）</button>
     </div>
     <div class="kv"><span>账户余额</span><b id="sBal">读取中…</b></div>
@@ -4143,14 +4148,14 @@ function samePath(a,b){
   const n = s => String(s||'').replace(/\//g,'\\').replace(/[\\]+$/,'').toLowerCase();
   return n(a) === n(b);
 }
-async function libUse(p, copy){
-  const ids = ['#libUse','#libUse2','#libCopy','#lbUse','#lbCopy'];
+async function libUse(p, copy, create){
+  const ids = ['#libUse','#libUse2','#libCopy','#lbUse','#lbCopy','#sLibMove','#libcMove','#libcNo'];
   const btns = ids.map(s=>$(s)).filter(Boolean);
   btns.forEach(b=>b.disabled=true);
   if(copy) toast('正在复制课程，文件多时请等一会儿…', 0);
   try{
     const j = await (await fetch('/api/library',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({action:'use', path:p, copy_current:!!copy})})).json();
+      body:JSON.stringify({action:'use', path:p, copy_current:!!copy, create:!!create})})).json();
     if(!j.ok){ btns.forEach(b=>b.disabled=false); toast('没改成：'+(j.error||'未知原因')); return; }
     closeVeil();
     alert('课程库已定为：\n'+p+'\n\n关闭软件重新打开后生效。'+(copy
@@ -4174,6 +4179,28 @@ async function libSkip(p){
   try{ await fetch('/api/library',{method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({action:'skip', path:p})}); }catch(e){}
   closeVeil(); toast('好，先不导入；以后可在「设置 → 课程库位置」里改');
+}
+let libAsked = false;
+function libAskC(){
+  // 2026-11-25 用户：「那么默认不要在 c 盘可以吗」——新装自动放别的盘；
+  //   已经在 C 盘的库不静默搬，这里问一次，复制后切换（重启生效，原文件不删）。
+  const L = B.library||{};
+  if(!L.suggest) return;
+  $('#dlg').innerHTML = `
+    <div class="eb">Library</div><h4>课程库在系统盘，要不要挪走？</h4>
+    <p class="fine">课程现在存在 <code>${esc(L.root||'')}</code>（${esc(L.system_drive||'C:')} 盘）。重装系统或清理系统盘时，这里可能被一起清掉。</p>
+    <p class="pickfine">建议复制到 <code>${esc(L.suggest)}</code> 再改用它：复制完关掉软件重开一次生效；原位置的文件不删，保持原样。</p>
+    <div class="acts">
+      <button class="btn ghost" id="libcNo">先不用</button>
+      <button class="btn" id="libcMove">复制过去并切换</button>
+    </div>`;
+  openVeil();
+  $('#libcNo').onclick = async ()=>{
+    try{ await fetch('/api/library',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({action:'off_c_decline'})}); }catch(e){}
+    closeVeil(); toast('好，库先留在原处；以后可在「设置 → 课程库位置」里挪');
+  };
+  $('#libcMove').onclick = ()=>libUse(L.suggest, true, true);
 }
 function libAsk(){
   const cs = (B.library&&B.library.pending)||[];
@@ -4216,12 +4243,21 @@ function bindLibraryRow(){
   const L = B.library||{};
   const cur = L.root || B.data_root || '';
   $('#sLib').textContent = cur || '（读不到）';
-  let html = L.custom
-    ? '课程存在这个独立文件夹里：换新版程序、把程序目录改名，都不影响课程。'
-    : '现在跟着程序目录走：把新版解到别的文件夹，课程不会跟过去。改到这里可固定下来。';
-  if(L.ignored) html = '<b style="color:var(--red)">上次设的库找不到：'+esc(L.ignored)+'（这次用程序目录）。</b><br>'+html;
+  let html = '';
+  if(L.ignored) html += '<b style="color:var(--red)">上次设的库找不到：'+esc(L.ignored)+'（这次用程序目录）。</b><br>';
+  if(L.auto) html += '程序在 C 盘，库已自动放到系统盘之外；换新版程序、把程序目录改名都不影响课程。';
+  else if(L.custom) html += '课程存在这个独立文件夹里：换新版程序、把程序目录改名，都不影响课程。';
+  else html += '现在跟着程序目录走：把新版解到别的文件夹，课程不会跟过去。改到这里可固定下来。';
+  if(L.on_system_drive && L.suggest){
+    html += '<br><b style="color:var(--red)">库在系统盘（'+esc(L.system_drive||'C:')+'），重装系统或清理磁盘时可能连课程一起清掉。可以挪到 <code>'+esc(L.suggest)+'</code>。</b>';
+  }
   $('#sLibNote').innerHTML = html;
-  $('#sLibReset').style.display = L.custom ? 'inline-block' : 'none';
+  $('#sLibReset').style.display = (L.custom && !L.auto) ? 'inline-block' : 'none';
+  const mv = $('#sLibMove');
+  if(mv){
+    if(L.on_system_drive && L.suggest){ mv.style.display = 'inline-block'; mv.textContent = '挪到 '+L.suggest; }
+    else mv.style.display = 'none';
+  }
   $('#sLibPick').onclick = async ()=>{
     const cur2 = (B.library||{}).root || B.data_root;
     const j = await (await fetch('/api/pick-dir',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({initial:cur2})})).json();
@@ -4229,6 +4265,7 @@ function bindLibraryRow(){
     if(samePath(j.path, cur2)){ toast('还是当前这个文件夹'); return; }
     askLibraryChange(j.path);
   };
+  if(mv) mv.onclick = ()=>libUse(L.suggest, true, true);
   $('#sLibReset').onclick = async ()=>{
     if(!confirm('恢复默认：课程库改回程序目录？\n\n当前库里的课程不会搬走，只是以后不再读它。')) return;
     const j = await (await fetch('/api/library',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'reset'})})).json();

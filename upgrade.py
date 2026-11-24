@@ -277,6 +277,9 @@ def set_library(path: str) -> dict:
         st = {}
     st.update({"library_root": p,
                "library_set": time.strftime("%Y-%m-%d %H:%M:%S")})
+    # 用户自己选的库：不再算「自动挑的」，C 盘提醒也不用再问
+    st.pop("library_auto", None)
+    st.pop("library_off_c_declined", None)
     if not _write_state(st):
         return {"ok": False, "error": "写不进安装状态：%s" % STATE}
     return {"ok": True, "library": p}
@@ -288,6 +291,7 @@ def clear_library() -> dict:
     if not isinstance(st, dict):
         st = {}
     st.pop("library_root", None)
+    st.pop("library_auto", None)
     st["library_cleared"] = time.strftime("%Y-%m-%d %H:%M:%S")
     if not _write_state(st):
         return {"ok": False, "error": "写不进安装状态：%s" % STATE}
@@ -309,6 +313,24 @@ def decline(path: str) -> None:
             and os.path.normcase(x) != os.path.normcase(p)]
     keep.append(p)
     st["import_declined"] = keep[-20:]
+    _write_state(st)
+
+
+def has_user_data(root: str) -> bool:
+    """这个目录里有没有用户课程数据（课程目录 / 导入记录）。"""
+    return _has_user_data(root)
+
+
+def off_c_declined() -> bool:
+    """用户说过「先不用」挪库：下次启动不再拿 C 盘的事问他。"""
+    return bool(_read_json(STATE, {}).get("library_off_c_declined"))
+
+
+def decline_off_c() -> None:
+    st = _read_json(STATE, {})
+    if not isinstance(st, dict):
+        st = {}
+    st["library_off_c_declined"] = time.strftime("%Y-%m-%d %H:%M:%S")
     _write_state(st)
 
 
