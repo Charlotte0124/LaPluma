@@ -533,6 +533,10 @@ html,body{background:var(--bg)}
   border-radius:999px;border:1px solid #b07d1f;color:#8a6417;background:rgba(176,125,31,.08);
   margin-left:6px;vertical-align:1px}
 .tr-badge[hidden]{display:none}
+/* 2026-11-24 用户：「离线质量只够兜底」——离线译文上面亮一条琥珀色小条，别让人以为和在线一样。 */
+.off-warn{display:flex;align-items:center;gap:6px;margin:0 0 9px;padding:5px 9px;border-radius:8px;
+  background:rgba(176,125,31,.09);border:1px solid rgba(176,125,31,.35);color:#8a6417;font-size:11.5px;line-height:1.5}
+.off-warn[hidden]{display:none}
 .tr-strip{display:flex;flex-direction:column;gap:3px;border:1px solid var(--line2);border-radius:9px;
   background:var(--card2);padding:7px 9px;margin:0 0 9px;font-size:11.5px;color:var(--sub)}
 .tr-strip[hidden]{display:none}
@@ -3261,6 +3265,19 @@ async function transPage(to){
     // 2026-11-24：这一次走的是哪条路——离线时标题旁挂「离线」；状态条翻完就收起。
     const badge = $('#trBadge');
     if(badge) badge.hidden = (j.engine !== 'offline');
+    // 离线结果上面亮一条提醒（用户 2026-11-24：离线只够兜底）
+    const outBox = $('#trOut');
+    if(outBox){
+      let warn = outBox.querySelector('.off-warn');
+      if(j.engine === 'offline'){
+        if(!warn){
+          warn = document.createElement('div');
+          warn.className = 'off-warn';
+          warn.textContent = '离线译文 · 术语与长句可能不准，重要内容请对照原文';
+          outBox.insertBefore(warn, outBox.firstChild);
+        }
+      } else if(warn){ warn.remove(); }
+    }
     hideTrStrip(true);
     if(j.fallback) toast('在线没成功，这次用离线语言包（术语可能不准）');
     if(j.history) renderTransHistory(j.history);
