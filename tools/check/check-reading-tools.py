@@ -18,12 +18,14 @@ r"""check-reading-tools.py — 阅读页六件事的判据（2026-11-22）
  10 「最近 5 条」翻译历史在整块最下面
  11 笔记颜色 + PDF 引用高亮（悬停亮、点击常驻、右键换色）
  12 笔记列表溢出不压扁条目；点空白处清掉选区
+ 13 离线语言包接在侧栏（管理常驻 / 状态条收起 / 三档引擎）
+ 14 侧栏三块各自选边：左右可同时存在，背板不复制面板，选择记在 localStorage
 
 用法：
     python tools\check\check-reading-tools.py            # 判本仓
     python tools\check\check-reading-tools.py --selftest # 临时副本逐个造坏，先证明会红
 
-退出码：0 = 12/12 · 1 = 有红
+退出码：0 = 全部绿（项数以输出为准）· 1 = 有红
 """
 from __future__ import annotations
 
@@ -239,6 +241,19 @@ def check(root):
         and ".tr-strip{" in idx and ".mgr{" in idx
     ), "「管理」常驻（翻多少次都在）、状态条翻一次写 localStorage 收起、三档引擎与下载/删除都接上")
 
+    # 14 侧栏三块各自选边（2026-11-25 用户：「这个设置保留 并且增加左右都可以同时存在的」）
+    add(14, "侧栏三块各自选边（左右可同时存在）", (
+        'data-dock="left"' in idx and 'data-dock="right"' in idx
+        and '.read-body[data-docks="lr"]{grid-template-columns:300px 1fr 300px}' in idx
+        and '.read-body[data-docks="l"]{grid-template-columns:300px 1fr}' in idx
+        and ".side[data-dock=\"left\"]{border-left:0;border-right:1px solid var(--line2)}" in idx
+        and "let SIDE_DOCK = {" in idx and "pluma.sideDock" in idx and "pluma.sideActive" in idx
+        and "function applyDock()" in idx and "function movePanel(" in idx and "function swapSides()" in idx
+        and 'id="btnSide"' in idx and ".side-tabs .stab.mv{" in idx
+        and "el && el.parentElement !== box) box.appendChild(el)" in idx   # 面板跟着边搬，不复制
+        and "applyDock();   // 首屏先把页签条画出来" in idx
+    ), "笔记 / 翻译 / 会话 各自存边（left/right），两边没面板的列自动收起；页签条上 ⇤/⇥ 只挪一块，工具条 ⇄ 侧栏整叠换边；选择记在 localStorage")
+
     return rows
 
 
@@ -293,6 +308,7 @@ def selftest():
             ("译文框样式又变成全局", 12, IDX, ".tr-out .trans{white-space:pre-wrap;font-size:13px;line-height:1.8", ".trans{white-space:pre-wrap;font-size:13px;line-height:1.8"),
             ("管理按钮被拿掉", 13, IDX, 'id="trMgrBtn"', 'id="trMgrBtnX"'),
             ("状态条不再收起", 13, IDX, "hideTrStrip(true)", "hideTrStrip(false)"),
+            ("侧栏不再分边", 14, IDX, "let SIDE_DOCK = {", "let SIDEDOCK = {"),
         ]
         all_ok = True
         for label, no, rel, old, new in defects:

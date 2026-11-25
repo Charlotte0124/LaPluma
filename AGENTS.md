@@ -131,7 +131,7 @@
 18. **「课件 p.N」可点跳原件**（2026-11-23 用户：「讲义里的『课件 p.N』现在只是文字，点了不能跳到原件那一页」）：讲义是按课件生成的，正文/图注里的出处要能一点跳过去。三条硬约束：① **只有单击**才跳——`pointerdown` 记下起点，`pointermove` 位移 >3px 就算拖选，松手绝不跳（否则「选一段去记笔记」会变成「跳走」）；`pointercancel` 也不跳。② 判「点的是不是这几个字」用**字符偏移**（`caretAt` 的光标位置 → 整页拼接文字里的区间），不按「整段包含出处」粗判，点同一行别处不跳。③ 原件由服务端算（`GET /api/orig-of` → `engine\_draft.source_of()`，只复用这一处实现），认不出/页数不够就照实提示，不静默。标记只用 `span.cite` 加类名与 `title`，**不动 left/top/宽度/字号**（W3 对位判据量的就是这些）。判据：`check-citation-jump.py` 6 项 + `check-window-real.py` **W18**（真窗口：单击 → 打开原件且页码等于页面里写的 N；拖选、点同一行别处都不跳）。**靶子必须取 p.2 以上**——p.1 分不清「翻到第 N 页」与「永远停在第 1 页」，那是假绿。
 6. **翻译历史最多 5 条**：存 `%USERPROFILE%\.pluma\translate-history.json`（`PLUMA_HOME` 可改），字段为时间 / 原文前 120 字 / 译文前 400 字；翻译页签顶部列最近 5 条，点一条回填 `#trSrc` 与译文。
 
-**怎么验证它被执行**：`python tools\check\check-reading-tools.py` 必须 **12/12**，且 `--selftest` 12/12（临时副本逐条造坏，证明判据会红）；提交钩子 `.githooks\pre-commit` 自动跑。
+**怎么验证它被执行**：`python tools\check\check-reading-tools.py` 必须**全绿**（项数以它打印的 N/N 为准，2026-11-25 起为 14/14），且 `--selftest` 全按预期（临时副本逐条造坏，证明判据会红）；提交钩子 `.githooks\pre-commit` 自动跑。
 
 ## 十二、文字层 / 已成稿列表 / 干净启动器（2026-11-22 用户定）
 

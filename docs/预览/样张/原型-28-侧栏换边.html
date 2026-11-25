@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<title>原型 28 · 阅读侧栏左右换边与同开</title>
+<style>
+:root{
+  --bg:#f2f1ee; --card:#fff; --card2:#faf9f7; --line:#e4e2dd; --line2:#efeeea;
+  --ink:#171714; --sub:#6c6a63; --faint:#97948c; --code:#f5f4f1; --red:#C8202C;
+  --reader-bg:#eceae6; --sheet-shadow:0 2px 6px rgba(0,0,0,.08),0 18px 40px rgba(0,0,0,.10);
+}
+html[data-theme="dark"]{
+  --bg:#111110; --card:#1c1c1a; --card2:#232321; --line:#2e2e2b; --line2:#262624;
+  --ink:#e9e7e2; --sub:#9c9992; --faint:#6f6c66; --code:#141413; --red:#e2565c;
+  --reader-bg:#0d0d0c; --sheet-shadow:0 2px 8px rgba(0,0,0,.5),0 20px 46px rgba(0,0,0,.55);
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font:14px/1.62 "Microsoft YaHei","Segoe UI",system-ui,sans-serif;
+     padding:26px 30px 34px;max-width:1180px;margin:0 auto}
+h1{font-size:17px;font-weight:600;margin:0 0 4px}
+.sub{font-size:12px;color:var(--faint);margin:0 0 6px;line-height:1.8}
+.sub b{color:var(--ink);font-weight:600}
+.cap{font-size:12px;color:var(--sub);margin:14px 0 8px}
+.cap b{color:var(--ink);font-weight:600;margin-right:6px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.read-top{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--line2);font-size:13px;flex-wrap:wrap}
+.read-top .t{font-weight:600;font-size:13.5px}
+.read-top .p{font-size:11.5px;color:var(--faint);font-family:Consolas,monospace}
+.read-ctl{margin-left:auto;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.seg{display:flex;align-items:center;border:1px solid var(--line);border-radius:9px;overflow:hidden;background:var(--card);font-size:12.5px;color:var(--sub)}
+.seg button{border:0;background:transparent;padding:5px 10px;color:inherit;font-size:12.5px}
+.seg .val{padding:5px 8px;font-family:Consolas,monospace;font-size:12px;min-width:56px;text-align:center}
+.tbtn{display:inline-flex;align-items:center;gap:6px;background:var(--card);border:1px solid var(--line);
+      border-radius:999px;padding:5px 12px;font-size:12.5px;color:var(--sub)}
+.tbtn.new{border-color:var(--red);box-shadow:0 0 0 3px rgba(226,86,92,.18);color:var(--ink)}
+.read-body{display:grid;grid-template-columns:1fr 300px;align-items:start}
+.read-body.both{grid-template-columns:300px 1fr 300px}
+.reader{background:var(--reader-bg);padding:18px;height:470px;display:flex;justify-content:center;align-items:flex-start;overflow:hidden}
+.sheet{width:330px;height:430px;background:#fbfaf8;border-radius:2px;box-shadow:var(--sheet-shadow);padding:26px 24px;color:#2a2a26}
+.sheet .k{font-family:Georgia,serif;font-size:9px;letter-spacing:.16em;color:#8a7a5c;text-transform:uppercase}
+.sheet h3{font-size:19px;margin:10px 0 6px;line-height:1.3;font-weight:700}
+.sheet .en{font-size:10px;color:#6b6b64;margin:0 0 14px}
+.sheet p{font-size:9.5px;line-height:1.9;color:#4a4a44;margin:0 0 8px}
+.side{background:var(--card);padding:14px;border-left:1px solid var(--line2);min-height:470px;display:flex;flex-direction:column;gap:12px}
+.side.left{border-left:0;border-right:1px solid var(--line2)}
+.side-tabs{display:flex;gap:6px;margin:0 0 10px}
+.side-tabs .stab{border:1px solid var(--line);background:transparent;color:var(--faint);border-radius:8px;padding:5px 11px;font-size:12px}
+.side-tabs .stab.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.side-tabs .stab.mv{margin-left:auto;padding:5px 8px;border-style:dashed}
+.nhead{display:flex;align-items:center;gap:8px}
+.nhead h5{margin:0;font-size:12.5px;font-weight:600}
+.nbtn{margin-left:auto;border:1px solid var(--line);background:transparent;color:var(--ink);border-radius:999px;padding:3px 10px;font-size:11.5px}
+.nitem{border:1px solid var(--line2);border-left:2px solid #3f7d5a;border-radius:8px;padding:8px 10px;font-size:12px;color:var(--sub);line-height:1.7}
+.nitem b{color:var(--ink);font-weight:600}
+.nitem .q{color:var(--faint);font-size:11px;margin-top:4px}
+.note{font-size:11.5px;line-height:1.75;color:var(--faint);margin:8px 0 0}
+.note b{color:var(--ink)}
+</style>
+</head>
+<body>
+<h1>阅读页 · 侧栏换边 + 左右同时开（v1.9.21 追加）</h1>
+<p class="sub">只挪位置、不复制面板：<b>笔记 / 翻译 / 会话</b>三块，每块各自记一个边；哪一边没面板，那一列就收起。<br>工具条「⇄ 侧栏」= 三块整叠换边；页签条上的「⇤ / ⇥」= 只挪这一块；选择记在本机，关掉再开还在。</p>
+
+<div class="cap"><b>① 现在</b>（三块都在右；⇤ 侧栏整叠换边）</div>
+<div class="card">
+  <div class="read-top">
+    <div><div class="t">示例课程 · D06-2 讲义标题</div><div class="p">示例课程 · 01_讲义 · D06-2_示例讲义.pdf</div></div>
+    <div class="read-ctl">
+      <div class="seg"><button>‹</button><span class="val">1 / 18</span><button>›</button></div>
+      <div class="seg"><button>−</button><span class="val">100%</span><button>＋</button></div>
+      <button class="tbtn new">⇤ 侧栏</button>
+      <button class="tbtn">▤ 笔记</button>
+      <button class="tbtn">译</button>
+      <button class="tbtn">⤢ 全屏</button>
+    </div>
+  </div>
+  <div class="read-body">
+    <div class="reader"><div class="sheet"><div class="k">示例课程 · Lecture D06-2</div><h3>一页讲义的标题</h3><p class="en">Sample Course · A lecture title</p><p>讲义页在左栏居中显示，侧栏占右栏 300px；两边各自滚动，互不挤压。</p><p>换边之后，讲义仍然居中在自己那一栏里，页宽、缩放、翻页都不变。</p></div></div>
+    <div class="side">
+      <div class="side-tabs"><button class="stab on">笔记 3</button><button class="stab">翻译</button><button class="stab">会话</button><button class="stab mv" title="把这一块移到左边">⇤</button></div>
+      <div class="nhead"><h5>第 p.1 页</h5><button class="nbtn">记笔记</button></div>
+      <div class="nitem"><b>示例笔记</b>——引用原文的一段话。<div class="q">第 p.1 页 · 2026-11-25</div></div>
+      <div class="nitem"><b>第二条</b>——笔记在列表里按时间叠放。<div class="q">第 p.2 页 · 2026-11-24</div></div>
+    </div>
+  </div>
+</div>
+
+<div class="cap"><b>② 整叠换到左边</b>（点一下「⇤ 侧栏」；页签仍是同一个槽里切）</div>
+<div class="card">
+  <div class="read-top">
+    <div><div class="t">示例课程 · D06-2 讲义标题</div><div class="p">示例课程 · 01_讲义 · D06-2_示例讲义.pdf</div></div>
+    <div class="read-ctl">
+      <div class="seg"><button>‹</button><span class="val">1 / 18</span><button>›</button></div>
+      <div class="seg"><button>−</button><span class="val">100%</span><button>＋</button></div>
+      <button class="tbtn new">⇥ 侧栏</button>
+      <button class="tbtn">▤ 笔记</button>
+      <button class="tbtn">译</button>
+      <button class="tbtn">⤢ 全屏</button>
+    </div>
+  </div>
+  <div class="read-body">
+    <div class="side left">
+      <div class="side-tabs"><button class="stab on">笔记 3</button><button class="stab">翻译</button><button class="stab">会话</button><button class="stab mv" title="把这一块移到右边">⇥</button></div>
+      <div class="nhead"><h5>第 p.1 页</h5><button class="nbtn">记笔记</button></div>
+      <div class="nitem"><b>示例笔记</b>——引用原文的一段话。<div class="q">第 p.1 页 · 2026-11-25</div></div>
+      <div class="nitem"><b>第二条</b>——笔记在列表里按时间叠放。<div class="q">第 p.2 页 · 2026-11-24</div></div>
+    </div>
+    <div class="reader"><div class="sheet"><div class="k">示例课程 · Lecture D06-2</div><h3>一页讲义的标题</h3><p class="en">Sample Course · A lecture title</p><p>讲义页换到右侧居中，侧栏占左栏 300px；页宽、缩放、翻页都不变。</p><p>页面窄的时候仍然一边一栏，不会叠在一起。</p></div></div>
+  </div>
+</div>
+
+<div class="cap"><b>③ 左右同时开</b>（页签条上的「⇥」只把「会话」挪到右边——左边笔记、右边会话）</div>
+<div class="card">
+  <div class="read-top">
+    <div><div class="t">示例课程 · D06-2 讲义标题</div><div class="p">示例课程 · 01_讲义 · D06-2_示例讲义.pdf</div></div>
+    <div class="read-ctl">
+      <div class="seg"><button>‹</button><span class="val">1 / 18</span><button>›</button></div>
+      <div class="seg"><button>−</button><span class="val">100%</span><button>＋</button></div>
+      <button class="tbtn new">⇄ 侧栏</button>
+      <button class="tbtn">▤ 笔记</button>
+      <button class="tbtn">译</button>
+      <button class="tbtn">⤢ 全屏</button>
+    </div>
+  </div>
+  <div class="read-body both">
+    <div class="side left">
+      <div class="side-tabs"><button class="stab on">笔记 3</button><button class="stab">翻译</button><button class="stab mv" title="把这一块移到右边">⇥</button></div>
+      <div class="nhead"><h5>第 p.1 页</h5><button class="nbtn">记笔记</button></div>
+      <div class="nitem"><b>示例笔记</b>——引用原文的一段话。<div class="q">第 p.1 页 · 2026-11-25</div></div>
+      <div class="nitem"><b>第二条</b>——笔记在列表里按时间叠放。<div class="q">第 p.2 页 · 2026-11-24</div></div>
+    </div>
+    <div class="reader"><div class="sheet"><div class="k">示例课程 · Lecture D06-2</div><h3>一页讲义的标题</h3><p class="en">Sample Course · A lecture title</p><p>左右各占 300px，讲义在中间居中；两边的面板各自滚动。</p><p>同一时间每种面板只有一份，左边看笔记、右边提问，互不影响。</p></div></div>
+    <div class="side">
+      <div class="side-tabs"><button class="stab on">会话</button><button class="stab mv" title="把这一块移到左边">⇤</button></div>
+      <div class="nhead"><h5>本课程会话</h5><button class="nbtn">清除</button></div>
+      <div class="nitem"><b>你</b>：这一讲先讲什么？</div>
+      <div class="nitem"><b>羽毛笔</b>：先给结论，再标出处（课件 p.2）。</div>
+    </div>
+  </div>
+  <p class="note"><b>规则：</b>默认三块都在右；「⇄ 侧栏」把三块一起换边；页签条上的「⇤ / ⇥」只挪当前这一块；哪边没面板哪边收起（PDF 自动变宽）；「▤ 笔记」仍然一次收起／显示两侧。选择记在 localStorage。</p>
+</div>
+</body>
+</html>
