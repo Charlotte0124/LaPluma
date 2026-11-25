@@ -252,7 +252,12 @@ def check(root):
         and 'id="btnSide"' in idx and ".side-tabs .stab.mv{" in idx
         and "el && el.parentElement !== box) box.appendChild(el)" in idx   # 面板跟着边搬，不复制
         and "applyDock();   // 首屏先把页签条画出来" in idx
-    ), "笔记 / 翻译 / 会话 各自存边（left/right），两边没面板的列自动收起；页签条上 ⇤/⇥ 只挪一块，工具条 ⇄ 侧栏整叠换边；选择记在 localStorage")
+        # 2026-11-25 用户「底下怎么留有坑位的」：空左栏与没选中的会话都被自己的 display 顶掉 hidden，
+        # 空左栏占掉一整格、会话把侧栏撑高；作者样式优先，必须显式补 [hidden]{display:none}
+        and ".side[hidden]{display:none}" in idx
+        and "#sideChat[hidden]{display:none}" in idx
+        and "align-items:stretch" in idx
+    ), "笔记 / 翻译 / 会话 各自存边（left/right），两边没面板的列自动收起；页签条上 ⇤/⇥ 只挪一块，工具条 ⇄ 侧栏整叠换边；选择记在 localStorage；空栏与没选中的面板被 [hidden] 真正收起（不再留坑位）")
 
     return rows
 

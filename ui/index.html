@@ -384,7 +384,7 @@ nav a.on{background:var(--ink);color:var(--bg)}
 .seg button{border:0;background:transparent;padding:5px 10px;color:inherit;font-size:12.5px}
 .seg button:hover{background:var(--card2);color:var(--ink)}
 .seg .val{padding:5px 8px;font-family:Consolas,monospace;font-size:12px;min-width:56px;text-align:center}
-.read-body{display:grid;grid-template-columns:1fr 300px;align-items:start}
+.read-body{display:grid;grid-template-columns:1fr 300px;align-items:stretch}
 /* 2026-11-25 用户：「左右都可以同时存在」——三个面板各自选边：
    左边栏 / 阅读器 / 右边栏，按 data-docks 决定列（l / r / lr / none）。
    左边栏自己带右分隔线，右边栏带左分隔线。 */
@@ -475,7 +475,13 @@ html,body{background:var(--bg)}
 .note-menu button.nc-dot:hover{transform:scale(1.16);background:transparent}
 .note-menu button.nc-dot.on{box-shadow:0 0 0 2px var(--ink)}
 .note-menu button.nc-dot i{display:block;width:14px;height:14px;border-radius:50%}
-.side{background:var(--card);padding:14px;border-left:1px solid var(--line2);min-height:560px;display:flex;flex-direction:column;gap:12px}
+.side{background:var(--card);padding:14px;border-left:1px solid var(--line2);min-height:560px;
+  max-height:calc(100vh - 190px);overflow:auto;display:flex;flex-direction:column;gap:12px}
+/* 2026-11-25 用户：「底下怎么留有坑位的」——两处都是 [hidden] 被自己的 display 顶掉：
+   空的左栏仍占一格（顶出一整行空位）、没选中的会话面板仍占高度撑高侧栏。
+   作者样式比 UA 的 [hidden]{display:none} 优先，这里显式补回来。 */
+.side[hidden]{display:none}
+#sideChat[hidden]{display:none}
 /* 2026-11-25：面板外面多了一层 .dock-body（面板要在左右两边搬），把 flex 链接下去，
    否则 #sideChat 的 flex:1 会断，会话列表就不滚了。 */
 .dock-body{display:flex;flex-direction:column;flex:1;min-height:0}
@@ -3154,7 +3160,11 @@ function applyDock(){
     el.hidden = !(groups[side].includes(k) && SIDE_ACTIVE[side] === k);
   });
   const both = groups.left.length && groups.right.length;
-  body.dataset.docks = SIDE_HIDDEN ? 'none' : (both ? 'lr' : (groups.left.length ? 'l' : (groups.right.length ? 'r' : 'none')));
+  const nextDocks = SIDE_HIDDEN ? 'none' : (both ? 'lr' : (groups.left.length ? 'l' : (groups.right.length ? 'r' : 'none')));
+  const docksChanged = body.dataset.docks !== nextDocks;
+  body.dataset.docks = nextDocks;
+  // 换边/开合会改讲义栏宽度：重排一次，别让页面停在旧宽度上被两侧切掉。
+  if(docksChanged && RD.doc) setTimeout(() => { try{ renderPdf(); }catch(_){} }, 80);
   if(card){
     const chatActive = SIDE_ACTIVE[SIDE_DOCK.chat] === 'chat';
     card.classList.toggle('chat-on', !SIDE_HIDDEN && chatActive);
