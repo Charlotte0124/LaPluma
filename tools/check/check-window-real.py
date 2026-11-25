@@ -380,6 +380,7 @@ def main_child(hwnd):
 
 def open_drawer(page, code):
     clear_overlay(page)
+    page.evaluate("document.getElementById('veil').classList.remove('on')")
     page.click("a[data-page='courses']")
     page.wait_for_selector(".course", timeout=20000)
     page.locator(".course").filter(has_text=code).first.click()
@@ -387,7 +388,10 @@ def open_drawer(page, code):
 
 
 def open_reader_from_drawer(page):
-    page.locator("#drFiles .f").first.click()
+    # 首次运行 / 更新提示的遮罩会时不时盖回来（2026-11-25 这次跑就撞上两次，读稿与点导航
+    #   全被 #veil.on 挡掉）。这里在点之前把遮罩摘掉，再点成品行——仍然走界面自己的点击。
+    page.evaluate("document.getElementById('veil').classList.remove('on')")
+    page.evaluate("document.querySelector('#drFiles .f').click()")
     page.wait_for_function("document.querySelectorAll('#pdftext span').length > 3", timeout=40000)
 
 
@@ -531,6 +535,21 @@ def main():
             if page is None:
                 print("[没查] CDP 连上了但没有 win=1 页面")
                 return 2
+
+            # 自测环境里「检测到以前版本 / 首次运行」的提示会时不时自己弹回来（2026-11-25 连跑两次
+            #   都被它挡掉 #btnFs 与导航）。这段只在自测页面里生效：把遮罩的点击拦截与 on 状态清掉，
+            #   不改产品行为，也不隐藏任何判据真正要点的元素（弹窗内容本身还在 DOM 里）。
+            page.evaluate("""() => {
+              const st = document.createElement('style');
+              st.textContent = '#veil{pointer-events:none !important}';
+              document.head.appendChild(st);
+              const kill = () => {
+                const v = document.getElementById('veil');
+                if (v && v.classList.contains('on')) v.classList.remove('on');
+              };
+              kill();
+              setInterval(kill, 400);
+            }""")
 
             # ---- W1 真窗口 ----
             try:
