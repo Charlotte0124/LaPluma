@@ -4125,7 +4125,10 @@ function openSettings(){
       };
       hint.appendChild(goBtn);
     }else{
-      hint.innerHTML = '仓库 ' + esc(repo) + ' · 已是最新（' + esc(String(up.checked || '')) + ' 查过一次）';
+      // 2026-11-25 用户：发版后几分钟镜像还是旧号，写「已是最新」像自相矛盾。
+      // 仓库比本机旧时说「本机已更新」；追平（或仓库更新，走上面那条）才说「已是最新」。
+      hint.innerHTML = '仓库 ' + esc(repo) + ' · ' + (up.older ? '本机已更新' : '已是最新')
+        + '（' + esc(String(up.checked || '')) + ' 查过一次）';
     }
   })();
   $('#sTut').onclick = () => { closeVeil(); showTut(); };

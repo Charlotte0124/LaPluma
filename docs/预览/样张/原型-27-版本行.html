@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<title>原型 27 · 设置页版本行（仓库落后时的文案）</title>
+<style>
+:root{
+  --bg:#f2f1ee; --card:#fff; --card2:#faf9f7; --line:#e4e2dd; --line2:#efeeea;
+  --ink:#171714; --sub:#6c6a63; --faint:#97948c;
+  --code:#f5f4f1; --ok:#2f7d4f; --red:#C8202C;
+}
+html[data-theme="dark"]{
+  --bg:#111110; --card:#1c1c1a; --card2:#232321; --line:#2e2e2b; --line2:#262624;
+  --ink:#e9e7e2; --sub:#9c9992; --faint:#6f6c66;
+  --code:#141413; --ok:#57b87c; --red:#e2565c;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:14px/1.62 "Microsoft YaHei","Segoe UI",system-ui,sans-serif;
+     padding:26px 30px 34px;max-width:860px;margin:0 auto}
+h1{font-size:17px;font-weight:600;margin:0 0 4px}
+.sub{font-size:12px;color:var(--faint);margin:0 0 22px}
+.case{margin:0 0 22px}
+.cap{font-size:12px;color:var(--sub);margin:0 0 8px}
+.cap b{color:var(--ink);font-weight:600;margin-right:6px}
+.dlg{background:var(--card);border:1px solid var(--line);border-radius:16px;width:min(660px,100%);
+  box-shadow:0 24px 70px rgba(0,0,0,.28);padding:20px 24px 16px}
+.kv{display:flex;font-size:12.5px;padding:5px 0;color:var(--sub)}
+.kv b{margin-left:auto;font-weight:500;color:var(--ink);font-family:Consolas,monospace;font-size:12px}
+.pickfine{font-size:11.5px;color:var(--faint);margin:8px 0 0;line-height:1.7}
+.fine{font-size:11.5px;color:var(--faint);margin:11px 0 0;line-height:1.7}
+.acts{display:flex;justify-content:flex-end;gap:9px;margin-top:16px}
+.btn{border:1px solid var(--ink);background:var(--ink);color:var(--bg);border-radius:9px;padding:7px 15px;
+     font-size:12.5px;font-weight:500}
+.btn.ghost{background:transparent;color:var(--ink);border-color:var(--line)}
+.note{font-size:11.5px;line-height:1.75;margin:8px 0 0;padding-left:2px}
+.note.bad{color:var(--red)}
+.note.good{color:var(--ok)}
+.note.flat{color:var(--faint)}
+</style>
+</head>
+<body>
+<h1>设置页「版本」行 · 仓库比本机旧时的文案（v1.9.21 候选）</h1>
+<p class="sub">2026-11-25 · 只改这一行文案，不改布局；下面三块是同一个设置弹窗的底部</p>
+
+<div class="case">
+  <div class="cap"><b>① 现在</b>（今天 12:31 的现场：仓库镜像还没追上）</div>
+  <div class="dlg">
+    <div class="kv"><span>版本</span><b>本机 v1.9.20</b></div>
+    <p class="pickfine">仓库 v1.9.19 · 已是最新（2026-11-25 12:31 查过一次）</p>
+    <p class="fine">© 2026 Ryo · 代码 MIT / 示例内容 CC BY-NC 4.0 / 文档 CC BY 4.0，边界见随程序附带的 NOTICE.md</p>
+    <div class="acts"><button class="btn ghost">重看教学</button><button class="btn">保存</button></div>
+  </div>
+  <p class="note bad">仓库 1.9.19 比本机 1.9.20 旧，却说「已是最新」——看不出是「镜像没追上」还是「真最新」。</p>
+</div>
+
+<div class="case">
+  <div class="cap"><b>② 建议</b>（仓库落后时）</div>
+  <div class="dlg">
+    <div class="kv"><span>版本</span><b>本机 v1.9.20</b></div>
+    <p class="pickfine">仓库 v1.9.19 · 本机已更新（2026-11-25 12:31 查过一次）</p>
+    <p class="fine">© 2026 Ryo · 代码 MIT / 示例内容 CC BY-NC 4.0 / 文档 CC BY 4.0，边界见随程序附带的 NOTICE.md</p>
+    <div class="acts"><button class="btn ghost">重看教学</button><button class="btn">保存</button></div>
+  </div>
+  <p class="note good">「已是最新」只在仓库追平本机（或比本机新）时说；落后时说「本机已更新」。</p>
+</div>
+
+<div class="case">
+  <div class="cap"><b>③ 追平后</b>（不变）</div>
+  <div class="dlg">
+    <div class="kv"><span>版本</span><b>本机 v1.9.20</b></div>
+    <p class="pickfine">仓库 v1.9.20 · 已是最新（2026-11-25 12:36 查过一次）</p>
+    <p class="fine">© 2026 Ryo · 代码 MIT / 示例内容 CC BY-NC 4.0 / 文档 CC BY 4.0，边界见随程序附带的 NOTICE.md</p>
+    <div class="acts"><button class="btn ghost">重看教学</button><button class="btn">保存</button></div>
+  </div>
+  <p class="note flat">「有新版本」态（仓库比本机新）也不动，仍带「立即更新」按钮。</p>
+</div>
+</body>
+</html>

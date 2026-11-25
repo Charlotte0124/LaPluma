@@ -2923,7 +2923,8 @@ def check_update(force: bool = False, channel: str = "auto") -> dict:
         # 2026-11-17：缓存里存的是「当时算出来的 newer」。升完版新进程读缓存会继续报有新版，
         # 所以按当前 VERSION 重算一次，不信缓存里的布尔值。
         data = dict(data, cached=True, current=VERSION,
-                    newer=_ver_num(data.get("latest")) > _ver_num(VERSION))
+                    newer=_ver_num(data.get("latest")) > _ver_num(VERSION),
+                    older=_ver_num(data.get("latest")) < _ver_num(VERSION))
         return data
 
     errs, got = [], {}
@@ -2958,6 +2959,9 @@ def check_update(force: bool = False, channel: str = "auto") -> dict:
                 da[_k] = oa[_k]
     data["sources"] = {k: v["latest"] for k, v in got.items()}
     data["newer"] = _ver_num(data.get("latest")) > _ver_num(VERSION)
+    # 2026-11-25：发版后 5 分钟内镜像可能还是旧号。仓库比本机旧时界面不说「已是最新」，
+    #   改说「本机已更新」——判断放在后端，前端只读这个字段，不在 JS 里另写一套版本比较。
+    data["older"] = _ver_num(data.get("latest")) < _ver_num(VERSION)
     data["current"] = VERSION
     # 2026-11-21：缓存写不进去不能把「检查更新」弄死——实测 update.json 被占用/只读时，
     #   _write_json 抛 PermissionError，整个 /api/update 回 403，界面只看到「读不到仓库版本」。
