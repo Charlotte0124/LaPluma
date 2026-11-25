@@ -1392,6 +1392,9 @@ function applyTheme(t){
   document.documentElement.dataset.theme = t;
   try{ localStorage.setItem('pluma.theme', t); }catch(_){ }
   saveUI({theme: t});
+  /* 2026-11-25：窗口/WebView2 的底色跟着主题换——拖边时露出来的那块就是它，
+     不换的话深色主题下拖窗口还是会闪一道白边。 */
+  try{ if(window.pywebview && window.pywebview.api && window.pywebview.api.set_bg) window.pywebview.api.set_bg(t); }catch(_){ }
   const label = t==='dark' ? '浅色' : '深色', icon = t==='dark' ? '☀' : '◐';
   ['themeLabel','themeLabel2'].forEach(id=>{ const e=document.getElementById(id); if(e) e.textContent=label; });
   ['themeIcon','themeIcon2'].forEach(id=>{ const e=document.getElementById(id); if(e) e.textContent=icon; });
@@ -2863,9 +2866,17 @@ async function renderTextLayer(page, vp, lib){
     markCites();
   }catch(e){ /* 没有文字层就留空，不影响看图 */ }
 }
-/* 2026-11-22：窗口尺寸变过之后重排一次（字号/留白都按当前宽度算过才对得上） */
+/* 2026-11-22：窗口尺寸变过之后重排一次（字号/留白都按当前宽度算过才对得上）
+   2026-11-25：只上下拉窗口时宽度没变，不必重画整页 PDF——重画一次要几十上百毫秒，
+   在拖边收尾那一下就是一次明显的卡顿。宽度没变（±2px）就跳过。 */
+let lastRenderW = 0;
 window.addEventListener('pluma:relayout', () => {
-  if(RD.doc && !RD.busy) renderPdf();
+  if(!RD.doc || RD.busy) return;
+  const box = $('#readerBox');
+  const w = box ? Math.round(box.clientWidth) : 0;
+  if(w && Math.abs(w - lastRenderW) <= 2) return;
+  lastRenderW = w;
+  renderPdf();
 });
 async function renderPdf(){
   if(!RD.doc || RD.busy) return;
@@ -3571,6 +3582,21 @@ function fitReadCard(){
   const h = Math.max(420, Math.round(window.innerHeight - top - 12));
   card.style.height = h + 'px';
 }
+/* 2026-11-25 用户：「图一图二的同一类问题」——窗口拉高后卡片还是 716 高（下面空一大片），
+   窗口压矮后卡片又溢出、侧栏被窗口底边切掉。实测：卡片高度只在打开讲义时定了一次，
+   之后窗口从 760 拉到 1300 高，卡片底边一直停在 818。
+   根因：本文件是 <script type="module">，fitReadCard 不在 window 上；下面自绘标题条那段
+   普通脚本里的 fitReadCard() 只会抛 ReferenceError，又被 try/catch 吞掉，所以窗口缩放
+   /全屏切换时的重排一次都没发生过。现在两件事：
+     ① 每帧跟着窗口改高度（一次布局读 + 一次 style 写，拖边时也跟得上）；
+     ② 把函数挂到 window 上，给窗口层那段用。 */
+let fitRaf = 0;
+function fitReadCardOnResize(){
+  if(fitRaf) return;
+  fitRaf = requestAnimationFrame(() => { fitRaf = 0; try{ fitReadCard(); }catch(_){ } });
+}
+window.addEventListener('resize', fitReadCardOnResize, {passive:true});
+window.__plumaFitReadCard = fitReadCard;
 applyDock();   // 首屏先把页签条画出来（面板默认都在右边）
 initSideResizers();
 async function setFullscreen(on){
@@ -4916,19 +4942,35 @@ document.addEventListener('keydown', e => {
     lastNudge = Date.now();
     try{ const a = api(); if(a && a.relayout) a.relayout(); }catch(_){ }
   }
-  document.addEventListener('fullscreenchange', () => { setTimeout(nudgeWin, 140); setTimeout(() => { try{ fitReadCard(); }catch(_){ } }, 220); });
-  let rzTimer = 0;
+  document.addEventListener('fullscreenchange', () => { setTimeout(nudgeWin, 140); setTimeout(() => { try{ if(window.__plumaFitReadCard) window.__plumaFitReadCard(); }catch(_){ } }, 220); });
+  let rzTimer = 0, healW = window.innerWidth, healH = window.innerHeight;
   window.addEventListener('resize', () => {
     const dw = Math.abs(window.innerWidth - stableW);
     const dh = Math.abs(window.innerHeight - stableH);
     if(dw <= 2 && dh <= 2 && (Date.now() - lastNudge) < 2000) return;  // 自己那 1px 的回声
     stableW = window.innerWidth; stableH = window.innerHeight;
+    /* 2026-11-25 用户：「拉伸窗口的时候 卡顿感太强了 甚至会出现白边」。
+       白边的来源是 WebView2 自己的底色（pywebview create_window 的 background_color
+       原来是浅色 #F7F5EF），窗口先变大、页面后重画，中间露出来的就是它；已改成跟主题走
+       （见 server.py run_window）。卡顿则来自拖边收尾时又做了一次 relayout（窗口 ±1px
+       抖动 + 整窗重画）再重画 PDF：用户在拖边，窗口尺寸本来就是新的，不需要再逼一次；
+       高度每帧由模块里的 rAF 跟（fitReadCardOnResize），这里只留「拖完」的收尾：
+       按新宽度重画一次 PDF。relayout 仍保留给全屏切换那种「程序改尺寸」的场合。 */
     clearTimeout(rzTimer);
     rzTimer = setTimeout(() => {
-      nudgeWin();
-      try{ fitReadCard(); }catch(_){ }
+      /* 2026-11-25 用户补图：偶尔整块只剩上面一条、下面全黑（只剩工具条）。这是 WebView2
+         合成表面没跟上窗口的同族毛病（2026-11-22 那次是「整块变黑」）。本机按最大化/还原
+         与来回改尺寸都没复现出来，所以这里只做**已知失效模式**的兜底：窗口跨度大（>220px）
+         才请 Python 做一次 relayout（±1px + 整窗重画），细碎拖边不做——那才是「拖一下抖一下」
+         的来源。小跨度真出了问题，也还能用「全屏进出一次」把它撞回来。 */
+      const dw = Math.abs(window.innerWidth - healW), dh = Math.abs(window.innerHeight - healH);
+      if(dw > 220 || dh > 220){
+        healW = window.innerWidth; healH = window.innerHeight;
+        nudgeWin();
+      }
+      try{ if(window.__plumaFitReadCard) window.__plumaFitReadCard(); }catch(_){ }
       window.dispatchEvent(new Event('pluma:relayout'));
-    }, 180);
+    }, 300);
   });
 
   /* ---- 标题栏 ---- */

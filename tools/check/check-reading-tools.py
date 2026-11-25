@@ -318,6 +318,21 @@ def check(root):
         and "border-radius:12px" in idx
     ), "全屏不再贴死屏幕四边：留 12px 界面底色（与窗口模式的 12px 对齐），带同款圆角；原生全屏的 backdrop 也用界面底色")
 
+    # 20 窗口缩放时卡片跟着变高 + WebView 底色跟主题（2026-11-25 用户：「图一图二的同一类问题」
+    #   与「拉伸窗口的时候卡顿感太强了 甚至会出现白边」）
+    add(20, "窗口缩放后卡片仍铺满，拖动不露白边", (
+        "window.__plumaFitReadCard = fitReadCard;" in idx          # 模块作用域的函数挂到 window，窗口层才调得到
+        and "function fitReadCardOnResize()" in idx
+        and "window.addEventListener('resize', fitReadCardOnResize" in idx   # 每帧跟高度
+        and "if(window.__plumaFitReadCard) window.__plumaFitReadCard();" in idx
+        and "nudgeWin();\n      try{ fitReadCard();" not in idx    # 拖边收尾不再做 ±1px 的 relayout
+        and "background_color=_window_bg_color()" in srv          # 露出来的那块不再是写死浅色
+        and '"#111110" if theme == "dark" else "#F7F5EF"' in srv
+        and "def set_bg(self, theme):" in srv                     # 换主题立刻换底色
+        and "DefaultBackgroundColor" in srv
+        and "api.set_bg(t)" in idx
+    ), "卡片高度每帧跟窗口（窗口层通过 window.__plumaFitReadCard 调）；窗口/WebView2 底色按主题取（深色 #111110、浅色 #F7F5EF），换主题即换；细碎拖边不重设窗口，跨度 >220px 才兜一次 relayout")
+
     return rows
 
 
@@ -380,6 +395,8 @@ def selftest():
             ("全屏又贴死屏幕", 19, IDX, "inset:12px;z-index:70", "inset:0;z-index:70"),
             ("原生全屏的出血边框被拿掉", 19, IDX, "border:12px solid var(--bg)", "border:0"),
             ("最近阅读不再记录", 15, IDX, "const RECENT_RD_KEY = 'pluma.recentRead'", "const RECENT_RD_KEY = 'pluma.recentReadX'"),
+            ("卡片不再跟窗口缩放", 20, IDX, "window.__plumaFitReadCard = fitReadCard;", ""),
+            ("WebView 底色又写死浅色", 20, SRV, "background_color=_window_bg_color()", 'background_color="#F7F5EF"'),
         ]
         all_ok = True
         for label, no, rel, old, new in defects:

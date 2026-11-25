@@ -29,6 +29,8 @@ r"""真窗口自测：在羽毛笔**自己的 WebView2 窗口**里量窗口矩�
   W19 阅读侧栏「会话」：三页签切得过去、会话从本机读回来（气泡「我」灰底靠右 /「羽毛笔」带边框）、
       回答下面的出处片单击打开原件第 N 页、没配 key 时只出「没发给模型」的提示（不给假答案）、
       点「清除」只清这门课那一份
+  W20 窗口缩放后卡片仍铺满（四次改尺寸，卡片底边都在窗口底边上方 12px、无滚动）
+  W21 拖动窗口不露白边（深色主题下拉大窗口，立刻连拍 3 张；窗口底色跟主题走）
 
 注意：主脚本是 <script type="module">，函数不在 window 上——所以这里只点界面元素，
       不调页面函数；页面里只读 DOM、设选区。
@@ -273,6 +275,74 @@ def snap(hwnd):
     return img
 
 
+def rect_phys(hwnd):
+    """DWM 物理边界。本进程 DPI 不自知，GetWindowRect 会被虚拟化（实测 1943 报 1566），
+    量图与量窗口都得用物理像素，否则 PrintWindow 会把右边裁掉。"""
+    class R(ctypes.Structure):
+        _fields_ = [("left", ctypes.c_long), ("top", ctypes.c_long),
+                    ("right", ctypes.c_long), ("bottom", ctypes.c_long)]
+
+    r = R()
+    ctypes.windll.dwmapi.DwmGetWindowAttribute(
+        wt.HWND(hwnd), 9, ctypes.byref(r), ctypes.sizeof(r))
+    return (int(r.left), int(r.top), int(r.right - r.left), int(r.bottom - r.top))
+
+
+def snap_phys(hwnd):
+    """按物理尺寸 PrintWindow 抓真窗口（W21 要看拖边时露出来的那块底色）。"""
+    from PIL import Image
+    u = ctypes.windll.user32
+    r = rect_phys(hwnd)
+    w, h = r[2], r[3]
+    hdc = u.GetWindowDC(wt.HWND(hwnd))
+    mdc = ctypes.windll.gdi32.CreateCompatibleDC(hdc)
+    bmp = ctypes.windll.gdi32.CreateCompatibleBitmap(hdc, w, h)
+    ctypes.windll.gdi32.SelectObject(mdc, bmp)
+    u.PrintWindow(wt.HWND(hwnd), mdc, 2)
+
+    class BMI(ctypes.Structure):
+        _fields_ = [("biSize", ctypes.c_uint32), ("biWidth", ctypes.c_int32),
+                    ("biHeight", ctypes.c_int32), ("biPlanes", ctypes.c_uint16),
+                    ("biBitCount", ctypes.c_uint16), ("biCompression", ctypes.c_uint32),
+                    ("biSizeImage", ctypes.c_uint32), ("biXPelsPerMeter", ctypes.c_int32),
+                    ("biYPelsPerMeter", ctypes.c_int32), ("biClrUsed", ctypes.c_uint32),
+                    ("biClrImportant", ctypes.c_uint32)]
+
+    bi = BMI()
+    bi.biSize = ctypes.sizeof(BMI)
+    bi.biWidth = w
+    bi.biHeight = -h
+    bi.biPlanes = 1
+    bi.biBitCount = 32
+    buf = ctypes.create_string_buffer(w * h * 4)
+    ctypes.windll.gdi32.GetDIBits(mdc, bmp, 0, h, buf, ctypes.byref(bi), 0)
+    img = Image.frombuffer("RGBA", (w, h), buf, "raw", "BGRA", 0, 1).convert("RGB")
+    ctypes.windll.gdi32.DeleteObject(bmp)
+    ctypes.windll.gdi32.DeleteDC(mdc)
+    u.ReleaseDC(wt.HWND(hwnd), hdc)
+    return img
+
+
+def white_ratio(img, frac=0.15):
+    """图底部 frac 那一条里，近白像素（三通道都 >238）占多少。"""
+    w, h = img.size
+    y0 = int(h * (1 - frac))
+    px = img.crop((0, y0, w, h)).load()
+    n = white = 0
+    for y in range(0, h - y0, 2):
+        for x in range(0, w, 2):
+            r, g, b = px[x, y]
+            n += 1
+            if r > 238 and g > 238 and b > 238:
+                white += 1
+    return white / float(n or 1)
+
+
+def place_window(hwnd, w, h):
+    """按物理像素改窗口大小（SWP_NOZORDER），用于量「改尺寸之后卡片还铺不铺满」。"""
+    ctypes.windll.user32.SetWindowPos(wt.HWND(hwnd), None, 40, 40, int(w), int(h), 0x0004)
+
+
 def diff_ratio(a, b, top_skip=0.5):
     """两张同尺寸图在下半部分有多少像素明显不同（0~1）。"""
     if a.size != b.size:
@@ -497,6 +567,7 @@ def main():
             if opened:
                 try:
                     r0 = rect_of(hwnd)
+                    clear_overlay(page)          # 首次运行的提示框会盖住按钮（点不到 #btnFs）
                     page.click("#btnFs")
                     time.sleep(1.2)
                     page.click("#btnFs")
@@ -1442,6 +1513,96 @@ def main():
                     ok("W13 不自激", "relayout 之后 4 秒共 %d 次 resize，后 2 秒 0 次（不自激）" % n1)
             except Exception as e:  # noqa: BLE001
                 bad("W13 不自激", "没验成：%r" % (e,))
+
+            # ---- W20 窗口缩放后卡片仍铺满（2026-11-25 用户：「图一图二的同一类问题」）----
+            # 实测现场：打开讲义时窗口 830 高，卡片 716 高；把窗口拉到 1300 高，卡片还是 716
+            #   （下面空 340px）；压到 620 高，卡片又溢出、侧栏被窗口底边切掉。
+            #   根因是 <script type="module"> 里的 fitReadCard 不在 window 上，窗口层那段普通
+            #   脚本调它只抛 ReferenceError、被 try/catch 吞掉——所以 resize 时一次都没重排过。
+            if opened:
+                try:
+                    u = ctypes.windll.user32
+                    r0 = rect_phys(hwnd)
+                    u.ShowWindow(wt.HWND(hwnd), 9)      # SW_RESTORE：不拿最大化状态量
+                    time.sleep(0.4)
+                    # 前面几项可能把页面停在别处（或提示框还没关），先回到阅读页再量
+                    clear_overlay(page)
+                    print("W20 现场", page.evaluate("""() => ({
+                      pageOn: document.querySelector('#page-read').classList.contains('on'),
+                      hidden: document.querySelector('#readCard').hidden,
+                      display: getComputedStyle(document.querySelector('#readCard')).display,
+                      veil: !!document.querySelector('#veil.on'), url: location.search})"""))
+                    if not page.evaluate("document.querySelector('#page-read').classList.contains('on')"):
+                        page.click("a[data-page='read']")
+                        time.sleep(0.8)
+
+                    def read_fit():
+                        return page.evaluate("""() => {
+                          const c = document.querySelector('#readCard').getBoundingClientRect();
+                          return {ih: innerHeight, bottom: c.bottom, top: c.top,
+                                  sh: document.documentElement.scrollHeight};
+                        }""")
+
+                    wrong = []
+                    worst = 0.0
+                    for w, h in ((1100, 660), (1500, 1280), (1000, 640), (1500, 900)):
+                        place_window(hwnd, w, h)
+                        time.sleep(0.9)
+                        f = read_fit()
+                        d = abs(f["bottom"] - (f["ih"] - 12))
+                        worst = max(worst, d)
+                        if d > 6 or f["sh"] > f["ih"] + 2:
+                            wrong.append((w, h, round(f["ih"], 1), round(f["bottom"], 1), round(d, 1)))
+                    if wrong:
+                        bad("W20 缩放铺满",
+                            "窗口改尺寸后卡片没跟上：%r（差 = 底边 − (窗口高 − 12)，容差 6）" % (wrong,))
+                    else:
+                        ok("W20 缩放铺满",
+                           "窗口 1100×660 / 1500×1280 / 1000×640 / 1500×900 四次改尺寸，卡片底边都停在"
+                           "窗口底边上方 12px（最大差 %.1fpx），整页无纵向滚动" % worst)
+                    u.SetWindowPos(wt.HWND(hwnd), None, r0[0], r0[1], r0[2], r0[3], 0x0004 | 0x0010)
+                    time.sleep(0.5)
+                except Exception as e:  # noqa: BLE001
+                    bad("W20 缩放铺满", "没验成：%r" % (e,))
+
+            # ---- W21 拖动窗口不露白边（2026-11-25 用户：「拉伸窗口的时候 卡顿感太强了 甚至会出现白边」）----
+            # 白边是 WebView2 自己的 DefaultBackgroundColor（以前写死 #F7F5EF）：窗口先变大、
+            #   页面后重画，中间露出来的就是它。这里在深色主题下把窗口一次拉大，立刻连拍 3 张，
+            #   底部那一条不许有大片近白像素；同时 set_bg 必须真的把底色换成 #111110。
+            if opened:
+                try:
+                    u = ctypes.windll.user32
+                    theme0 = page.evaluate("document.documentElement.dataset.theme")
+                    if theme0 != "dark":
+                        page.click("#btnTheme")
+                        time.sleep(0.9)
+                    api = page.evaluate(
+                        "() => { const a = window.pywebview && window.pywebview.api;"
+                        " return (a && a.set_bg) ? a.set_bg('dark') : null; }")
+                    place_window(hwnd, 1050, 660)
+                    time.sleep(1.0)
+                    place_window(hwnd, 1500, 1080)
+                    worst = 0.0
+                    for _ in range(3):
+                        worst = max(worst, white_ratio(snap_phys(hwnd)))
+                    if not (api and api.get("ok")):
+                        bad("W21 拖动不露白边",
+                            "窗口底色接口不可用（set_bg → %r）：拖边露出的那块还是写死的浅色" % (api,))
+                    elif worst > 0.5:
+                        bad("W21 拖动不露白边",
+                            "窗口从 1050×660 拉到 1500×1080，底部 15%% 有 %.0f%% 是浅色（白边还在）"
+                            % (worst * 100))
+                    else:
+                        ok("W21 拖动不露白边",
+                           "深色主题下拉大窗口，立刻连拍 3 张都没有白边（底部近白像素最多 %.0f%%）；"
+                           "set_bg → %s" % (worst * 100, api.get("color")))
+                    if theme0 != "dark":
+                        page.click("#btnTheme")
+                        time.sleep(0.6)
+                    r0 = rect_phys(hwnd)
+                    u.SetWindowPos(wt.HWND(hwnd), None, 40, 40, r0[2], r0[3], 0x0004 | 0x0010)
+                except Exception as e:  # noqa: BLE001
+                    bad("W21 拖动不露白边", "没验成：%r" % (e,))
 
             # ---- W6 真拖动（可选，会动鼠标）----
             if args.drag:

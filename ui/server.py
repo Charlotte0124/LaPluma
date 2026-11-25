@@ -3328,6 +3328,40 @@ class _WinApi:
             w.minimize()
         return {"ok": bool(w)}
 
+    def set_bg(self, theme):
+        """换主题时把窗口与 WebView2 的底色一起换掉。
+
+        2026-11-25 用户：「拉伸窗口的时候 卡顿感太强了 甚至会出现白边」。白边就是这层
+        WebView2 的 DefaultBackgroundColor（建窗时给的是浅色）；窗口先变大、页面后重画，
+        中间露出来的那一块就是它。改主题后要立刻跟着换，不然深色主题下还是白边。
+        WinForms 控件只能在 UI 线程动，所以用 form.Invoke 回主线程。
+        """
+        argb = (255, 0x11, 0x11, 0x10) if str(theme) == "dark" else (255, 0xF7, 0xF5, 0xEF)
+        try:
+            import webview
+            from System import Action
+            from System.Drawing import Color
+            win = (webview.windows or [None])[0]
+            form = getattr(win, "native", None) if win else None
+            if form is None:
+                return {"ok": False, "error": "拿不到窗口"}
+
+            def apply():
+                c = Color.FromArgb(argb[0], argb[1], argb[2], argb[3])
+                ctrl = getattr(form, "webview", None)
+                if ctrl is not None:
+                    ctrl.DefaultBackgroundColor = c
+                form.BackColor = c
+
+            if getattr(form, "InvokeRequired", False):
+                form.Invoke(Action(apply))
+            else:
+                apply()
+            return {"ok": True, "color": "#%02X%02X%02X" % argb[1:]}
+        except Exception as e:  # noqa: BLE001
+            _log_error("set_bg", e)
+            return {"ok": False, "error": str(e)}
+
     def relayout(self):
         """窗口尺寸变过之后，逼 WebView2 重算一次绘制表面。
 
@@ -3729,6 +3763,23 @@ def _msgbox(text: str, title: str = "", yes_no: bool = False) -> bool:
         return False
 
 
+def _window_bg_color() -> str:
+    """窗口 / WebView2 的底色：跟着主题走（深色 #111110，浅色 #F7F5EF）。
+
+    2026-11-25 用户：「拉伸窗口的时候 卡顿感太强了 甚至会出现白边」。
+    实测（真窗口，深色主题）：窗口从 1200×700 一次拉到 1780×1300，立刻 PrintWindow，
+    窗口底部 18% 有 74.9% 的像素是 #F7F5EF —— 就是这里写死的 background_color。
+    窗口先变大、页面后重画，中间露出来的就是这块浅色底；深色主题下就是一道白边。
+    现在按 config 里的 ui.theme 取色：深色给 #111110（--bg），浅色仍给 #F7F5EF。
+    """
+    try:
+        cfg = load_cfg() or {}
+        theme = str((cfg.get("ui") or {}).get("theme") or "light")
+    except Exception:  # noqa: BLE001
+        theme = "light"
+    return "#111110" if theme == "dark" else "#F7F5EF"
+
+
 def run_window(url: str) -> int:
     """把界面放进一个原生窗口（Windows 上走 WebView2 / Edge）。
 
@@ -3776,7 +3827,7 @@ def run_window(url: str) -> int:
     webview.create_window("%s v%s" % (APP_NAME, VERSION), win_url,
                           width=w0, height=h0, x=x0, y=y0, min_size=(980, 640),
                           frameless=True, easy_drag=False, js_api=api,
-                          background_color="#F7F5EF")
+                          background_color=_window_bg_color())
     # 2026-11-17 用户：「为什么我本地的软件的图标还是一样的」——
     #   pywebview 的 winforms 后端只有在 start(icon=...) 传了图标时才用自定义图标，
     #   不传就取 sys.executable 的图标 → 从源码跑时窗口与任务栏一直是 python.exe 的蓝黄头像。
