@@ -48,7 +48,9 @@ python -c "import pymupdf; print(pymupdf.__version__)"
 > `python` 认不出来时，把命令里的 `python` 换成 `py -3.12`：
 > `py -3.12 -m pip install pymupdf -i https://pypi.tuna.tsinghua.edu.cn/simple`
 
-## 3. 装窗口组件 pywebview（缺了会打开浏览器页）
+## 3. 装窗口组件 pywebview
+
+v1.9.0 起界面装在 WebView2 原生窗口里，双击启动就是一个自己的窗口；浏览器页只在加 `--no-window` 时才用。缺 pywebview 时启动器会提示先装。
 
 1. 同样在 cmd 里粘这一行：
 
