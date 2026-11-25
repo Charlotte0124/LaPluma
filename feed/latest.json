@@ -2,22 +2,23 @@
   "schema": "lapluma-feed-v1",
   "product": "LaPluma",
   "latest": "1.9.21",
-  "title": "v1.9.21 · 仓库版本比本机旧时，设置页不再说「已是最新」，改说「本机",
+  "title": "v1.9.21 · 阅读侧栏可以放到左边、左右两侧同时开着",
   "released": "2026-11-25",
-  "summary": "仓库版本比本机旧时，设置页不再说「已是最新」，改说「本机已更新」",
+  "summary": "阅读侧栏可以放到左边、左右两侧同时开着；设置页版本行不再说「已是最新」",
   "notes": [
+    "阅读侧栏可以放到左边，也能左右同时开（用户 2026-11-25：「把笔记/翻译/会话丢过去左侧那边 并且也一样可以像右边一样可以叠加」）：笔记 / 翻译 / 会话 三块各自记一个边，可以左边笔记、右",
     "版本行不再自相矛盾（用户 2026-11-25 发版后当场看到「本机 v1.9.20 / 仓库 v1.9.19 · 已是最新」）：发版后几分钟内 feed 镜像还回旧版本号，旧文案读着像「仓库比本机旧",
-    "判据：check-update.py 新增第 10 项——只喂旧清单（latest=1.9.0）时必须 newer=false 且 older=true",
-    "图：预览稿 docs\\预览\\27-版本行-仓库落后.png（三态对照）"
+    "判据：check-update.py 新增第 10 项——只喂旧清单（latest=1.9.0）时必须 newer=false 且 older=true，共 13 项",
+    "图：预览稿 docs\\预览\\27-版本行-仓库落后.png（三态对照）、docs\\预览\\28-侧栏可放左侧.png"
   ],
   "page": "https://github.com/Charlotte0124/LaPluma/releases/tag/v1.9.21",
   "assets": {
     "app": {
       "url": "https://github.com/Charlotte0124/LaPluma/releases/download/v1.9.21/LaPluma-1.9.21.zip",
-      "size": 14549376,
-      "sha256": "66578ad7cc1211907aa880bc54bd84cb21fcfdafaeff60eab204b2a23936be9d",
+      "size": 15103632,
+      "sha256": "50cf2c8ae92dec0951acf4d8a44300a3129709a4682b50ed49a1546e48104378",
       "name": "LaPluma-1.9.21.zip"
     }
   },
-  "_generated": "2026-11-25 12:50:25"
+  "_generated": "2026-11-25 13:06:22"
 }
