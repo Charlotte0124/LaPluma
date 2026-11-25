@@ -903,9 +903,6 @@ body.win #appScroll{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden
   box-shadow:0 14px 38px rgba(10,10,9,.18);animation:dropIn .18s ease}
 .upd[hidden]{display:none}
 .upd h5{margin:0 0 4px;font-size:13.5px;color:var(--ink)}
-.upd .upd-shot{display:block;width:100%;max-height:280px;object-fit:cover;object-position:top center;
-  border:1px solid var(--line);border-radius:10px;margin:0 0 10px;cursor:zoom-in;background:var(--card2)}
-.upd-shot[hidden]{display:none}
 .upd-sum{margin:0 0 8px;font-size:12.5px;line-height:1.7;color:var(--sub)}
 .upd ul{margin:0 0 10px;padding-left:18px;font-size:12.3px;line-height:1.75;color:var(--sub);max-height:150px;overflow:auto}
 .upd .upd-act{display:flex;gap:8px;align-items:center}
@@ -940,8 +937,6 @@ body.win #appScroll{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden
 <div class="upd" id="upd" hidden>
   <h5 id="updTitle">发现新版本</h5>
   <p class="upd-sum" id="updSum"></p>
-  <!-- 2026-11-25 用户：更新推送里要有「版本速览」图，让用户先看懂改了什么 -->
-  <img class="upd-shot" id="updShot" alt="这一版的界面速览" hidden>
   <ul id="updNotes"></ul>
   <div class="upd-prog" id="updProg"><i id="updBar"></i></div>
   <p class="upd-state" id="updState"></p>
@@ -5266,11 +5261,7 @@ document.addEventListener('keydown', e => {
     if(!box) return;
     document.getElementById('updTitle').textContent = '有新版本 ' + (j.latest || '') + '（当前 ' + (j.current || '') + '）';
     document.getElementById('updSum').textContent = j.summary || '这一版改了什么，点「去看看」看详情。';
-    const shot = document.getElementById('updShot');
-    if(shot){
-      if(j.image){ shot.src = j.image; shot.hidden = false; shot.onclick = () => window.open(j.image, '_blank'); }
-      else { shot.hidden = true; shot.removeAttribute('src'); shot.onclick = null; }
-    }
+    /* 2026-11-25 用户：更新卡只要纯文字，不显示版本速览图（图仍进 feed / Release / 项目台留底）。 */
     const ul = document.getElementById('updNotes');
     ul.innerHTML = (j.notes || []).slice(0, 6).map(t => '<li>' + String(t).replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c])) + '</li>').join('');
     const go = document.getElementById('updGo');

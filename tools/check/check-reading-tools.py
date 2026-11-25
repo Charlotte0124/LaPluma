@@ -348,8 +348,8 @@ def check(root):
         and 'class="msg a sc-welcome"' in idx
         and 'data-ex="这一讲最重要的三个概念是什么？"' in idx
         and "SC.messages.length ? box.scrollHeight : 0" in idx        # 开场白从第一句看起
-        and 'id="updShot"' in idx and "if(j.image){ shot.src = j.image; shot.hidden = false;" in idx
-    ), "没打开讲义只显示最近阅读；列表页签只列本课程（成品 + 00_原件 的 PDF）、当前行标「正在读」、点一行换读；会话空记录给开场白 + 三个例子（只填输入框不发请求）；更新卡显示版本速览图")
+        and 'id="updShot"' not in idx and "更新卡只要纯文字，不显示版本速览图" in idx
+    ), "没打开讲义只显示最近阅读；列表页签只列本课程（成品 + 00_原件 的 PDF）、当前行标「正在读」、点一行换读；会话空记录给开场白 + 三个例子（只填输入框不发请求）；更新卡只要纯文字、不显示版本速览图")
 
     # 22 pdf.js 测量画布不许在 body 里占位（2026-11-25 用户：「偶尔一大片黑」）
     add(22, "阅读页不被 pdf.js 测量画布挤黑", (
