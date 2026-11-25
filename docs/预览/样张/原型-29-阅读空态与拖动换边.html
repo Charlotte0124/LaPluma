@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<title>原型 29 · 阅读空态与拖动换边</title>
+<style>
+:root{--bg:#111110;--card:#1c1c1a;--card2:#232321;--line:#2e2e2b;--line2:#262624;--ink:#e9e7e2;--sub:#9c9992;--faint:#6f6c66;--red:#e2565c;--reader-bg:#0d0d0c}
+*{box-sizing:border-box}
+body{margin:0 auto;max-width:1180px;padding:24px 30px 30px;background:var(--bg);color:var(--ink);
+  font:14px/1.62 "Microsoft YaHei","Segoe UI",system-ui,sans-serif}
+h1{font-size:17px;font-weight:600;margin:0 0 4px}
+.sub{font-size:12px;color:var(--faint);margin:0 0 4px;line-height:1.8}
+.cap{font-size:12px;color:var(--sub);margin:16px 0 8px}
+.cap b{color:var(--ink);font-weight:600;margin-right:6px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.top{display:flex;align-items:center;gap:16px;padding:10px 16px;border-bottom:1px solid var(--line2);font-size:12.5px;color:var(--sub)}
+.top .logo{display:flex;align-items:center;gap:6px;color:var(--ink);font-weight:600}
+.top .nav{display:flex;gap:14px;margin:0 auto}
+.top .nav .on{color:var(--ink);background:var(--card2);border-radius:999px;padding:3px 12px}
+.top .rt{margin-left:auto;display:flex;gap:10px;color:var(--faint)}
+.body{padding:18px 20px 22px}
+h3{font-size:15px;margin:0 0 2px;font-weight:600}
+.hint{font-size:11.5px;color:var(--faint);margin:0 0 14px}
+.grp{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);margin:14px 0 6px}
+.row{display:flex;align-items:center;gap:12px;padding:9px 12px;border:1px solid var(--line2);border-radius:10px;margin:0 0 6px;background:var(--card2)}
+.row .ic{width:26px;height:26px;border-radius:7px;display:grid;place-items:center;background:var(--card);border:1px solid var(--line);font-size:12px;color:var(--sub);flex:none}
+.row .nm{font-size:13px;color:var(--ink);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row .meta{font-size:11px;color:var(--faint);margin-top:1px}
+.row .tm{margin-left:auto;font-size:11px;color:var(--faint);flex:none}
+.empty{padding:26px 12px;text-align:center;color:var(--faint);font-size:12.5px;line-height:1.9}
+.rg{font-size:11px;letter-spacing:.08em;color:var(--faint);margin:14px 0 7px}
+.rcards{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px}
+.course{border:1px solid var(--line);border-radius:14px;padding:14px 16px;background:var(--card)}
+.course .code{font-size:10.5px;font-family:Consolas,monospace;color:var(--faint);letter-spacing:.04em}
+.course h3{margin:5px 0 6px;font-size:14.5px}
+.course p{margin:0 0 10px;font-size:11.5px;color:var(--sub);line-height:1.7}
+.course .foot{display:flex;gap:12px;font-size:11px;color:var(--faint);border-top:1px solid var(--line2);padding-top:8px}
+.pill{display:inline-block;border:1px solid var(--line);border-radius:999px;padding:2px 10px;font-size:11px;color:var(--sub)}
+.readhost{position:relative;display:flex;height:300px;background:var(--reader-bg);border-radius:10px;overflow:hidden}
+.readhost .pane{flex:1;display:grid;place-items:center;color:var(--faint);font-size:12px}
+.readhost .side{width:260px;background:var(--card);border-left:1px solid var(--line2);padding:10px}
+.readhost .side.small{width:220px}
+.tabs{display:flex;gap:6px;margin:0 0 8px}
+.tab{border:1px solid var(--line);border-radius:8px;padding:4px 10px;font-size:11.5px;color:var(--faint);background:transparent}
+.tab.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.tab.ghost{opacity:.5;border-style:dashed}
+.drop{position:absolute;top:8px;bottom:8px;width:200px;border:2px dashed var(--red);border-radius:10px;display:grid;place-items:center;
+  color:var(--red);font-size:12px;background:rgba(226,86,92,.06)}
+.drop.left{left:8px}.drop.right{right:8px}
+.note{font-size:11.5px;line-height:1.8;color:var(--faint);margin:10px 0 0}
+.note b{color:var(--ink)}
+.oldbtn{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:999px;padding:4px 11px;font-size:12px;color:var(--sub)}
+.oldbtn.gone{text-decoration:line-through;color:var(--faint);border-style:dashed;opacity:.7}
+.zoom{position:relative;display:inline-block}
+.zoom .tag{position:absolute;left:-6px;top:-22px;background:var(--red);color:#fff;font-size:10px;border-radius:4px;padding:1px 6px}
+</style>
+</head>
+<body>
+<h1>阅读页 · 空态「最近阅读」 + 拖动页签换边（v1.9.23 提案）</h1>
+<p class="sub">四条一起改：① 「▤ 笔记」按钮改名「显示侧栏」；② 去掉工具条「⇤ 侧栏」；③ 侧栏不再靠按钮开，拖页签到另一边就成侧栏；④ 阅读页没有打开讲义时，不再弹「先到课程抽屉里点一份讲义」，改成最近阅读的 5 个文件 + 3 门课程（按先后排）。</p>
+
+<div class="cap"><b>① 阅读页空态</b>（没有打开的讲义 → 最近阅读；分两组：文件 5 个 + 课程 3 张卡片，各按打开先后）</div>
+<div class="card">
+  <div class="top"><div class="logo">✒ 羽毛笔 <em style="font-style:italic;font-weight:400;color:var(--faint)">La Pluma</em></div>
+    <div class="nav"><span>课程</span><span>生成</span><span class="on">阅读</span><span>上线</span></div>
+    <div class="rt"><span>教学</span><span>设置</span></div></div>
+  <div class="body">
+    <h3>最近阅读</h3>
+    <p class="hint">点一下接着看；文件 5 个、课程 3 门，按打开先后排。</p>
+    <div class="rg">文件</div>
+    <div class="row"><div class="ic">▤</div><div><div class="nm">D01_一份讲义是怎么出来的_讲义.pdf</div><div class="meta">示例课程 · 第 1 页</div></div><div class="tm">3 分钟前</div></div>
+    <div class="row"><div class="ic">▤</div><div><div class="nm">L03_线性变换_讲义.pdf</div><div class="meta">高等数学 · 第 7 页</div></div><div class="tm">今天 16:20</div></div>
+    <div class="row"><div class="ic">▤</div><div><div class="nm">T02_矩阵的秩_讲义.pdf</div><div class="meta">线性代数 · 第 3 页</div></div><div class="tm">昨天 21:05</div></div>
+    <div class="row"><div class="ic">▤</div><div><div class="nm">D02_桃花源记_讲义.pdf</div><div class="meta">示例课程 · 第 2 页</div></div><div class="tm">11-24 19:30</div></div>
+    <div class="row"><div class="ic">▤</div><div><div class="nm">L01_极限与连续_讲义.pdf</div><div class="meta">高等数学 · 第 12 页</div></div><div class="tm">11-23 20:14</div></div>
+    <div class="rg">课程</div>
+    <div class="rcards">
+      <div class="course"><div class="code">DEMO · Sample Course</div><h3>示例课程</h3><p>用一讲把「数据 → 讲义 → PDF → 三道门」走一遍</p><div class="foot"><span>2 份</span><span>23 页</span><span>2 讲可生成</span></div></div>
+      <div class="course"><div class="code">MATH</div><h3>高等数学</h3><p>从极限到多重积分，按章整理成讲义</p><div class="foot"><span>6 份</span><span>188 页</span><span>9 讲可生成</span></div></div>
+      <div class="course"><div class="code">LINEAR</div><h3>线性代数</h3><p>矩阵、秩、线性变换</p><div class="foot"><span>4 份</span><span>96 页</span><span>6 讲可生成</span></div></div>
+    </div>
+    <p class="note">分两组：文件 5 个、课程 3 门，各自按打开先后排；课程用卡片（跟课程页一个样子），文件点开续读、课程点开抽屉。</p>
+  </div>
+</div>
+
+<div class="cap"><b>② 第一次用（还没有记录）</b>（这时才给一句提示，不弹 toast）</div>
+<div class="card">
+  <div class="body"><h3>最近阅读</h3><p class="hint">还没有读过讲义。</p>
+  <div class="empty">从「课程」抽屉里点一份讲义，读过的会按时间排在这里。</div></div>
+</div>
+
+<div class="cap"><b>③ 拖动页签换边</b>（左：把「笔记」拖到左侧，出现投放区；右：放手后左边就是侧栏）</div>
+<div class="card">
+  <div class="top"><div class="logo">✒ 羽毛笔</div><div class="nav"><span class="on">阅读</span></div>
+    <div class="rt"><span class="oldbtn gone">⇤ 侧栏</span><span class="oldbtn">▤ 显示侧栏</span><span class="oldbtn">译</span></div></div>
+  <div class="body" style="padding:12px 16px 16px">
+    <div class="readhost">
+      <div class="drop left">放到左侧</div>
+      <div class="pane" style="flex:1">讲义</div>
+      <div class="side">
+        <div class="tabs"><span class="tab ghost">笔记</span><span class="tab">翻译</span><span class="tab">会话</span></div>
+        <div style="height:150px;border:1px dashed var(--line);border-radius:8px;display:grid;place-items:center;color:var(--faint);font-size:11.5px">（笔记正在被拖走）</div>
+      </div>
+    </div>
+    <p class="note">拖动中：被拖的页签半透明，另一边出现红色虚线投放区；松手就落到那边，那边自动成为侧栏。</p>
+    <div class="readhost" style="margin-top:12px">
+      <div class="side" style="border-left:0;border-right:1px solid var(--line2);width:260px">
+        <div class="tabs"><span class="tab on">笔记</span><span class="tab">翻译</span><span class="tab">会话</span></div>
+        <div style="font-size:11.5px;color:var(--faint)">第 p.1 页 · 笔记</div>
+      </div>
+      <div class="pane">讲义</div>
+      <div class="side" style="width:220px">
+        <div class="tabs"><span class="tab">会话</span></div>
+        <div style="font-size:11.5px;color:var(--faint)">本课程会话</div>
+      </div>
+    </div>
+    <p class="note">放手后：左边「笔记 / 翻译 / 会话」，右边只剩原来的「会话」——就是现在这套左右同开，只是换边靠拖，不靠按钮。</p>
+  </div>
+</div>
+
+<div class="cap"><b>④ 三处配套改动</b></div>
+<div class="card"><div class="body" style="padding:14px 18px">
+  <p class="note" style="margin:0 0 6px"><b>「▤ 笔记」→「▤ 显示侧栏」</b>：悬停提示也改成「显示 / 隐藏侧栏」；收起后按钮写「显示侧栏」。</p>
+  <p class="note" style="margin:0 0 6px"><b>「⇤ 侧栏」按钮取消</b>：工具条上不再有换边按钮；页签上的 ⇤/⇥ 小按钮也一并去掉，只保留拖动。</p>
+  <p class="note" style="margin:0"><b>「先到课程抽屉里点一份讲义」的 toast 取消</b>：没打开讲义时点「阅读」，直接进空态页看最近阅读。</p>
+</div></div>
+</body>
+</html>

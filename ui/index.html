@@ -374,7 +374,34 @@ nav a.on{background:var(--ink);color:var(--bg)}
 .pick-model .p small{font-size:11.5px;color:var(--sub)}
 
 /* 阅读器 */
-.read-card{overflow:hidden}
+.read-card{overflow:hidden;position:relative}
+/* 2026-11-25 用户第四条：阅读页空态 = 最近阅读（文件 5 个 + 课程 3 门，分组，按打开先后） */
+.recent-card{padding:22px 26px 26px}
+.recent-in h3{margin:0 0 3px;font-size:15px}
+.recent-in .hint{border:0;padding:0;margin:0 0 14px}
+.recent-in .rg{font-size:11px;letter-spacing:.08em;color:var(--faint);margin:14px 0 7px}
+.recent-in .rrow{display:flex;align-items:center;gap:12px;border:1px solid var(--line2);background:var(--card2);
+  border-radius:10px;padding:9px 12px;margin:0 0 6px;cursor:pointer}
+.recent-in .rrow:hover{border-color:var(--sub)}
+.recent-in .ric{width:26px;height:26px;flex:none;border-radius:7px;border:1px solid var(--line);background:var(--card);
+  display:grid;place-items:center;font-size:12px;color:var(--sub)}
+.recent-in .rtx{min-width:0}
+.recent-in .rnm{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.recent-in .rmeta{font-size:11px;color:var(--faint);margin-top:1px}
+.recent-in .rtm{margin-left:auto;flex:none;font-size:11px;color:var(--faint)}
+.recent-in .rcards{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
+.recent-in .rcards .course{cursor:pointer}
+.recent-in .empty{color:var(--faint);font-size:12.5px;line-height:1.9;padding:18px 2px}
+/* 拖动换边：被拖页签半透明，对侧露出虚线投放区 */
+.read-card .dropzone{position:absolute;top:0;bottom:0;width:300px;display:none;place-items:center;z-index:6;
+  border:2px dashed var(--red);border-radius:12px;color:var(--red);font-size:12.5px;background:rgba(226,86,92,.07);margin:8px}
+.read-card.dragging .dropzone{display:grid}
+.read-card.dragging.dz-show-left .dz-left{left:6px}
+.read-card.dragging.dz-show-right .dz-right{right:6px}
+.read-card.dragging.dz-show-left .dz-right,
+.read-card.dragging.dz-show-right .dz-left{display:none}
+.read-card .stab[draggable="true"]{cursor:grab}
+.read-card .stab.dragging{opacity:.45;border-style:dashed}
 .read-top{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--line2);font-size:13px;flex-wrap:wrap}
 .read-top .t{font-weight:600;font-size:13.5px}
 .read-top .p{font-size:11.5px;color:var(--faint);font-family:Consolas,monospace}
@@ -384,7 +411,7 @@ nav a.on{background:var(--ink);color:var(--bg)}
 .seg button{border:0;background:transparent;padding:5px 10px;color:inherit;font-size:12.5px}
 .seg button:hover{background:var(--card2);color:var(--ink)}
 .seg .val{padding:5px 8px;font-family:Consolas,monospace;font-size:12px;min-width:56px;text-align:center}
-.read-body{display:grid;grid-template-columns:1fr 300px;align-items:stretch}
+.read-body{display:grid;grid-template-columns:1fr 300px;align-items:stretch;position:relative}
 /* 2026-11-25 用户：「左右都可以同时存在」——三个面板各自选边：
    左边栏 / 阅读器 / 右边栏，按 data-docks 决定列（l / r / lr / none）。
    左边栏自己带右分隔线，右边栏带左分隔线。 */
@@ -411,8 +438,6 @@ nav a.on{background:var(--ink);color:var(--bg)}
 .side-tabs .stab{border:1px solid var(--line);background:transparent;color:var(--faint);
   border-radius:8px;padding:5px 11px;font:inherit;font-size:12px;cursor:pointer}
 .side-tabs .stab.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
-.side-tabs .stab.mv{margin-left:auto;padding:5px 8px;color:var(--faint);border-style:dashed}
-.side-tabs .stab.mv:hover{color:var(--ink);border-color:var(--ink)}
 .nhead{display:flex;align-items:center;gap:8px;margin:0 0 10px}
 .nhead h5{margin:0;font-size:12.5px;font-weight:600}
 .nhead .btn{margin-left:auto;padding:4px 12px;font-size:11.5px}
@@ -1043,7 +1068,9 @@ body.win #appScroll{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden
 
   <!-- 阅读器 -->
   <div class="page" id="page-read">
-    <div class="card read-card">
+    <!-- 2026-11-25 用户第四条：没打开讲义时不再弹 toast，直接进这里看「最近阅读」 -->
+    <div class="card recent-card" id="recentPage" hidden></div>
+    <div class="card read-card" id="readCard">
       <div class="read-top">
         <div>
           <div class="t" id="rTitle">还没有打开讲义</div>
@@ -1052,14 +1079,16 @@ body.win #appScroll{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden
         <div class="read-ctl">
           <div class="seg"><button id="pgPrev">‹</button><span class="val" id="pgVal">— / —</span><button id="pgNext">›</button></div>
           <div class="seg"><button id="zOut">−</button><span class="val" id="zVal">100%</span><button id="zIn">＋</button></div>
-          <button class="tbtn" id="btnSide" title="笔记 / 翻译 / 会话整叠换到另一侧；只挪一块用页签条上的 ⇤ / ⇥">⇤ 侧栏</button>
-          <button class="tbtn" id="btnNotes" title="显示 / 隐藏笔记栏">▤ <span id="notesLabel">笔记</span></button>
+          <button class="tbtn" id="btnNotes" title="显示 / 隐藏侧栏">▤ <span id="notesLabel">侧栏</span></button>
           <button class="tbtn" id="btnTrans" title="翻译这一页（会调用模型）">译</button>
           <button class="tbtn" id="btnFs"><span id="fsIcon">⤢</span><span id="fsLabel">全屏</span></button>
           <button class="tbtn" id="btnTheme2"><span id="themeIcon2">◐</span><span id="themeLabel2">深色</span></button>
         </div>
       </div>
       <div class="read-body">
+        <!-- 拖动页签换边时的投放区（只在拖动时露出来；挂在 read-body 里，不压工具栏） -->
+        <div class="dropzone dz-left" data-drop="left">放到左侧</div>
+        <div class="dropzone dz-right" data-drop="right">放到右侧</div>
         <!-- 2026-11-25：左右两栏都可以有面板；哪一个面板在哪一边由 JS（applyDock）放。
              左边栏先摆着（hidden），面板搬过来时才显示。 -->
         <div class="side dock" data-dock="left" hidden>
@@ -1348,8 +1377,9 @@ function showPage(p){
   scrollApp(0);
 }
 document.querySelectorAll('#nav a').forEach(a=>a.onclick=()=>{
-  if(a.dataset.page==='read' && !RD.doc){ toast('先到课程抽屉里点一份讲义'); return; }
+  // 2026-11-25 用户第四条：没打开讲义也进阅读页，看「最近阅读」，不再弹 toast 拦着
   showPage(a.dataset.page);
+  if(a.dataset.page==='read') showReadPage();
   if(a.dataset.page==='host') renderHost();
 });
 
@@ -1434,6 +1464,91 @@ function recentPush(kw){
   kw = String(kw||'').trim(); if(!kw) return;
   const a = recentRead().filter(x => x !== kw); a.unshift(kw);
   try{ localStorage.setItem(RECENT_KEY, JSON.stringify(a.slice(0,8))); }catch(e){}
+}
+
+/* ---------- 最近阅读（2026-11-25 用户第四条）----------
+   没打开讲义时点「阅读」，给的是最近读过的文件 5 个 + 课程 3 门，分组、按「先后点开」排。
+   只存本机（localStorage）；文件点开续读，课程点开抽屉（卡片，跟课程页一个样子）。 */
+const RECENT_RD_KEY = 'pluma.recentRead';
+function recentRdStore(){
+  try{
+    const j = JSON.parse(localStorage.getItem(RECENT_RD_KEY) || 'null');
+    if(j && Array.isArray(j.files) && Array.isArray(j.courses)) return j;
+  }catch(e){}
+  return { files: [], courses: [] };
+}
+function recentRdSave(st){
+  try{ localStorage.setItem(RECENT_RD_KEY, JSON.stringify(st)); }catch(e){}
+}
+function recentRdFile(rel, name, code, page){
+  if(!rel) return;
+  const st = recentRdStore();
+  st.files = st.files.filter(x => x.rel !== rel);
+  st.files.unshift({ rel: rel, name: name || rel.split('/').pop(), code: code || '', page: page || 1, t: Date.now() });
+  st.files = st.files.slice(0, 20);
+  recentRdSave(st);
+}
+function recentRdCourse(code){
+  if(!code) return;
+  const st = recentRdStore();
+  st.courses = st.courses.filter(x => x.code !== code);
+  st.courses.unshift({ code: code, t: Date.now() });
+  st.courses = st.courses.slice(0, 20);
+  recentRdSave(st);
+}
+function agoText(t){
+  const d = Date.now() - (t || 0), dt = new Date(t || 0), now = new Date();
+  if(d < 60000) return '刚刚';
+  if(d < 3600000) return Math.floor(d / 60000) + ' 分钟前';
+  const hm = String(dt.getHours()).padStart(2,'0') + ':' + String(dt.getMinutes()).padStart(2,'0');
+  if(dt.toDateString() === now.toDateString()) return '今天 ' + hm;
+  const y = new Date(now); y.setDate(now.getDate() - 1);
+  if(dt.toDateString() === y.toDateString()) return '昨天 ' + hm;
+  return (dt.getMonth() + 1) + '-' + dt.getDate() + ' ' + hm;
+}
+function courseByCode(code){ return ((B.courses) || []).find(c => c.code === code) || null; }
+function renderRecent(){
+  const box = $('#recentPage'); if(!box) return;
+  const st = recentRdStore();
+  const files = st.files.slice(0, 5);
+  const courses = st.courses.slice(0, 3).map(x => courseByCode(x.code)).filter(Boolean);
+  let h = '<div class="recent-in"><h3>最近阅读</h3><p class="hint">点一下接着看；文件 5 个、课程 3 门，按打开先后排。</p>';
+  if(files.length){
+    h += '<div class="rg">文件</div>';
+    files.forEach(f => {
+      const c = courseByCode(f.code);
+      h += '<div class="rrow" data-rrel="' + esc(f.rel) + '" data-rname="' + esc(f.name) + '" data-rcode="' + esc(f.code) + '">' +
+        '<span class="ric">▤</span><div class="rtx"><div class="rnm">' + esc(f.name) + '</div>' +
+        '<div class="rmeta">' + esc(c ? c.title : (f.code || '课程')) + ' · 第 ' + (f.page || 1) + ' 页</div></div>' +
+        '<span class="rtm">' + esc(agoText(f.t)) + '</span></div>';
+    });
+  }
+  if(courses.length){
+    h += '<div class="rg">课程</div><div class="rcards">';
+    courses.forEach(c => {
+      h += '<div class="course" data-rcc="' + esc(c.code) + '"><div class="code">' + esc(c.code) + (c.en ? ' · ' + esc(c.en) : '') + '</div>' +
+        '<h3>' + esc(c.title) + '</h3><p>' + esc(c.desc) + '</p>' +
+        '<div class="foot"><span>' + c.files.length + ' 份</span><span>' + c.files.reduce((a,f)=>a+(f.pages||0),0) + ' 页</span><span>' + c.lessons.length + ' 讲可生成</span></div></div>';
+    });
+    h += '</div>';
+  }
+  if(!files.length && !courses.length){
+    h += '<div class="empty">从「课程」抽屉里点一份讲义，读过的会按顺序排在这里。</div>';
+  }
+  h += '</div>';
+  box.innerHTML = h;
+  box.querySelectorAll('[data-rrel]').forEach(el => {
+    el.onclick = () => { openReader(el.dataset.rrel, el.dataset.rname, el.dataset.rcode || '', 1); };
+  });
+  box.querySelectorAll('[data-rcc]').forEach(el => {
+    const c = courseByCode(el.dataset.rcc); if(c) el.onclick = () => openDrawer(c);
+  });
+}
+function showReadPage(){
+  const has = !!RD.doc;
+  if($('#recentPage')) $('#recentPage').hidden = has;
+  if($('#readCard')) $('#readCard').hidden = !has;
+  if(!has) renderRecent();
 }
 function findOpen(on){
   FIND.open = (on === undefined) ? !FIND.open : !!on;
@@ -1769,6 +1884,7 @@ function askMoveOriginal(name, from){
 }
 function openDrawer(c){
   DRAGGED = c;
+  recentRdCourse(c.code);
   $('#drCode').textContent = c.code + (c.en?' · '+c.en:'');
   $('#drTitle').textContent = c.title; $('#drDesc').textContent = c.desc;
   $('#drFind').value = '';
@@ -2597,6 +2713,9 @@ async function openReader(rel, name, code, goPage){
   $('#rTitle').textContent = RD.name;
   $('#rSub').textContent = rel;
   showPage('read');
+  if($('#recentPage')) $('#recentPage').hidden = true;
+  if($('#readCard')) $('#readCard').hidden = false;
+  recentRdFile(rel, name, code, goPage || 1);
   applySide();
   $('#readerBox').innerHTML = '<div class="pdfmsg">正在打开 ' + esc(RD.name) + ' …</div>';
   await loadNotes();
@@ -3125,15 +3244,18 @@ function renderDockTabs(side){
       b.appendChild(n);
     }
     b.onclick = () => sideTab(k);
+    // 2026-11-25 用户第三条：换边靠把页签拖到另一边，不再放按钮
+    b.draggable = true;
+    b.addEventListener('dragstart', e => {
+      DRAG_KEY = k;
+      const card = readCard();
+      if(card) card.classList.add('dragging', side === 'left' ? 'dz-show-right' : 'dz-show-left');
+      b.classList.add('dragging');
+      try{ e.dataTransfer.setData('text/plain', k); e.dataTransfer.effectAllowed = 'move'; }catch(_){ }
+    });
+    b.addEventListener('dragend', () => { b.classList.remove('dragging'); clearDragUi(); });
     bar.appendChild(b);
   });
-  const mv = document.createElement('button');
-  mv.className = 'stab mv';
-  mv.title = '把这一块移到' + (side === 'left' ? '右边' : '左边');
-  mv.setAttribute('aria-label', mv.title);
-  mv.textContent = side === 'left' ? '⇥' : '⇤';
-  mv.onclick = () => movePanel(SIDE_ACTIVE[side]);
-  bar.appendChild(mv);
 }
 function applyDock(){
   const card = readCard();
@@ -3169,12 +3291,6 @@ function applyDock(){
     const chatActive = SIDE_ACTIVE[SIDE_DOCK.chat] === 'chat';
     card.classList.toggle('chat-on', !SIDE_HIDDEN && chatActive);
   }
-  const bs = document.getElementById('btnSide');
-  if(bs){
-    const allLeft = PANEL_KEYS.every(k => SIDE_DOCK[k] === 'left');
-    const allRight = PANEL_KEYS.every(k => SIDE_DOCK[k] === 'right');
-    bs.textContent = allRight ? '⇤ 侧栏' : (allLeft ? '⇥ 侧栏' : '⇄ 侧栏');
-  }
 }
 function sideTab(which){
   const t = PANEL_KEYS.includes(which) ? which : 'notes';
@@ -3184,29 +3300,35 @@ function sideTab(which){
   applyDock();
   if(t === 'chat' && typeof loadSideChat === 'function') loadSideChat();
 }
-function movePanel(k){
-  if(!k) return;
-  const to = SIDE_DOCK[k] === 'left' ? 'right' : 'left';
-  SIDE_DOCK[k] = to;
-  SIDE_ACTIVE[to] = k;
+let DRAG_KEY = '';
+function clearDragUi(){
+  DRAG_KEY = '';
+  const card = readCard();
+  if(card) card.classList.remove('dragging', 'dz-show-left', 'dz-show-right');
+}
+function movePanelTo(k, side){
+  if(!k || (side !== 'left' && side !== 'right') || !PANEL_KEYS.includes(k)) return;
+  if(SIDE_DOCK[k] === side){ clearDragUi(); return; }
+  SIDE_DOCK[k] = side;
+  SIDE_ACTIVE[side] = k;
   saveDock();
   applyDock();
+  clearDragUi();
 }
-function swapSides(){
-  PANEL_KEYS.forEach(k => { SIDE_DOCK[k] = SIDE_DOCK[k] === 'left' ? 'right' : 'left'; });
-  ['left','right'].forEach(s => {
-    const list = dockList(s);
-    if(list.length && !list.includes(SIDE_ACTIVE[s])) SIDE_ACTIVE[s] = list[0];
+document.querySelectorAll('.dropzone').forEach(z => {
+  z.addEventListener('dragover', e => { e.preventDefault(); try{ e.dataTransfer.dropEffect = 'move'; }catch(_){ } });
+  z.addEventListener('drop', e => {
+    e.preventDefault();
+    const to = z.dataset.drop;
+    if(DRAG_KEY){ movePanelTo(DRAG_KEY, to); }else{ clearDragUi(); }
   });
-  saveDock();
-  applyDock();
-}
+});
 let SIDE_HIDDEN = false;
 try{ SIDE_HIDDEN = localStorage.getItem('pluma.hideSide') === '1'; }catch(_){}
 function applySide(){
   const card = readCard();
   if(card) card.classList.toggle('hide-side', SIDE_HIDDEN);
-  if($('#notesLabel')) $('#notesLabel').textContent = SIDE_HIDDEN ? '显示笔记' : '笔记';
+  if($('#notesLabel')) $('#notesLabel').textContent = SIDE_HIDDEN ? '显示侧栏' : '侧栏';
   applyDock();
 }
 $('#btnNotes').onclick = () => {
@@ -3216,7 +3338,6 @@ $('#btnNotes').onclick = () => {
   if(!SIDE_HIDDEN && typeof sideTab === 'function') sideTab('notes');   // 打开时回到笔记页签
   setTimeout(()=>{ if(RD.doc) renderPdf(); }, 120);
 };
-document.getElementById('btnSide').onclick = () => swapSides();
 applyDock();   // 首屏先把页签条画出来（面板默认都在右边）
 async function setFullscreen(on){
   const card = readCard(); if(!card) return;

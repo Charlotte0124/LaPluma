@@ -19,7 +19,8 @@ r"""check-reading-tools.py — 阅读页六件事的判据（2026-11-22）
  11 笔记颜色 + PDF 引用高亮（悬停亮、点击常驻、右键换色）
  12 笔记列表溢出不压扁条目；点空白处清掉选区
  13 离线语言包接在侧栏（管理常驻 / 状态条收起 / 三档引擎）
- 14 侧栏三块各自选边：左右可同时存在，背板不复制面板，选择记在 localStorage
+ 14 侧栏三块各自选边：左右可同时存在，背板不复制面板，拖页签换边，选择记在 localStorage
+ 15 阅读空态：最近阅读 5 文件 + 3 课程（分组、按打开先后；课程用卡片；不再弹「先到课程抽屉…」）
 
 用法：
     python tools\check\check-reading-tools.py            # 判本仓
@@ -248,8 +249,10 @@ def check(root):
         and '.read-body[data-docks="l"]{grid-template-columns:300px 1fr}' in idx
         and ".side[data-dock=\"left\"]{border-left:0;border-right:1px solid var(--line2)}" in idx
         and "let SIDE_DOCK = {" in idx and "pluma.sideDock" in idx and "pluma.sideActive" in idx
-        and "function applyDock()" in idx and "function movePanel(" in idx and "function swapSides()" in idx
-        and 'id="btnSide"' in idx and ".side-tabs .stab.mv{" in idx
+        and "function applyDock()" in idx
+        and "b.draggable = true" in idx and "let DRAG_KEY" in idx and "movePanelTo(" in idx
+        and 'class="dropzone dz-left" data-drop="left"' in idx and 'class="dropzone dz-right" data-drop="right"' in idx
+        and 'id="btnSide"' not in idx and ".stab.mv{" not in idx          # 换边不再靠按钮
         and "el && el.parentElement !== box) box.appendChild(el)" in idx   # 面板跟着边搬，不复制
         and "applyDock();   // 首屏先把页签条画出来" in idx
         # 2026-11-25 用户「底下怎么留有坑位的」：空左栏与没选中的会话都被自己的 display 顶掉 hidden，
@@ -257,7 +260,20 @@ def check(root):
         and ".side[hidden]{display:none}" in idx
         and "#sideChat[hidden]{display:none}" in idx
         and "align-items:stretch" in idx
-    ), "笔记 / 翻译 / 会话 各自存边（left/right），两边没面板的列自动收起；页签条上 ⇤/⇥ 只挪一块，工具条 ⇄ 侧栏整叠换边；选择记在 localStorage；空栏与没选中的面板被 [hidden] 真正收起（不再留坑位）")
+    ), "笔记 / 翻译 / 会话 各自存边（left/right），两边没面板的列自动收起；换边靠把页签拖到另一边的虚线投放区（没有 ⇤/⇥ 按钮）；选择记在 localStorage；空栏与没选中的面板被 [hidden] 真正收起")
+
+    # 15 阅读页空态「最近阅读」（2026-11-25 用户第四条）
+    add(15, "阅读空态：最近阅读（5 文件 + 3 课程，分组、按打开先后）", (
+        'id="recentPage"' in idx and "const RECENT_RD_KEY = 'pluma.recentRead'" in idx
+        and "function recentRdFile(" in idx and "function recentRdCourse(" in idx
+        and "function renderRecent()" in idx and "function showReadPage()" in idx
+        and "st.files.slice(0, 5)" in idx and "st.courses.slice(0, 3)" in idx
+        and '<div class="rg">文件</div>' in idx and '<div class="rg">课程</div>' in idx
+        and 'class="course" data-rcc=' in idx            # 课程用卡片，不是行
+        and "recentRdFile(rel, name, code, goPage || 1)" in idx      # 打开讲义就记一笔
+        and "recentRdCourse(c.code)" in idx                          # 打开课程抽屉也记一笔
+        and "先到课程抽屉里点一份讲义" not in idx                    # 那句 toast 不再拦人
+    ), "没打开讲义时进阅读页给最近阅读：文件 5 条 + 课程 3 张卡片（分组、按先后点开排）；文件点开续读、课程点开抽屉；没有记录才给一句空态提示")
 
     return rows
 
@@ -314,6 +330,8 @@ def selftest():
             ("管理按钮被拿掉", 13, IDX, 'id="trMgrBtn"', 'id="trMgrBtnX"'),
             ("状态条不再收起", 13, IDX, "hideTrStrip(true)", "hideTrStrip(false)"),
             ("侧栏不再分边", 14, IDX, "let SIDE_DOCK = {", "let SIDEDOCK = {"),
+            ("换边又改回按钮", 14, IDX, "b.draggable = true", "b.draggable = false"),
+            ("最近阅读不再记录", 15, IDX, "const RECENT_RD_KEY = 'pluma.recentRead'", "const RECENT_RD_KEY = 'pluma.recentReadX'"),
         ]
         all_ok = True
         for label, no, rel, old, new in defects:
