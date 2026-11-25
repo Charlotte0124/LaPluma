@@ -1462,17 +1462,22 @@ def main():
                                 time.sleep(0.4)
                                 page.click("#scClear")
                                 time.sleep(1.2)
+                                # 2026-11-25 起空会话显示「开场白 + 三个例子」，开场白本身也是一个 .msg.a，
+                                #   所以清除后不是 0 条，而是「我的消息 0 条、只剩这一块开场白」。
                                 gone = page.evaluate("""() => ({
                                   msgs: document.querySelectorAll('#sideChat .msg').length,
-                                  empty: !!document.querySelector('#sideChat .sc-empty')
+                                  u: document.querySelectorAll('#sideChat .msg.u').length,
+                                  welcome: !!document.querySelector('#sideChat .sc-welcome'),
+                                  ex: document.querySelectorAll('#sideChat [data-ex]').length
                                 })""")
-                                if gone["msgs"] != 0 or not gone["empty"]:
-                                    bad("W19 侧栏会话", "点了「清除」还留着 %d 条消息（空态提示 %r）"
-                                        % (gone["msgs"], gone["empty"]))
+                                if gone["u"] != 0 or not gone["welcome"] or gone["msgs"] != 1 or gone["ex"] < 3:
+                                    bad("W19 侧栏会话",
+                                        "点了「清除」后还剩 我的 %d 条 / 共 %d 条消息（开场白 %r，例子 %d 个）"
+                                        % (gone["u"], gone["msgs"], gone["welcome"], gone["ex"]))
                                 else:
                                     ok("W19 侧栏会话",
-                                       "三页签（%s）；气泡「我」灰底靠右、「羽毛笔」带边框；"
-                                       "没 key 提问只出提示（%s）；出处片「%s」→ %s 的 %s；清除后归零"
+                                       "四页签（%s）；气泡「我」灰底靠右、「羽毛笔」带边框；"
+                                       "没 key 提问只出提示（%s）；出处片「%s」→ %s 的 %s；清除后只剩开场白（3 个例子）"
                                        % (" / ".join(h0["tabs"]), ask["warnText"][:20],
                                           h0["cites"][0], jp["title"], jp["pg"]))
                 except Exception as e:  # noqa: BLE001
