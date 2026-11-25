@@ -18,10 +18,10 @@
   "assets": {
     "app": {
       "url": "https://github.com/Charlotte0124/LaPluma/releases/download/v1.9.24/LaPluma-1.9.24.zip",
-      "size": 18865662,
-      "sha256": "0449a5145b418fee930225a521a887e28496d83d6e65f4dfb7261118caa9e928",
+      "size": 18865802,
+      "sha256": "c350e76a90bad4dc79733dab7fe0d216567353188afefc83158db22eb462c921",
       "name": "LaPluma-1.9.24.zip"
     }
   },
-  "_generated": "2026-11-25 20:15:06"
+  "_generated": "2026-11-25 20:17:46"
 }
