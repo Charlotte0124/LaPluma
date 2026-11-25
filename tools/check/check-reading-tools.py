@@ -333,6 +333,31 @@ def check(root):
         and "api.set_bg(t)" in idx
     ), "卡片高度每帧跟窗口（窗口层通过 window.__plumaFitReadCard 调）；窗口/WebView2 底色按主题取（深色 #111110、浅色 #F7F5EF），换主题即换；细碎拖边不重设窗口，跨度 >220px 才兜一次 relayout")
 
+    # 21 阅读空态 / 侧栏「列表」/ 会话开场白（2026-11-25 用户看图后定）
+    add(21, "空态只留最近阅读 · 侧栏列表 · 会话开场白", (
+        'id="readCard" hidden' in idx                                  # 空态不露空讲义卡
+        and ".read-card[hidden]{display:none}" in idx                  # display:flex 会顶掉 [hidden]
+        and "if(typeof showReadPage === 'function' && !RD.doc) showReadPage();" in idx
+        and 'id="sideList" hidden' in idx
+        and "const PANEL_KEYS = ['notes', 'trans', 'chat', 'list'];" in idx
+        and "list: 'sideList'" in idx and "list: '列表'" in idx
+        and "function renderSideList()" in idx
+        and "只列这门课" in idx
+        and "00_原件 · 只列 PDF" in idx                               # 原件只列能读的 PDF
+        and "data-lrel=" in idx and "openReader(el.dataset.lrel, el.dataset.lname, RD.code, 1)" in idx
+        and 'class="msg a sc-welcome"' in idx
+        and 'data-ex="这一讲最重要的三个概念是什么？"' in idx
+        and "SC.messages.length ? box.scrollHeight : 0" in idx        # 开场白从第一句看起
+    ), "没打开讲义只显示最近阅读；列表页签只列本课程（成品 + 00_原件 的 PDF）、当前行标「正在读」、点一行换读；会话空记录给开场白 + 三个例子（只填输入框不发请求）")
+
+    # 22 pdf.js 测量画布不许在 body 里占位（2026-11-25 用户：「偶尔一大片黑」）
+    add(22, "阅读页不被 pdf.js 测量画布挤黑", (
+        ".hiddenCanvasElement{position:absolute !important" in idx
+        and "left:-9999px !important" in idx
+        and "width:1px !important;height:1px !important" in idx
+        and "body.win{height:100vh;overflow:hidden;display:flex;flex-direction:column}" in idx
+    ), "pdf.js 的字体测量画布（不透明黑）被挪出视口并缩到 1px；否则它会成为 body 的 flex 子项，实测把 #appScroll 从 794 挤到 168（页面下半截全黑）")
+
     return rows
 
 
@@ -397,6 +422,10 @@ def selftest():
             ("最近阅读不再记录", 15, IDX, "const RECENT_RD_KEY = 'pluma.recentRead'", "const RECENT_RD_KEY = 'pluma.recentReadX'"),
             ("卡片不再跟窗口缩放", 20, IDX, "window.__plumaFitReadCard = fitReadCard;", ""),
             ("WebView 底色又写死浅色", 20, SRV, "background_color=_window_bg_color()", 'background_color="#F7F5EF"'),
+            ("空态又露出空讲义卡", 21, IDX, 'id="readCard" hidden', 'id="readCard"'),
+            ("列表页签被拿掉", 21, IDX, 'id="sideList" hidden', 'id="sideListX" hidden'),
+            ("会话开场白被拿掉", 21, IDX, 'class="msg a sc-welcome"', 'class="msg a"'),
+            ("pdf.js 测量画布又占位", 22, IDX, ".hiddenCanvasElement{position:absolute !important", ".hiddenCanvasElement{"),
         ]
         all_ok = True
         for label, no, rel, old, new in defects:

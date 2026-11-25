@@ -460,6 +460,10 @@ body.col-resizing{cursor:ew-resize;user-select:none}
 .read-card.fs .side{max-height:none;overflow:auto}
 .read-card.hide-side .read-body{grid-template-columns:1fr}
 .read-card.hide-side .side{display:none}
+/* 2026-11-25 用户：「下面那个『还没有打开讲义』整个课件删除」——空态只留最近阅读。
+   hidden 属性被 .read-card 的 display:flex 顶掉了（UA 的 [hidden]{display:none} 权重不够），
+   所以显式写一条；不然 JS 里设 hidden=true 也照样显示，图1 那张空卡片就是这么冒出来的。 */
+.read-card[hidden]{display:none}
 /* 2026-11-21 用户第七/八条：翻译要像笔记一样从右侧切出来，不挡阅读；点「记笔记」也要弹出侧栏。 */
 .side-tabs{display:flex;gap:6px;margin:0 0 10px}
 .side-tabs .stab{border:1px solid var(--line);background:transparent;color:var(--faint);
@@ -692,6 +696,32 @@ html,body{background:var(--bg)}
 #sideChat .sc-log::-webkit-scrollbar-track{background:transparent}
 #sideChat .sc-log::-webkit-scrollbar-thumb{background:var(--line);border-radius:4px}
 #sideChat .sc-log::-webkit-scrollbar-thumb:hover{background:var(--faint)}
+/* 2026-11-25 用户：会话打开一片空白，不知道能干什么——给一句开场白 + 三个能点的例子。
+   例子只填进输入框，不自动发（免得点看看就先花一次调用）。 */
+#sideChat .sc-welcome .ex{display:flex;flex-wrap:wrap;gap:5px;margin-top:9px}
+#sideChat .sc-welcome .ex button{border:1px dashed var(--line);background:transparent;color:var(--ink);
+  border-radius:999px;padding:2px 8px;font-size:10.5px;transition:.14s}
+#sideChat .sc-welcome .ex button:hover{border-color:var(--sub);background:var(--card2)}
+#sideChat .sc-welcome .dim{color:var(--faint)}
+/* 2026-11-25 用户：侧栏第四个页签「列表」——只在本课程内换成品 / 原件，与笔记 / 翻译 / 会话同一属性 */
+#sideList{display:flex;flex-direction:column;min-height:0;flex:1;gap:6px}
+#sideList[hidden]{display:none}
+#sideList .ls-hd{display:flex;align-items:baseline;gap:8px}
+#sideList .ls-hd h5{margin:0;font-size:12.5px;font-weight:600}
+#sideList .ls-hd span{font-size:10.5px;color:var(--faint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#sideList .ls-body{flex:1;min-height:0;overflow:auto;padding-right:2px;scrollbar-gutter:stable}
+#sideList .ls-grp{font-size:10.5px;color:var(--faint);letter-spacing:.04em;margin:9px 0 3px;display:flex;gap:6px}
+#sideList .ls-grp i{font-style:normal;color:var(--faint);opacity:.8}
+#sideList .ls-row{display:flex;align-items:center;gap:7px;padding:6px 7px;border-radius:8px;cursor:pointer;
+  font-size:12px;color:var(--sub);transition:.14s}
+#sideList .ls-row:hover{background:var(--card2)}
+#sideList .ls-row.on{background:var(--card2);box-shadow:inset 2px 0 0 var(--ink)}
+#sideList .ls-row .nm{color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#sideList .ls-row .mt{font-size:10px;color:var(--faint);margin-top:1px}
+#sideList .ls-row .now{margin-left:auto;flex:none;font-size:9px;color:var(--faint);
+  border:1px solid var(--line);border-radius:999px;padding:0 5px}
+#sideList .ls-empty{font-size:11.5px;color:var(--faint);line-height:1.8;padding:6px 2px}
+#sideList .hint{border-top:1px solid var(--line2);padding-top:7px;margin:6px 0 0}
 .nitem .m{display:flex;gap:8px;font-size:11px;color:var(--faint);font-family:Consolas,monospace;margin-bottom:4px;border:0;padding:0}
 /* 2026-11-22：列表里带出这条笔记引用的原文（灰、小字），一眼看出它是拿哪段话起的 */
 .nitem .nq{font-size:11.5px;line-height:1.6;color:var(--faint);background:var(--card2);border-radius:6px;
@@ -827,6 +857,13 @@ footer{max-width:1080px;margin:26px auto 0;padding:0 16px;display:flex;align-ite
    滚动条出现 → 内容变窄 → 回流变矮 → 滚动条消失，循环抖动（白边就是卡片底边跟着跳）。
    用 scrollbar-gutter 给它固定留一条槽，滚动条出现/消失都不再改变内容宽度。 */
 body.win #appScroll{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden;scrollbar-gutter:stable}
+/* 2026-11-25 用户的「偶尔一大片黑」：pdf.js 做字体测量时会把 <canvas class="hiddenCanvasElement">
+   append 到 body（它自带的 viewer CSS 会把这些画布藏起来，我们没引那份 CSS）。body.win 是
+   display:flex 的列容器，于是每块画布都成了 flex 子项：实测 #appScroll 被挤到只剩 168px，
+   画布本身用 getContext('2d',{alpha:false}) → 不透明黑，直接在页面下半截铺成一大片黑。
+   这里按 pdf.js viewer 的口径把它们挪出视口并缩到 1px——只影响测量，不影响任何绘制。 */
+.hiddenCanvasElement{position:absolute !important;left:-9999px !important;top:-9999px !important;
+  width:1px !important;height:1px !important;opacity:0 !important;pointer-events:none !important}
  body.win .tbar{position:relative;flex:0 0 36px}
  /* 2026-11-21 用户：「顶栏依旧会挡住软件UI」。
     原来浮层的层级是 抽屉 30 / 遮罩 29 / 弹窗 40 / 拖放 60，全在导航（70）与自绘标题栏（80）下面：
@@ -866,7 +903,10 @@ body.win #appScroll{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden
   box-shadow:0 14px 38px rgba(10,10,9,.18);animation:dropIn .18s ease}
 .upd[hidden]{display:none}
 .upd h5{margin:0 0 4px;font-size:13.5px;color:var(--ink)}
-.upd .upd-sum{margin:0 0 8px;font-size:12.5px;line-height:1.7;color:var(--sub)}
+.upd .upd-shot{display:block;width:100%;max-height:280px;object-fit:cover;object-position:top center;
+  border:1px solid var(--line);border-radius:10px;margin:0 0 10px;cursor:zoom-in;background:var(--card2)}
+.upd-shot[hidden]{display:none}
+.upd-sum{margin:0 0 8px;font-size:12.5px;line-height:1.7;color:var(--sub)}
 .upd ul{margin:0 0 10px;padding-left:18px;font-size:12.3px;line-height:1.75;color:var(--sub);max-height:150px;overflow:auto}
 .upd .upd-act{display:flex;gap:8px;align-items:center}
 .upd .upd-act .btn{padding:5px 12px;font-size:12.5px}
@@ -1092,7 +1132,8 @@ body.win #appScroll{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden
   <div class="page" id="page-read">
     <!-- 2026-11-25 用户第四条：没打开讲义时不再弹 toast，直接进这里看「最近阅读」 -->
     <div class="card recent-card" id="recentPage" hidden></div>
-    <div class="card read-card" id="readCard">
+    <!-- 2026-11-25：默认 hidden（没打开讲义时不该露出空卡片）；打开讲义时 openReader 去掉 -->
+    <div class="card read-card" id="readCard" hidden>
       <div class="read-top">
         <div>
           <div class="t" id="rTitle">还没有打开讲义</div>
@@ -1228,6 +1269,13 @@ body.win #appScroll{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden
                 <input type="checkbox" id="scCrossBox"> 引用其他课件</label>
               <div class="tip">一门课一个会话；关掉再开还在。讲次范围在右侧选。</div>
             </div>
+          </div>
+          <!-- 2026-11-25 用户：加一个「列表」页签，跟笔记 / 翻译 / 会话同一属性（可拖到四角）。
+               只列当前课程的成品（01_讲义）与原件（00_原件 里的 PDF），点一行换读这份。 -->
+          <div id="sideList" hidden>
+            <div class="ls-hd"><h5 id="lsTitle">列表</h5><span id="lsSub"></span></div>
+            <div class="ls-body" id="lsBody"></div>
+            <p class="hint" id="lsTip" hidden>点一行换读这份，回到第 1 页。原件里的 docx / pptx 读不了，所以只列 PDF。</p>
           </div>
           </div>
           </div>
@@ -1421,6 +1469,8 @@ function showPage(p){
   document.querySelectorAll('#nav a').forEach(a=>a.classList.toggle('on', a.dataset.page===p));
   scrollApp(0);
   if(p === 'read'){
+    // 2026-11-25：没打开讲义时只留「最近阅读」——空讲义卡（「还没有打开讲义」）整块不出现
+    if(typeof showReadPage === 'function' && !RD.doc) showReadPage();
     // 卡片高度按可用高度算：首帧先量一次，字体/导航落定后再补一次
     requestAnimationFrame(() => { try{ fitReadCard(); }catch(_){ } });
     setTimeout(() => { try{ fitReadCard(); }catch(_){ } }, 160);
@@ -2767,6 +2817,7 @@ async function openReader(rel, name, code, goPage){
   if($('#readCard')) $('#readCard').hidden = false;
   fitReadCard();
   recentRdFile(rel, name, code, goPage || 1);
+  try{ renderSideList(); }catch(_){ }   // 列表页签跟着当前这份走（当前行高亮 + 正在读）
   applySide();
   $('#readerBox').innerHTML = '<div class="pdfmsg">正在打开 ' + esc(RD.name) + ' …</div>';
   await loadNotes();
@@ -3265,13 +3316,13 @@ function exitReaderFullscreen(){
    · 每侧一列，上下两格：左上 / 左下 / 右上 / 右下；每格一叠页签，面板搬家不复制；
    · 侧栏宽度可拖（260–560），上下比例可拖（25–75），都记在 localStorage；
    · 打开 / 拉宽侧栏时窗口同步加宽，讲义列宽度不变（到屏幕工作区边为止）。 */
-const PANEL_KEYS = ['notes', 'trans', 'chat'];
-const PANEL_IDS = { notes: 'sideNotes', trans: 'sideTrans', chat: 'sideChat' };
-const PANEL_NAMES = { notes: '笔记', trans: '翻译', chat: '会话' };
+const PANEL_KEYS = ['notes', 'trans', 'chat', 'list'];
+const PANEL_IDS = { notes: 'sideNotes', trans: 'sideTrans', chat: 'sideChat', list: 'sideList' };
+const PANEL_NAMES = { notes: '笔记', trans: '翻译', chat: '会话', list: '列表' };
 const SLOTS = ['lt', 'lb', 'rt', 'rb'];
 const SLOT_SIDE = { lt: 'left', lb: 'left', rt: 'right', rb: 'right' };
 const SIDE_W_MIN = 260, SIDE_W_MAX = 560;
-let SIDE_DOCK = { notes: 'rt', trans: 'rt', chat: 'rt' };
+let SIDE_DOCK = { notes: 'rt', trans: 'rt', chat: 'rt', list: 'rt' };
 let SIDE_ACTIVE = { lt: 'notes', lb: 'notes', rt: 'notes', rb: 'notes' };
 let SIDE_W = { left: 300, right: 300 };
 let SIDE_SPLIT = { left: 50, right: 50 };
@@ -3429,6 +3480,49 @@ function applyDock(){
     applyDock._rz = setTimeout(() => { try{ renderPdf(); }catch(_){ } }, 90);
   }
 }
+/* 2026-11-25 用户：侧栏「列表」——只列**当前这门课**的成品（01_讲义）与原件（00_原件 里的 PDF）。
+   原件里的 docx / pptx 读不了，不列；点一行换读这份、回第 1 页，并记进「最近阅读」。 */
+function courseOfCode(code){ return ((B && B.courses) || []).find(c => c.code === code) || null; }
+function renderSideList(){
+  const body = $('#lsBody'); if(!body) return;
+  const c = courseOfCode(RD.code);
+  if($('#lsTitle')) $('#lsTitle').textContent = c ? (c.code + ' · ' + c.title) : '列表';
+  if($('#lsSub')) $('#lsSub').textContent = c ? '只列这门课' : '';
+  if(!RD.doc || !c){
+    body.innerHTML = '<div class="ls-empty">先打开一份讲义，这里会列出同一门课的成品和原件。</div>';
+    if($('#lsTip')) $('#lsTip').hidden = true;
+    return;
+  }
+  const files = c.files || [];
+  const pdfs = (c.originals || []).filter(x => /\.pdf$/i.test(x.name || '') || /\.pdf$/i.test(x.rel || ''));
+  const sizeText = (kb) => {
+    const n = Number(kb) || 0;
+    if(!n) return '';
+    return n >= 1024 ? (n / 1024).toFixed(1) + ' MB' : Math.round(n) + ' KB';
+  };
+  const row = (x, meta) => {
+    const on = (x.rel === RD.rel);
+    return '<div class="ls-row' + (on ? ' on' : '') + '" data-lrel="' + esc(x.rel) + '" data-lname="' + esc(x.name) + '" title="' + esc(x.rel) + '">' +
+      '<span>▤</span><div style="min-width:0"><div class="nm">' + esc(x.name) + '</div>' +
+      (meta ? '<div class="mt">' + esc(meta) + '</div>' : '') + '</div>' +
+      (on ? '<span class="now">正在读</span>' : '') + '</div>';
+  };
+  let h = '';
+  if(files.length){
+    h += '<div class="ls-grp">成品 · ' + files.length + ' 份 <i>01_讲义</i></div>';
+    files.forEach(f => { h += row(f, f.pages ? f.pages + ' 页' : ''); });
+  }
+  if(pdfs.length){
+    h += '<div class="ls-grp">原件 · ' + pdfs.length + ' 份 <i>00_原件 · 只列 PDF</i></div>';
+    pdfs.forEach(f => { h += row(f, sizeText(f.size_kb)); });
+  }
+  if(!h) h = '<div class="ls-empty">这门课还没有成品，也没有 PDF 原件。</div>';
+  body.innerHTML = h;
+  body.querySelectorAll('[data-lrel]').forEach(el => {
+    el.onclick = () => { if(el.dataset.lrel !== RD.rel) openReader(el.dataset.lrel, el.dataset.lname, RD.code, 1); };
+  });
+  if($('#lsTip')) $('#lsTip').hidden = !h.startsWith('<div class="ls-grp"');
+}
 function sideTab(which){
   const t = PANEL_KEYS.includes(which) ? which : 'notes';
   const slot = SIDE_DOCK[t];
@@ -3436,6 +3530,7 @@ function sideTab(which){
   saveDock();
   applyDock();
   if(t === 'chat' && typeof loadSideChat === 'function') loadSideChat();
+  if(t === 'list') renderSideList();
 }
 let DRAG_KEY = '';
 function clearDragUi(){
@@ -4030,10 +4125,27 @@ function renderSideChat(){
       md(m.text) + chips + (m.warn ? scRefs(m) : '') + '</div>';
   }).join('');
   if(SC.busy) html += '<div class="msg a"><div class="who">羽毛笔</div>提问中…（一次模型调用）</div>';
-  box.innerHTML = html || ('<div class="sc-empty">在这门课里问一句：答案只依据本课程内容，并标出课件页码。' +
-    '<br>一门课一个会话，关掉再开还在。</div>');
-  box.scrollTop = box.scrollHeight;
+  /* 2026-11-25 用户：打开会话一片空白，不知道能问什么、答案长什么样（图3）。
+     空记录时给一句开场白 + 三个例子；例子只填进输入框，不自动发，免得点看看就先花一次调用。
+     这段不写进会话记录（SC.messages 不变），所以「清除」之后它还在。 */
+  if(!html){
+    html = '<div class="msg a sc-welcome"><div class="who">羽毛笔</div>' +
+      '<p>这门课的讲义都在这儿，可以问我<b>任何讲次</b>里的内容——概念、公式、例题，或者把某一节讲人话。</p>' +
+      '<p>答案会带 <b>「课件 p.N」</b>，点一下直接打开原件那一页；勾「引用其他课件」才会跨课找，讲次范围在右侧选。</p>' +
+      '<p class="dim">还没配模型密钥时，我会直说「没发出去」，不会编答案。</p>' +
+      '<div class="ex">' +
+      '<button type="button" data-ex="这一讲最重要的三个概念是什么？">这一讲最重要的三个概念是什么？</button>' +
+      '<button type="button" data-ex="把第 3 节用一句话讲清楚">把第 3 节用一句话讲清楚</button>' +
+      '<button type="button" data-ex="考点和例题有什么区别？">考点和例题有什么区别？</button>' +
+      '</div></div>';
+  }
+  box.innerHTML = html;
+  // 空记录时开场白从第一句看起；有消息才滚到底
+  box.scrollTop = SC.messages.length ? box.scrollHeight : 0;
   box.querySelectorAll('[data-cite]').forEach(bindCiteChip);
+  box.querySelectorAll('[data-ex]').forEach(b => {
+    b.onclick = () => { const q = $('#scQ'); if(q){ q.value = b.dataset.ex; q.focus(); } };
+  });
 }
 async function loadSideChat(){
   const code = RD.code;
@@ -5152,6 +5264,11 @@ document.addEventListener('keydown', e => {
     if(!box) return;
     document.getElementById('updTitle').textContent = '有新版本 ' + (j.latest || '') + '（当前 ' + (j.current || '') + '）';
     document.getElementById('updSum').textContent = j.summary || '这一版改了什么，点「去看看」看详情。';
+    const shot = document.getElementById('updShot');
+    if(shot){
+      if(j.image){ shot.src = j.image; shot.hidden = false; shot.onclick = () => window.open(j.image, '_blank'); }
+      else { shot.hidden = true; shot.removeAttribute('src'); shot.onclick = null; }
+    }
     const ul = document.getElementById('updNotes');
     ul.innerHTML = (j.notes || []).slice(0, 6).map(t => '<li>' + String(t).replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c])) + '</li>').join('');
     const go = document.getElementById('updGo');

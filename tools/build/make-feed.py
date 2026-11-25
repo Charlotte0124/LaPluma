@@ -115,6 +115,15 @@ def main(argv: list | None = None) -> int:
             return 2
         assets["res"] = asset_of(a.res, ver)
 
+    # 2026-11-25 用户：更新推送要带「版本速览」图——图在 docs/版本速览/v<版本>-*.png，
+    # 清单里给 raw 地址（跟 tag 绑定），应用内更新卡与本条正文都用它。找不到不拦发布，只说一句。
+    image_rel = ""
+    shot_dir = os.path.join(ROOT, "docs", "版本速览")
+    if os.path.isdir(shot_dir):
+        cands = sorted(n for n in os.listdir(shot_dir)
+                       if n.startswith("v%s-" % ver) and n.lower().endswith(".png"))
+        if cands:
+            image_rel = "docs/版本速览/" + cands[0]
     summary, notes = section(ver)
     if not summary:
         print("提醒：CHANGELOG 里没有 v%s 的「<!-- 摘要：… -->」，清单会缺一句摘要" % ver,
@@ -127,6 +136,7 @@ def main(argv: list | None = None) -> int:
         "released": a.date,
         "summary": summary or "这一版改了什么，见更新日志。",
         "notes": notes,
+        "image": ("https://raw.githubusercontent.com/%s/v%s/%s" % (REPO, ver, image_rel)) if image_rel else "",
         "page": "https://github.com/%s/releases/tag/v%s" % (REPO, ver),
         "assets": assets,
         "_generated": time.strftime("%Y-%m-%d %H:%M:%S"),
@@ -144,6 +154,10 @@ def main(argv: list | None = None) -> int:
         print("  %-4s %6.1f MB · sha256 %s… · %s"
               % (k, v["size"] / 1048576, v["sha256"][:12], v["name"]))
     print("  %d 条说明" % len(notes))
+    if image_rel:
+        print("  速览图 %s" % image_rel)
+    else:
+        print("  提醒：docs/版本速览 里没有 v%s-*.png（本轮更新卡不会带图）" % ver, file=sys.stderr)
     return 0
 
 

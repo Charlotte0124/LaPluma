@@ -1,0 +1,345 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>原型 31 · 阅读空态 / 侧栏列表 / 会话开场</title>
+<style>
+
+:root{--bg:#111110;--card:#1c1c1a;--card2:#232321;--line:#2e2e2b;--line2:#262624;--ink:#e9e7e2;--sub:#9c9992;--faint:#6f6c66;--red:#e2565c;--green:#3f7d5a;--amber:#b07d1f;--reader-bg:#0d0d0c;--page:#f7f5ef}
+*{box-sizing:border-box}
+body{margin:0 auto;max-width:1180px;padding:26px 30px 34px;background:var(--bg);color:var(--ink);
+  font:14px/1.62 "Microsoft YaHei","Segoe UI",system-ui,sans-serif}
+h1{font-size:18px;font-weight:600;margin:0 0 5px}
+.sub{font-size:12.5px;color:var(--sub);margin:0 0 2px;line-height:1.85}
+.sub b{color:var(--ink);font-weight:600}
+h2{font-size:14px;font-weight:600;margin:26px 0 3px}
+h2 .n{display:inline-grid;place-items:center;width:19px;height:19px;border-radius:50%;background:var(--ink);color:var(--bg);
+  font-size:11px;margin-right:8px;vertical-align:1px}
+.cap{font-size:11.5px;color:var(--faint);margin:0 0 10px;line-height:1.8}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.mock{background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.wbar{display:flex;align-items:center;gap:10px;height:34px;padding:0 12px;background:var(--card);border-bottom:1px solid var(--line);font-size:11.5px;color:var(--sub)}
+.wbar .dot3{display:flex;gap:5px;margin-left:auto}
+.wbar .dot3 i{width:9px;height:9px;border-radius:50%;background:var(--line);display:block}
+.rtop{display:flex;align-items:center;gap:9px;padding:8px 12px;border-bottom:1px solid var(--line2);font-size:11.5px;color:var(--sub);background:var(--card)}
+.rtop .t{font-size:12.5px;color:var(--ink);font-weight:600}
+.rtop .p{font-size:10.5px;color:var(--faint)}
+.rtop .ctl{margin-left:auto;display:flex;gap:5px}
+.tb{border:1px solid var(--line);border-radius:7px;padding:3px 8px;font-size:10.5px;color:var(--sub);background:transparent}
+.tb.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.rb{display:grid;grid-template-columns:250px 1fr 250px;grid-template-rows:1fr 1fr;height:470px;background:var(--reader-bg)}
+.dock{background:var(--card);display:flex;flex-direction:column;min-height:0;position:relative}
+.dz{outline:1px dashed rgba(226,86,92,.55);outline-offset:-7px}
+.dz::after{content:attr(data-corner);position:absolute;top:7px;right:8px;font-size:9.5px;letter-spacing:.08em;color:var(--red);
+  background:rgba(226,86,92,.12);border:1px solid rgba(226,86,92,.35);border-radius:4px;padding:0 5px}
+.d-lt{grid-area:1/1/2/2;border-right:1px solid var(--line2);border-bottom:1px solid var(--line2)}
+.d-lb{grid-area:2/1/3/2;border-right:1px solid var(--line2)}
+.d-rt{grid-area:1/3/2/4;border-left:1px solid var(--line2);border-bottom:1px solid var(--line2)}
+.d-rb{grid-area:2/3/3/4;border-left:1px solid var(--line2)}
+.reader{grid-area:1/2/3/3;display:grid;place-items:center;padding:16px;position:relative;background:var(--reader-bg)}
+.tabs{display:flex;gap:5px;padding:8px 9px 0;flex:none}
+.stab{border:1px solid var(--line);border-radius:7px;padding:3px 9px;font-size:10.5px;color:var(--faint);background:transparent}
+.stab.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.dbody{padding:9px 10px;overflow:hidden;flex:1;min-height:0}
+.h{font-size:11px;color:var(--ink);font-weight:600;display:flex;align-items:center;gap:6px;margin:0 0 7px}
+.h .btn{margin-left:auto;border:1px solid var(--line);background:transparent;color:var(--sub);border-radius:6px;padding:1px 7px;font-size:9.5px}
+.nitem{border:1px solid var(--line2);border-left:2px solid var(--green);border-radius:7px;padding:6px 8px;font-size:10.5px;color:var(--sub);line-height:1.7;margin:0 0 6px;background:var(--card2)}
+.nitem.trans{border-left-color:var(--amber)}
+.tag{font-size:9px;color:var(--green);border:1px solid currentColor;border-radius:4px;padding:0 4px;margin-left:6px}
+.tag.a{color:var(--amber)}
+.ta{width:100%;height:44px;border:1px solid var(--line);border-radius:7px;background:var(--card2);color:var(--faint);font-size:10.5px;padding:6px 8px}
+.dir{display:flex;align-items:center;justify-content:center;gap:8px;font-size:9.5px;color:var(--faint);margin:4px 0}
+.dir b{border:1px solid var(--line);border-radius:6px;padding:0 6px;font-weight:400;color:var(--sub)}
+.out{height:52px;border:1px solid var(--line2);border-radius:7px;background:var(--card2);color:var(--faint);font-size:10px;padding:6px 8px;margin-top:2px}
+.msg{border:1px solid var(--line2);border-radius:7px;padding:6px 8px;font-size:10.5px;color:var(--sub);margin:0 0 6px;background:var(--card2)}
+.msg.u{background:rgba(63,125,90,.10);margin-left:34px}
+.msg .who{font-size:9px;color:var(--faint);margin-bottom:2px}
+.scin{margin-top:auto;padding:7px 10px 8px 9px;border-top:1px solid var(--line2);font-size:10px;color:var(--faint)}
+.scin .row{display:flex;gap:5px;margin-bottom:5px;min-width:0}
+.scin .inp{flex:1;border:1px solid var(--line);border-radius:6px;padding:3px 7px;font-size:10px;color:var(--faint);background:var(--card2)}
+.scin .go{flex:0 0 auto;border:1px solid var(--ink);background:var(--ink);color:var(--bg);border-radius:6px;padding:3px 8px;font-size:10px}
+.page{width:250px;aspect-ratio:1/1.414;background:var(--page);border-radius:2px;box-shadow:0 2px 14px rgba(0,0,0,.5);padding:18px 16px;color:#2a2a28;position:relative}
+.page .ph1{font-size:7px;letter-spacing:.1em;color:#888;margin-bottom:12px}
+.page .ph2{font-size:15px;font-weight:700;margin-bottom:8px}
+.page .line{height:3px;background:#d8d4cb;border-radius:2px;margin:6px 0}
+.page .line.s{width:70%}
+.page .line.m{width:86%}
+.page .box{border:1px solid #ddd8ce;border-radius:3px;padding:7px;margin-top:12px}
+.page .box .line{height:2px;margin:5px 0}
+.page .pno{position:absolute;right:12px;bottom:10px;font-size:7px;color:#999}
+.grab{position:absolute;top:50%;width:7px;height:64px;margin-top:-32px;border-radius:4px;background:var(--line);cursor:ew-resize;z-index:5}
+.grab::after{content:"⋮";position:absolute;inset:0;display:grid;place-items:center;font-size:8px;color:var(--faint)}
+.grab.l{left:-4px}.grab.r{right:-4px}
+.grab.h{top:auto;left:50%;bottom:-4px;margin:0 0 0 -32px;width:64px;height:7px;cursor:ns-resize}
+.grab.h::after{content:"⋯"}
+.pin{position:absolute;left:9px;top:7px;font-size:9px;color:var(--sub);letter-spacing:.06em;background:rgba(17,17,16,.72);border:1px solid var(--line);border-radius:4px;padding:0 5px;z-index:4}
+.note{font-size:11px;color:var(--faint);line-height:1.8;margin:9px 0 0}
+.note b{color:var(--sub);font-weight:600}
+.ok{color:#7fbf93}
+.warn{color:#e0a34a}
+.bad{color:#e2565c}
+
+/* 拖动四区示意 */
+.zones{display:grid;grid-template-columns:1fr 1fr 1fr;grid-template-rows:1fr 1fr;height:250px;gap:0;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--reader-bg)}
+.zones .zd{display:grid;place-items:center;border:2px dashed var(--red);background:rgba(226,86,92,.06);color:var(--red);font-size:11.5px;margin:7px;border-radius:9px}
+.zones .zd small{display:block;text-align:center;font-size:9.5px;color:rgba(226,86,92,.75);margin-top:2px}
+.zones .mid{grid-area:1/2/3/3;display:grid;place-items:center;color:var(--faint);font-size:11.5px;border-left:1px solid var(--line2);border-right:1px solid var(--line2)}
+.zl{grid-area:1/1/2/2}.zl2{grid-area:2/1/3/2}.zr{grid-area:1/3/2/4}.zr2{grid-area:2/3/3/4}
+
+/* 宽度对比 */
+.compare{display:flex;gap:18px;align-items:flex-start}
+.win{background:var(--reader-bg);border:1px solid var(--line);border-radius:8px;overflow:hidden;flex:none}
+.win .bar{height:20px;background:var(--card);border-bottom:1px solid var(--line2);display:flex;align-items:center;padding:0 6px;gap:4px}
+.win .bar i{width:5px;height:5px;border-radius:50%;background:var(--line);display:block}
+.win .body{display:grid;height:250px}
+.win .sd{background:var(--card);border-right:1px solid var(--line2);font-size:9.5px;color:var(--faint);padding:5px}
+.win .sd.r{border-right:0;border-left:1px solid var(--line2)}
+.win .rd{display:grid;place-items:center;background:var(--reader-bg)}
+.win .pg{background:var(--page);height:206px;aspect-ratio:1/1.414;border-radius:1px;box-shadow:0 1px 8px rgba(0,0,0,.5)}
+.win .lbl{text-align:center;font-size:10px;color:var(--faint);padding:5px 0 0}
+.measure{font-size:11px;color:var(--sub);line-height:1.9;margin:0 0 0 18px}
+.measure b{color:var(--ink)}
+.measure .k{display:inline-block;min-width:72px;color:var(--faint)}
+.bar2{height:5px;border-radius:3px;background:var(--line);overflow:hidden;width:100%;margin:3px 0 8px}
+.bar2 i{display:block;height:100%;background:var(--green)}
+.bar2 i.red{background:var(--red)}
+.bar2 i.amber{background:var(--amber)}
+
+/* 底部空位 */
+.gapdemo{display:flex;gap:18px;align-items:flex-start}
+.frame{position:relative;width:330px;height:250px;border:1px solid var(--line);border-radius:8px;background:var(--reader-bg);overflow:hidden}
+.frame .win{border:0;border-radius:0;height:100%;display:flex;flex-direction:column}
+.frame .cb{display:grid;grid-template-columns:80px 1fr 80px;flex:0 0 auto;border-bottom:1px solid var(--line2);background:var(--card);height:26px;align-items:center;font-size:8px;color:var(--faint);padding:0 5px}
+.frame .cb2{display:grid;grid-template-columns:1fr 80px;height:150px;background:var(--reader-bg)}
+.frame .cb2 .s{background:var(--card);border-left:1px solid var(--line2)}
+.frame .cb2 .r{display:grid;place-items:center}
+.frame .cb2 .p{background:var(--page);height:126px;aspect-ratio:1/1.414;border-radius:1px}
+.frame .gap{position:absolute;left:0;right:0;bottom:0;height:74px;background:
+  repeating-linear-gradient(45deg,rgba(226,86,92,.13) 0 6px,transparent 6px 12px);border-top:1px dashed var(--red)}
+.frame .gl{position:absolute;left:50%;top:53%;transform:translateX(-50%);font-size:9px;color:var(--red);white-space:nowrap}
+.frame.after .cb2{height:224px}
+.frame.after .cb2 .p{height:190px}
+.frame .tag2{position:absolute;top:5px;left:6px;font-size:9px;color:var(--sub);background:rgba(17,17,16,.8);border:1px solid var(--line);border-radius:4px;padding:0 5px;z-index:2}
+.legend{font-size:10.5px;color:var(--faint);margin-top:7px;line-height:1.8}
+
+/* 全屏拖动 */
+.fsbar{display:flex;align-items:center;gap:12px;height:52px;padding:0 16px;background:var(--card);border:1px solid var(--line);border-radius:12px 12px 0 0}
+.fsbar .dots{display:grid;grid-template-columns:repeat(3,4px);grid-template-rows:repeat(3,4px);gap:2px}
+.fsbar .dots i{background:var(--faint);border-radius:1px;display:block}
+.fsbar .txt{font-size:11.5px;color:var(--sub)}
+.fsbar .txt b{color:var(--ink)}
+.fsbar .cur{margin-left:auto;font-size:11px;color:var(--red);display:flex;align-items:center;gap:6px}
+.fsbody{height:74px;background:var(--reader-bg);border:1px solid var(--line);border-top:0;border-radius:0 0 12px 12px;display:grid;place-items:center;color:var(--faint);font-size:11px}
+
+table{border-collapse:collapse;width:100%;font-size:11.5px}
+th,td{border-bottom:1px solid var(--line2);padding:7px 9px;text-align:left;vertical-align:top}
+th{color:var(--faint);font-weight:400;font-size:10.5px;letter-spacing:.05em}
+td b{color:var(--ink);font-weight:600}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.pill{display:inline-block;border:1px solid var(--line);border-radius:999px;padding:1px 8px;font-size:10px;color:var(--sub)}
+.pill.keep{border-color:rgba(63,125,90,.6);color:#8ec6a2}
+.pill.cut{border-color:rgba(226,86,92,.55);color:#e58b8f}
+
+/* 本稿新增 */
+.two{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.mini{background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.mini .hd{display:flex;align-items:center;gap:8px;height:32px;padding:0 11px;border-bottom:1px solid var(--line);font-size:11px;color:var(--sub)}
+.mini .hd b{color:var(--ink);font-weight:600}
+.mini .bd{padding:10px}
+.rc{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 13px}
+.rc h3{margin:0 0 4px;font-size:13px}
+.rc .hint{margin:0 0 10px;font-size:11px;color:var(--faint)}
+.rrow{display:flex;align-items:center;gap:8px;padding:7px 8px;border-radius:8px;font-size:11.5px;color:var(--sub)}
+.rrow + .rrow{margin-top:2px}
+.rrow .ric{color:var(--faint)}
+.rrow .rnm{color:var(--ink)}
+.rrow .rtm{margin-left:auto;font-size:10.5px;color:var(--faint)}
+.rg{font-size:10.5px;color:var(--faint);letter-spacing:.06em;margin:12px 0 5px}
+.rcards{display:grid;grid-template-columns:repeat(3,1fr);gap:9px}
+.ccard{border:1px solid var(--line);border-radius:10px;padding:9px 10px}
+.ccard .code{font-size:9.5px;color:var(--faint);letter-spacing:.08em}
+.ccard b{display:block;font-size:11.5px;margin:2px 0 3px}
+.ccard span{font-size:10px;color:var(--faint)}
+.dead{border:1px dashed rgba(226,86,92,.45);border-radius:12px;padding:40px 10px;text-align:center;color:var(--faint);font-size:11.5px}
+.dead b{display:block;color:var(--red);font-size:11px;letter-spacing:.06em;margin-bottom:5px;font-weight:600}
+/* 阅读卡（列表用） */
+.rk{background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.rk .top{display:flex;align-items:center;gap:9px;padding:8px 12px;border-bottom:1px solid var(--line2)}
+.rk .top .t{font-size:12.5px;font-weight:600}
+.rk .top .p{font-size:10.5px;color:var(--faint)}
+.rk .top .ctl{margin-left:auto;display:flex;gap:5px}
+.rk .body{display:grid;grid-template-columns:minmax(0,1fr) 320px;height:600px;background:var(--reader-bg)}
+.rk .reader{grid-column:1;padding:16px;min-width:0}
+.dockw{grid-column:2}
+.pg{background:#f7f5ef;color:#1d1c19;border-radius:3px;height:100%;padding:16px 18px;font-size:11px;line-height:1.85;overflow:hidden}
+.pg h4{margin:0 0 8px;font-size:15px;color:#111}
+.pg .lead{color:#4a4842;margin:0 0 10px}
+.pg .row{display:flex;gap:10px;padding:3px 0;border-top:1px solid #e4e1d8}
+.pg .row i{color:#8a867c;font-style:normal;width:46px;flex:none}
+.dockw{background:var(--card);border-left:1px solid var(--line2);display:flex;flex-direction:column;min-height:0}
+.tabs4{display:flex;gap:5px;padding:8px 9px 0;flex:none}
+.dbody2{padding:9px 10px;flex:1;min-height:0;overflow:hidden}
+.lhd{font-size:11.5px;font-weight:600;margin:0 0 2px}
+.lsub{font-size:10px;color:var(--faint);margin:0 0 9px}
+.lgrp{font-size:10px;color:var(--faint);letter-spacing:.06em;display:flex;align-items:center;gap:6px;margin:10px 0 4px}
+.lgrp .n{color:var(--faint)}
+.lrow{display:flex;align-items:center;gap:7px;padding:6px 7px;border-radius:7px;font-size:11px;color:var(--sub);cursor:default}
+.lrow .ic{color:var(--faint);flex:none}
+.lrow .nm{color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lrow .mt{font-size:9.5px;color:var(--faint);margin-top:1px}
+.lrow.on{background:var(--card2);box-shadow:inset 2px 0 0 var(--ink)}
+.lrow.on .ic{color:var(--ink)}
+.lrow .now{margin-left:auto;font-size:9px;color:var(--faint);border:1px solid var(--line);border-radius:99px;padding:0 5px;flex:none}
+.lrow:hover{background:var(--card2)}
+.ltip{margin-top:10px;font-size:9.5px;color:var(--faint);line-height:1.7;border-top:1px solid var(--line2);padding-top:7px}
+/* 会话开场 */
+.chat{background:var(--card);border:1px solid var(--line);border-radius:14px;height:436px;display:flex;flex-direction:column;overflow:hidden}
+.chat .hd{display:flex;align-items:center;padding:9px 11px;border-bottom:1px solid var(--line2);font-size:11.5px;font-weight:600}
+.chat .hd .btn{margin-left:auto;border:1px solid var(--line);background:transparent;color:var(--sub);border-radius:6px;padding:1px 7px;font-size:9.5px}
+.chat .log{flex:1;min-height:0;padding:10px;display:flex;flex-direction:column;gap:8px;overflow:hidden}
+.msg{max-width:92%}
+.msg .who{font-size:9.5px;color:var(--faint);margin:0 0 3px}
+.msg .bub{background:var(--card2);border:1px solid var(--line);border-radius:10px;padding:8px 10px;font-size:11px;line-height:1.75;color:var(--sub)}
+.msg .bub p{margin:0}
+.msg .bub p + p{margin-top:6px}
+.msg .bub b{color:var(--ink)}
+.chips{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
+.chips button{font:inherit;font-size:10px;color:var(--ink);background:transparent;border:1px dashed var(--line);border-radius:99px;padding:3px 9px}
+.chat .in{padding:8px 10px 9px;border-top:1px solid var(--line2);flex:none}
+.chat .in .row{display:flex;gap:6px}
+.chat .in input{flex:1;background:var(--card2);border:1px solid var(--line);border-radius:7px;padding:6px 8px;font:inherit;font-size:10.5px;color:var(--faint)}
+.chat .in .go{background:var(--ink);color:var(--bg);border:0;border-radius:7px;padding:0 12px;font-size:10.5px}
+.chat .in .tip{font-size:9.5px;color:var(--faint);margin-top:5px}
+.empty2{flex:1;display:grid;place-items:center;color:var(--faint);font-size:11px}
+.note{font-size:11.5px;color:var(--faint);line-height:1.9;margin:8px 0 0}
+.note b{color:var(--ink)}
+.k{display:grid;grid-template-columns:repeat(2,1fr);gap:8px 18px;margin:8px 0 0;font-size:11.5px;color:var(--sub)}
+.k div b{color:var(--ink)}
+</style>
+</head>
+<body>
+
+<h1>原型 31 · 阅读空态 / 侧栏「列表」/ 会话开场</h1>
+<p class="sub">三个改动，都在阅读页：<b>① 没打开讲义时只剩「最近阅读」</b>（把「还没有打开讲义」那张空卡片整个删掉）；<b>② 侧栏新增「列表」页签</b>，只在同一门课里切换成品 / 原件，跟笔记、翻译、会话一样能拖到任意一角；<b>③ 会话给一句开场白</b>，说清能问什么、答案长什么样，再给三个能直接点的例子。</p>
+<p class="sub">约定：列表只列<b>当前这门课</b>（<code>RD.code</code>）的 <code>01_讲义</code> 成品与 <code>00_原件</code> 里的 <b>PDF</b>；原件里的 docx / pptx 不列（读不了，列出来只会点出一个错误）。点一行 = 换读这份，页码回到第 1 页，并记进「最近阅读」。</p>
+
+<h2><span class="n">1</span>空态：删掉「还没有打开讲义」整张卡片</h2>
+<p class="cap">左＝现在（最近阅读 + 一张空讲义卡：标题「还没有打开讲义」、翻页/缩放/全屏一排按钮、空阅读区、笔记栏）；右＝改后（只留最近阅读，卡片铺满阅读页）。空讲义卡上的按钮在空态本来就全都点不动，留着只是让人以为「这里坏了」。</p>
+<div class="two">
+  <div class="mini">
+    <div class="hd"><b>现在</b><span>· 两块叠在一起，下面那块是空的</span></div>
+    <div class="bd">
+      <div class="rc" style="margin-bottom:10px">
+        <h3>最近阅读</h3>
+        <p class="hint">点一下接着看；文件 5 个、课程 3 门，按打开先后排。</p>
+        <div class="rg">文件</div>
+        <div class="rrow"><span class="ric">▤</span><span class="rnm">CS340_九讲合订本_讲义.pdf</span><span class="rtm">今天 18:12</span></div>
+        <div class="rrow"><span class="ric">▤</span><span class="rnm">人体解剖生理学_LECTURE 06.pdf</span><span class="rtm">昨天 21:40</span></div>
+      </div>
+      <div class="dead" style="padding:22px 10px"><b>要删掉的就是这一块</b>还没有打开讲义 · 从课程抽屉中选择一份讲义<br>（空阅读区 + 笔记 / 翻译 / 会话页签）</div>
+    </div>
+  </div>
+  <div class="mini">
+    <div class="hd"><b>改后</b><span>· 只有最近阅读，铺满</span></div>
+    <div class="bd">
+      <div class="rc" style="min-height:286px">
+        <h3>最近阅读</h3>
+        <p class="hint">点一下接着看；文件 5 个、课程 3 门，按打开先后排。</p>
+        <div class="rg">文件</div>
+        <div class="rrow"><span class="ric">▤</span><span class="rnm">CS340_九讲合订本_讲义.pdf</span><span class="rtm">今天 18:12</span></div>
+        <div class="rrow"><span class="ric">▤</span><span class="rnm">人体解剖生理学_LECTURE 06.pdf</span><span class="rtm">昨天 21:40</span></div>
+        <div class="rrow"><span class="ric">▤</span><span class="rnm">CS340_01_操作系统是什么_讲义.pdf</span><span class="rtm">昨天 19:03</span></div>
+        <div class="rg">课程</div>
+        <div class="rcards">
+          <div class="ccard"><div class="code">CS340</div><b>操作系统</b><span>144 页 · 9 讲</span></div>
+          <div class="ccard"><div class="code">BIO101</div><b>人体解剖生理学</b><span>86 页 · 7 讲</span></div>
+          <div class="ccard"><div class="code">DEMO</div><b>示例课程</b><span>10 页 · 1 讲</span></div>
+        </div>
+        <p class="note">没有记录时那句提示保留（「从『课程』抽屉里点一份讲义，读过的会按顺序排在这里。」）。</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<h2><span class="n">2</span>侧栏加「列表」：只在本课程里换成品 / 原件</h2>
+<p class="cap">页签变成 <b>笔记 / 翻译 / 会话 / 列表</b> 四个，属性和前三个完全一样：可以拖到左上 / 左下 / 右上 / 右下，可以跟别的面板叠成一格，宽度跟着侧栏一起拖。「列表」只列当前正在读的这门课——换课程请走课程抽屉，避免在阅读页跨课跳。</p>
+<div class="rk">
+  <div class="top">
+    <div><div class="t">CS340_九讲合订本_讲义.pdf</div><div class="p">CS340/01_讲义/CS340_九讲合订本_讲义.pdf</div></div>
+    <div class="ctl"><span class="tb">‹</span><span class="tb">1 / 144</span><span class="tb">›</span><span class="tb">−</span><span class="tb">100%</span><span class="tb">＋</span><span class="tb">▤ 侧栏</span><span class="tb">译</span><span class="tb">⤢ 全屏</span><span class="tb">☀ 浅色</span></div>
+  </div>
+  <div class="body">
+    <div class="reader"><div class="pg">
+      <h4>操作系统 · 讲义合订本</h4>
+      <p class="lead">Operating Systems · Handouts in One Volume</p>
+      <div class="row"><i>L01</i><span>操作系统是什么 · Introduction to Operating Systems</span></div>
+      <div class="row"><i>L02</i><span>进程的基本管理 · Basic Process Management</span></div>
+      <div class="row"><i>L03</i><span>进程与内核 · Process and Kernel</span></div>
+      <div class="row"><i>L04-01</i><span>进程组织与调度（一）· Process Organization and Scheduling (1)</span></div>
+      <div class="row"><i>L04-02</i><span>进程组织与调度（二）· Process Organization and Scheduling (2)</span></div>
+      <div class="row"><i>L05</i><span>进程间通信与同步 · IPC and Process Synchronization</span></div>
+      <div class="row"><i>L06</i><span>轻量级进程：线程 · Light-Weight Processes: Threads</span></div>
+      <div class="row"><i>L08</i><span>用户态内存管理 · User-Space Memory Management</span></div>
+      <div class="row"><i>L09</i><span>主存管理 · Main Memory Management</span></div>
+    </div></div>
+    <div class="dockw">
+      <div class="tabs4"><span class="stab">笔记 1</span><span class="stab">翻译</span><span class="stab">会话</span><span class="stab on">列表</span></div>
+      <div class="dbody2">
+        <p class="lhd">CS340 · 操作系统</p>
+        <p class="lsub">只列这门课，换课请回课程抽屉</p>
+        <div class="lgrp">成品 · 3 份 <span class="n">01_讲义</span></div>
+        <div class="lrow on"><span class="ic">▤</span><div><div class="nm">CS340_九讲合订本_讲义.pdf</div><div class="mt">144 页</div></div><span class="now">正在读</span></div>
+        <div class="lrow"><span class="ic">▤</span><div><div class="nm">CS340_01_操作系统是什么_讲义.pdf</div><div class="mt">8 页</div></div></div>
+        <div class="lrow"><span class="ic">▤</span><div><div class="nm">CS340_02_进程的基本管理_讲义.pdf</div><div class="mt">10 页</div></div></div>
+        <div class="lgrp">原件 · 2 份 <span class="n">00_原件 · 只列 PDF</span></div>
+        <div class="lrow"><span class="ic">▤</span><div><div class="nm">CS340_九讲合订本.pdf</div><div class="mt">9.1 MB</div></div></div>
+        <div class="lrow"><span class="ic">▤</span><div><div class="nm">CS340_01_操作系统是什么.pdf</div><div class="mt">1.2 MB</div></div></div>
+        <p class="ltip">点一行就换读这份，回到第 1 页，并记进「最近阅读」。原件里的 docx / pptx 读不了，所以不列；要读先导入成 PDF。</p>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="k">
+  <div><b>同一门课</b>只读 <code>RD.code</code> 的 <code>files</code> 与 <code>originals</code>，别的课一个都不显示。</div>
+  <div><b>当前那份</b>高亮 + 「正在读」，和右上文件名走同一个来源（<code>RD.rel</code>）。</div>
+  <div><b>原件过滤</b>只留 <code>.pdf</code>；<code>（转换）</code> 出来的 PDF 照列，未转换的源文件不列。</div>
+  <div><b>空态</b>没打开讲义时：「先打开一份讲义，这里会列出同一门课的成品和原件。」</div>
+</div>
+
+<h2><span class="n">3</span>会话开场：一句「能干什么」，三个能点的例子</h2>
+<p class="cap">左＝现在（打开是一片空白，只有一个「清除」）；右＝改后：羽毛笔先说清三件事——问什么、答案长什么样、范围怎么改；下面三个例子点一下就填进输入框（不自动发送，避免误花钱）。开场白不写进会话记录，点「清除」之后它还在。</p>
+<div class="two">
+  <div class="chat">
+    <div class="hd">本课程会话 <span class="btn">清除</span></div>
+    <div class="empty2">（现在：一整片空白）</div>
+    <div class="in"><div class="row"><input value="只在本课程内提问…"><span class="go">提问</span></div><div class="tip">一门课一个会话；关掉再开还在。讲次范围在右侧选。</div></div>
+  </div>
+  <div class="chat">
+    <div class="hd">本课程会话 <span class="btn">清除</span></div>
+    <div class="log">
+      <div class="msg"><div class="who">羽毛笔</div><div class="bub">
+        <p>这门课的讲义都在这儿，可以问我<b>任何讲次</b>里的内容——概念、公式、例题，或者把某一节讲人话。</p>
+        <p>答案会带 <b>「课件 p.N」</b>，点一下直接打开原件那一页；勾「引用其他课件」才会跨课找，讲次范围在右侧选。</p>
+        <p style="color:var(--faint)">还没配模型密钥时，我会直说「没发出去」，不会编答案。</p>
+        <div class="chips">
+          <button>这一讲最重要的三个概念是什么？</button>
+          <button>把第 3 节用一句话讲清楚</button>
+          <button>考点和例题有什么区别？</button>
+        </div>
+      </div></div>
+    </div>
+    <div class="in"><div class="row"><input value="只在本课程内提问…"><span class="go">提问</span></div><div class="tip">一门课一个会话；关掉再开还在。讲次范围在右侧选。</div></div>
+  </div>
+</div>
+<p class="note"><b>为什么不自动发：</b>例子只是帮你起头，点一下填进输入框，改完再点「提问」——免得只是点看看就先花一次调用。</p>
+
+<h2><span class="n">4</span>判据打算这么接</h2>
+<div class="k">
+  <div><b>空态</b>没打开讲义时 <code>#readCard</code> 必须 hidden，DOM 里不许再有「还没有打开讲义」这段标题。</div>
+  <div><b>列表</b>页签在四个角的任意一格都能停；只出现当前课程的文件名；换一份后标题 / 页码跟着变。</div>
+  <div><b>会话</b>空记录时有一段开场白 + ≥3 个例子；点例子只填输入框不发请求；有记录时不再出现。</div>
+  <div><b>回归</b>「清除」之后开场白回来；最近阅读照旧 5 文件 + 3 课程。</div>
+</div>
+
+</body>
+</html>

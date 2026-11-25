@@ -31,6 +31,7 @@ r"""真窗口自测：在羽毛笔**自己的 WebView2 窗口**里量窗口矩�
       点「清除」只清这门课那一份
   W20 窗口缩放后卡片仍铺满（四次改尺寸，卡片底边都在窗口底边上方 12px、无滚动）
   W21 拖动窗口不露白边（深色主题下拉大窗口，立刻连拍 3 张；窗口底色跟主题走）
+  W22 阅读页不被 pdf.js 测量画布挤黑（滚动区高度 = 窗口，视口里没有盖着的黑画布）
 
 注意：主脚本是 <script type="module">，函数不在 window 上——所以这里只点界面元素，
       不调页面函数；页面里只读 DOM、设选区。
@@ -1367,8 +1368,10 @@ def main():
                     }""")
                     if h0["hidden"] or not (h0["notesHidden"] and h0["transHidden"]):
                         bad("W19 侧栏会话", "点「会话」没切到会话面板：%r" % (h0,))
-                    elif len(h0["tabs"]) != 3 or "会话" not in h0["tabs"][2] or "笔记" not in h0["tabs"][0]:
-                        bad("W19 侧栏会话", "页签不是「笔记 / 翻译 / 会话」三个：%r" % (h0["tabs"],))
+                    # 2026-11-25 起第四个页签「列表」也在这一叠里（同属性、可拖到四角）
+                    elif (len(h0["tabs"]) not in (3, 4) or "会话" not in h0["tabs"][2]
+                          or "笔记" not in h0["tabs"][0] or (len(h0["tabs"]) == 4 and "列表" not in h0["tabs"][3])):
+                        bad("W19 侧栏会话", "页签不是「笔记 / 翻译 / 会话（/ 列表）」：%r" % (h0["tabs"],))
                     elif h0["hd"] != "本课程会话" or h0["ph"] != "只在本课程内提问…":
                         bad("W19 侧栏会话", "标题/输入框文案对不上设计稿：%r / %r"
                             % (h0["hd"], h0["ph"]))
@@ -1622,6 +1625,40 @@ def main():
                     u.SetWindowPos(wt.HWND(hwnd), None, 40, 40, r0[2], r0[3], 0x0004 | 0x0010)
                 except Exception as e:  # noqa: BLE001
                     bad("W21 拖动不露白边", "没验成：%r" % (e,))
+
+            # ---- W22 阅读页不被 pdf.js 测量画布挤黑（2026-11-25 用户：「偶尔会有这种问题」）----
+            # 那次的黑块不是 WebView2 表面：pdf.js 做字体测量会往 body append 不透明的黑画布，
+            #   body.win 是 flex 列容器，画布成了 flex 子项，实测把 #appScroll 从 794 挤到 168，
+            #   于是页面下半截全是黑。这里量三件：滚动区高度、视口里有没有画布、下半截命中谁。
+            if opened:
+                try:
+                    info = page.evaluate("""() => {
+                      const a = document.getElementById('appScroll');
+                      const cs = [...document.querySelectorAll('.hiddenCanvasElement')];
+                      const vis = cs.filter(c => {
+                        const r = c.getBoundingClientRect();
+                        return r.width > 40 && r.height > 40 && r.right > 0 && r.bottom > 0
+                          && r.left < innerWidth && r.top < innerHeight;
+                      }).length;
+                      const el = document.elementFromPoint(Math.round(innerWidth * 0.5),
+                                                          Math.round(innerHeight * 0.75));
+                      return {ih: innerHeight, ch: a.clientHeight, canvases: cs.length, vis,
+                              at: el ? (el.closest('#page-read') ? 'page-read' : (el.id || el.className)) : null};
+                    }""")
+                    if info["ch"] < info["ih"] - 80:
+                        bad("W22 不被画布挤黑",
+                            "阅读页滚动区只有 %dpx（窗口 %dpx）：被占位元素挤扁了" % (info["ch"], info["ih"]))
+                    elif info["vis"]:
+                        bad("W22 不被画布挤黑",
+                            "有 %d 块 pdf.js 测量画布盖在视口里（DOM 里共 %d 块）" % (info["vis"], info["canvases"]))
+                    elif info["at"] != "page-read":
+                        bad("W22 不被画布挤黑", "视口下方 3/4 处的元素不是阅读页：%r" % (info["at"],))
+                    else:
+                        ok("W22 不被画布挤黑",
+                           "阅读区 %dpx / 窗口 %dpx；视口里 0 块测量画布盖着（DOM 里 %d 块，全在视口外）；"
+                           "下方 3/4 命中阅读页" % (info["ch"], info["ih"], info["canvases"]))
+                except Exception as e:  # noqa: BLE001
+                    bad("W22 不被画布挤黑", "没验成：%r" % (e,))
 
             # ---- W6 真拖动（可选，会动鼠标）----
             if args.drag:
