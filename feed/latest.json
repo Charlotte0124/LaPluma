@@ -1,24 +1,27 @@
 {
   "schema": "lapluma-feed-v1",
   "product": "LaPluma",
-  "latest": "1.9.23",
-  "title": "v1.9.23 · 阅读页没打开讲义时给「最近阅读」",
+  "latest": "1.9.24",
+  "title": "v1.9.24 · 阅读空态只留最近阅读",
   "released": "2026-11-25",
-  "summary": "阅读页没打开讲义时给「最近阅读」；侧栏换边改成拖页签，工具条不再放按钮",
+  "summary": "阅读空态只留最近阅读；侧栏加「列表」在同课程内换成品/原件；会话给开场白与示例；修掉偶尔半屏黑",
   "notes": [
-    "阅读页空态换成「最近阅读」（用户 2026-11-25 第四条：取消「先到课程抽屉里点一份讲义」）：没打开讲义时点「阅读」直接进这一页——文件 5 个、课程 3 张卡片，分两组、各按打开先后排",
-    "侧栏换边改成拖页签（用户第三条：「希望拖动笔记这个按钮去左边 然后自己变成侧栏」）：页签可拖动，另一边露出红色虚线投放区，松手就落到那边、自动成为侧栏",
-    "「▤ 笔记」改名「显示侧栏」（用户第一条）：悬停提示改「显示 / 隐藏侧栏」，收起后按钮写「显示侧栏」",
-    "判据：check-reading-tools.py 第 14 项改成「拖页签换边、没有换边按钮」，新增第 15 项「最近阅读 5 文件 + 3 课程分组、课程卡片、按打开先后」，共 15/15"
+    "空态只留「最近阅读」（用户 2026-11-25：「下面那个『还没有打开讲义』整个课件删除」）：没打开讲义时不再露出那张空卡片（标题、翻页/缩放按钮、空阅读区、笔记栏一起收），只留最近阅读",
+    "侧栏新增「列表」页签：可拖到左上/左下/右上/右下、可与别的面板叠成一格、宽度跟侧栏走",
+    "会话开场白：空记录时先说清能问什么、答案带「课件 p.N」可点、勾「引用其他课件」才跨课、没 key 会直说没发出去",
+    "修「偶尔一整块黑」（用户补图：「偶尔会有这种问题出现 你查明一下」）：pdf.js 做字体测量会往 body 塞不透明黑画布，body.win 是 flex 列容器，画布成了 flex 子项——实测把",
+    "更新卡带「版本速览」图：feed/latest.json 增加 image，应用内更新卡显示速览图（点开看大图）",
+    "判据：check-reading-tools.py 新增第 21 项（空态 / 列表 / 开场白）与第 22 项（测量画布不挤黑），共 22/22，--selftest 29 条全按预期"
   ],
-  "page": "https://github.com/Charlotte0124/LaPluma/releases/tag/v1.9.23",
+  "image": "https://raw.githubusercontent.com/Charlotte0124/LaPluma/v1.9.24/docs/版本速览/v1.9.24-阅读空态-列表-会话开场.png",
+  "page": "https://github.com/Charlotte0124/LaPluma/releases/tag/v1.9.24",
   "assets": {
     "app": {
-      "url": "https://github.com/Charlotte0124/LaPluma/releases/download/v1.9.23/LaPluma-1.9.23.zip",
-      "size": 15749947,
-      "sha256": "d7f996b78ba8b8d70b6bbd656d574c704e41714c6217edcf6d623f15200f98af",
-      "name": "LaPluma-1.9.23.zip"
+      "url": "https://github.com/Charlotte0124/LaPluma/releases/download/v1.9.24/LaPluma-1.9.24.zip",
+      "size": 18865662,
+      "sha256": "0449a5145b418fee930225a521a887e28496d83d6e65f4dfb7261118caa9e928",
+      "name": "LaPluma-1.9.24.zip"
     }
   },
-  "_generated": "2026-11-25 18:41:41"
+  "_generated": "2026-11-25 20:15:06"
 }
