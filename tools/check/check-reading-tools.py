@@ -242,25 +242,23 @@ def check(root):
         and ".tr-strip{" in idx and ".mgr{" in idx
     ), "「管理」常驻（翻多少次都在）、状态条翻一次写 localStorage 收起、三档引擎与下载/删除都接上")
 
-    # 14 侧栏三块各自选边（2026-11-25 用户：「这个设置保留 并且增加左右都可以同时存在的」）
-    add(14, "侧栏三块各自选边（左右可同时存在）", (
-        'data-dock="left"' in idx and 'data-dock="right"' in idx
-        and '.read-body[data-docks="lr"]{grid-template-columns:300px 1fr 300px}' in idx
-        and '.read-body[data-docks="l"]{grid-template-columns:300px 1fr}' in idx
-        and ".side[data-dock=\"left\"]{border-left:0;border-right:1px solid var(--line2)}" in idx
-        and "let SIDE_DOCK = {" in idx and "pluma.sideDock" in idx and "pluma.sideActive" in idx
+    # 14 四角停靠（2026-11-25 用户第三条：左上 / 左下 / 右上 / 右下，同侧可上下各一块）
+    add(14, "四角停靠（同侧上下两块）", (
+        'data-slot="lt"' in idx and 'data-slot="lb"' in idx and 'data-slot="rt"' in idx and 'data-slot="rb"' in idx
+        and 'class="dropzone dz-lt" data-drop="lt"' in idx and 'class="dropzone dz-lb" data-drop="lb"' in idx
+        and 'class="dropzone dz-rt" data-drop="rt"' in idx and 'class="dropzone dz-rb" data-drop="rb"' in idx
+        and "const SLOTS = ['lt', 'lb', 'rt', 'rb']" in idx
+        and "let SIDE_DOCK = { notes: 'rt'" in idx and "pluma.sideDock" in idx and "pluma.sideActive" in idx
         and "function applyDock()" in idx
-        and "b.draggable = true" in idx and "let DRAG_KEY" in idx and "movePanelTo(" in idx
-        and 'class="dropzone dz-left" data-drop="left"' in idx and 'class="dropzone dz-right" data-drop="right"' in idx
+        and "b.draggable = true" in idx and "let DRAG_KEY" in idx and "function movePanelTo(k, slot)" in idx
         and 'id="btnSide"' not in idx and ".stab.mv{" not in idx          # 换边不再靠按钮
-        and "el && el.parentElement !== box) box.appendChild(el)" in idx   # 面板跟着边搬，不复制
-        and "applyDock();   // 首屏先把页签条画出来" in idx
-        # 2026-11-25 用户「底下怎么留有坑位的」：空左栏与没选中的会话都被自己的 display 顶掉 hidden，
-        # 空左栏占掉一整格、会话把侧栏撑高；作者样式优先，必须显式补 [hidden]{display:none}
-        and ".side[hidden]{display:none}" in idx
-        and "#sideChat[hidden]{display:none}" in idx
-        and "align-items:stretch" in idx
-    ), "笔记 / 翻译 / 会话 各自存边（left/right），两边没面板的列自动收起；换边靠把页签拖到另一边的虚线投放区（没有 ⇤/⇥ 按钮）；选择记在 localStorage；空栏与没选中的面板被 [hidden] 真正收起")
+        and "el && el.parentElement !== box) box.appendChild(el)" in idx   # 面板跟着格子搬，不复制
+        and ".side-col.left{grid-column:1;grid-row:1}" in idx             # 一侧 hidden 时讲义不被顶到第 1 列
+        and ".read-body[data-docks=\"none\"] .reader{grid-column:1}" in idx
+        and ".side[hidden]{display:none}" in idx and "#sideChat[hidden]{display:none}" in idx
+        and "col.classList.toggle('one', on.length === 1)" in idx         # 只有一格时占满整列
+        and "SIDE_SPLIT[side]" in idx and "pluma.sideSplit" in idx        # 上下比例可拖、可记忆
+    ), "四角（左上/左下/右上/右下）都能停；同侧上下各一块、比例可拖；面板只搬家不复制；单格占满整列，空列收起")
 
     # 15 阅读页空态「最近阅读」（2026-11-25 用户第四条）
     add(15, "阅读空态：最近阅读（5 文件 + 3 课程，分组、按打开先后）", (
@@ -274,6 +272,51 @@ def check(root):
         and "recentRdCourse(c.code)" in idx                          # 打开课程抽屉也记一笔
         and "先到课程抽屉里点一份讲义" not in idx                    # 那句 toast 不再拦人
     ), "没打开讲义时进阅读页给最近阅读：文件 5 条 + 课程 3 张卡片（分组、按先后点开排）；文件点开续读、课程点开抽屉；没有记录才给一句空态提示")
+
+    # 16 阅读页铺满高度（2026-11-25 用户第二条：侧栏底线还有空位）
+    add(16, "阅读页铺满高度（侧栏到窗口底边）", (
+        "body.read-mode .wrap{max-width:none;padding:4px 12px 0}" in idx
+        and "body.read-mode footer{display:none}" in idx
+        and "function fitReadCard()" in idx
+        and "card.style.height = h + 'px';" in idx
+        and "window.innerHeight - top - 12" in idx
+        and "calc(100vh - 190px)" not in idx
+        and ".reader{background:var(--reader-bg);padding:18px;min-height:0;min-width:0;height:100%;display:flex" in idx
+        and ".side{background:var(--card);padding:14px;border:0;min-height:0;height:100%;max-height:none" in idx
+    ), "卡片按窗口可用高度钉住（不再跟 PDF 内容走），讲义与侧栏一起到窗口底边；阅读页用满宽度、不显示 footer")
+
+    # 17 侧栏宽度可拖 + 窗口同步加宽（2026-11-25 用户第四条）
+    add(17, "侧栏可拖宽，窗口跟着加宽", (
+        "const SIDE_W_MIN = 260, SIDE_W_MAX = 560;" in idx
+        and "pluma.sideW" in idx and "pluma.sideSplit" in idx
+        and "function initSideResizers()" in idx and "function setSideWidth(side, w" in idx
+        and "function shiftWindow(delta)" in idx and "a.shift_width" in idx
+        and "let WIN_EXTRA = 0;" in idx
+        and "def shift_width(self, dx):" in srv and "SystemParametersInfoW(0x0030" in srv
+        and "SWP_NOZORDER | SWP_NOACTIVATE" in srv       # 只在注释里也行：改动窗口不动层级
+        and "u.SetWindowPos(h, None, int(x), int(y), int(w), int(oldh)," in srv
+    ), "左右侧栏各自可拖 260–560（双击回 300）；开/收/拖宽时窗口按同样像素向外加，到屏幕工作区边为止，讲义列不被挤窄")
+
+    # 18 全屏 / 最大化拖动（2026-11-25 用户第一条：软件全屏之后拖不动）
+    add(18, "全屏与最大化也能拖窗口", (
+        "bindReadTopDrag" in idx
+        and "top.addEventListener('mousedown'" in idx
+        and "if(!inFullscreen()) return;" in idx
+        and "setFullscreen(false).then(() => {" in idx
+        and "a.drag_window()" in idx
+        and "time.sleep(0.10)" in drag
+        and 'return {"ok": True, "restored": True}' not in drag
+        and "u.SetWindowPos(h, None, x0 + dx, y0 + dy, 0, 0, flags)" in drag
+    ), "全屏时按住阅读工具条空白 → 先退出全屏回原尺寸 → 继续跟手拖；最大化时还原后不再要求拖第二次")
+
+    # 19 全屏保留出血位（2026-11-25 用户：「全屏的情况下也要保留出血位」）
+    add(19, "全屏保留出血位", (
+        ".read-card.fs{position:fixed;inset:12px" in idx
+        and "border:12px solid var(--bg)" in idx
+        and "width:100vw;height:100vh" in idx
+        and ".read-card:fullscreen::backdrop{background:var(--bg)}" in idx
+        and "border-radius:12px" in idx
+    ), "全屏不再贴死屏幕四边：留 12px 界面底色（与窗口模式的 12px 对齐），带同款圆角；原生全屏的 backdrop 也用界面底色")
 
     return rows
 
@@ -329,8 +372,13 @@ def selftest():
             ("译文框样式又变成全局", 12, IDX, ".tr-out .trans{white-space:pre-wrap;font-size:13px;line-height:1.8", ".trans{white-space:pre-wrap;font-size:13px;line-height:1.8"),
             ("管理按钮被拿掉", 13, IDX, 'id="trMgrBtn"', 'id="trMgrBtnX"'),
             ("状态条不再收起", 13, IDX, "hideTrStrip(true)", "hideTrStrip(false)"),
-            ("侧栏不再分边", 14, IDX, "let SIDE_DOCK = {", "let SIDEDOCK = {"),
+            ("四角又变回左右", 14, IDX, "const SLOTS = ['lt', 'lb', 'rt', 'rb'];", "const SLOTS = ['left','right'];"),
             ("换边又改回按钮", 14, IDX, "b.draggable = true", "b.draggable = false"),
+            ("卡片高度又跟内容走", 16, IDX, "card.style.height = h + 'px';", "card.style.height = '';"),
+            ("侧栏不再可拖", 17, IDX, "function initSideResizers(){", "function initSideResizersX(){"),
+            ("全屏拖动被拿掉", 18, IDX, "if(!inFullscreen()) return;", "return;"),
+            ("全屏又贴死屏幕", 19, IDX, "inset:12px;z-index:70", "inset:0;z-index:70"),
+            ("原生全屏的出血边框被拿掉", 19, IDX, "border:12px solid var(--bg)", "border:0"),
             ("最近阅读不再记录", 15, IDX, "const RECENT_RD_KEY = 'pluma.recentRead'", "const RECENT_RD_KEY = 'pluma.recentReadX'"),
         ]
         all_ok = True

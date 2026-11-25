@@ -1,0 +1,314 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>原型 30 · 阅读四角侧栏与窗口</title>
+<style>
+:root{--bg:#111110;--card:#1c1c1a;--card2:#232321;--line:#2e2e2b;--line2:#262624;--ink:#e9e7e2;--sub:#9c9992;--faint:#6f6c66;--red:#e2565c;--green:#3f7d5a;--amber:#b07d1f;--reader-bg:#0d0d0c;--page:#f7f5ef}
+*{box-sizing:border-box}
+body{margin:0 auto;max-width:1180px;padding:26px 30px 34px;background:var(--bg);color:var(--ink);
+  font:14px/1.62 "Microsoft YaHei","Segoe UI",system-ui,sans-serif}
+h1{font-size:18px;font-weight:600;margin:0 0 5px}
+.sub{font-size:12.5px;color:var(--sub);margin:0 0 2px;line-height:1.85}
+.sub b{color:var(--ink);font-weight:600}
+h2{font-size:14px;font-weight:600;margin:26px 0 3px}
+h2 .n{display:inline-grid;place-items:center;width:19px;height:19px;border-radius:50%;background:var(--ink);color:var(--bg);
+  font-size:11px;margin-right:8px;vertical-align:1px}
+.cap{font-size:11.5px;color:var(--faint);margin:0 0 10px;line-height:1.8}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.mock{background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.wbar{display:flex;align-items:center;gap:10px;height:34px;padding:0 12px;background:var(--card);border-bottom:1px solid var(--line);font-size:11.5px;color:var(--sub)}
+.wbar .dot3{display:flex;gap:5px;margin-left:auto}
+.wbar .dot3 i{width:9px;height:9px;border-radius:50%;background:var(--line);display:block}
+.rtop{display:flex;align-items:center;gap:9px;padding:8px 12px;border-bottom:1px solid var(--line2);font-size:11.5px;color:var(--sub);background:var(--card)}
+.rtop .t{font-size:12.5px;color:var(--ink);font-weight:600}
+.rtop .p{font-size:10.5px;color:var(--faint)}
+.rtop .ctl{margin-left:auto;display:flex;gap:5px}
+.tb{border:1px solid var(--line);border-radius:7px;padding:3px 8px;font-size:10.5px;color:var(--sub);background:transparent}
+.tb.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.rb{display:grid;grid-template-columns:250px 1fr 250px;grid-template-rows:1fr 1fr;height:470px;background:var(--reader-bg)}
+.dock{background:var(--card);display:flex;flex-direction:column;min-height:0;position:relative}
+.dz{outline:1px dashed rgba(226,86,92,.55);outline-offset:-7px}
+.dz::after{content:attr(data-corner);position:absolute;top:7px;right:8px;font-size:9.5px;letter-spacing:.08em;color:var(--red);
+  background:rgba(226,86,92,.12);border:1px solid rgba(226,86,92,.35);border-radius:4px;padding:0 5px}
+.d-lt{grid-area:1/1/2/2;border-right:1px solid var(--line2);border-bottom:1px solid var(--line2)}
+.d-lb{grid-area:2/1/3/2;border-right:1px solid var(--line2)}
+.d-rt{grid-area:1/3/2/4;border-left:1px solid var(--line2);border-bottom:1px solid var(--line2)}
+.d-rb{grid-area:2/3/3/4;border-left:1px solid var(--line2)}
+.reader{grid-area:1/2/3/3;display:grid;place-items:center;padding:16px;position:relative;background:var(--reader-bg)}
+.tabs{display:flex;gap:5px;padding:8px 9px 0;flex:none}
+.stab{border:1px solid var(--line);border-radius:7px;padding:3px 9px;font-size:10.5px;color:var(--faint);background:transparent}
+.stab.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.dbody{padding:9px 10px;overflow:hidden;flex:1;min-height:0}
+.h{font-size:11px;color:var(--ink);font-weight:600;display:flex;align-items:center;gap:6px;margin:0 0 7px}
+.h .btn{margin-left:auto;border:1px solid var(--line);background:transparent;color:var(--sub);border-radius:6px;padding:1px 7px;font-size:9.5px}
+.nitem{border:1px solid var(--line2);border-left:2px solid var(--green);border-radius:7px;padding:6px 8px;font-size:10.5px;color:var(--sub);line-height:1.7;margin:0 0 6px;background:var(--card2)}
+.nitem.trans{border-left-color:var(--amber)}
+.tag{font-size:9px;color:var(--green);border:1px solid currentColor;border-radius:4px;padding:0 4px;margin-left:6px}
+.tag.a{color:var(--amber)}
+.ta{width:100%;height:44px;border:1px solid var(--line);border-radius:7px;background:var(--card2);color:var(--faint);font-size:10.5px;padding:6px 8px}
+.dir{display:flex;align-items:center;justify-content:center;gap:8px;font-size:9.5px;color:var(--faint);margin:4px 0}
+.dir b{border:1px solid var(--line);border-radius:6px;padding:0 6px;font-weight:400;color:var(--sub)}
+.out{height:52px;border:1px solid var(--line2);border-radius:7px;background:var(--card2);color:var(--faint);font-size:10px;padding:6px 8px;margin-top:2px}
+.msg{border:1px solid var(--line2);border-radius:7px;padding:6px 8px;font-size:10.5px;color:var(--sub);margin:0 0 6px;background:var(--card2)}
+.msg.u{background:rgba(63,125,90,.10);margin-left:34px}
+.msg .who{font-size:9px;color:var(--faint);margin-bottom:2px}
+.scin{margin-top:auto;padding:7px 10px 8px 9px;border-top:1px solid var(--line2);font-size:10px;color:var(--faint)}
+.scin .row{display:flex;gap:5px;margin-bottom:5px;min-width:0}
+.scin .inp{flex:1;border:1px solid var(--line);border-radius:6px;padding:3px 7px;font-size:10px;color:var(--faint);background:var(--card2)}
+.scin .go{flex:0 0 auto;border:1px solid var(--ink);background:var(--ink);color:var(--bg);border-radius:6px;padding:3px 8px;font-size:10px}
+.page{width:250px;aspect-ratio:1/1.414;background:var(--page);border-radius:2px;box-shadow:0 2px 14px rgba(0,0,0,.5);padding:18px 16px;color:#2a2a28;position:relative}
+.page .ph1{font-size:7px;letter-spacing:.1em;color:#888;margin-bottom:12px}
+.page .ph2{font-size:15px;font-weight:700;margin-bottom:8px}
+.page .line{height:3px;background:#d8d4cb;border-radius:2px;margin:6px 0}
+.page .line.s{width:70%}
+.page .line.m{width:86%}
+.page .box{border:1px solid #ddd8ce;border-radius:3px;padding:7px;margin-top:12px}
+.page .box .line{height:2px;margin:5px 0}
+.page .pno{position:absolute;right:12px;bottom:10px;font-size:7px;color:#999}
+.grab{position:absolute;top:50%;width:7px;height:64px;margin-top:-32px;border-radius:4px;background:var(--line);cursor:ew-resize;z-index:5}
+.grab::after{content:"⋮";position:absolute;inset:0;display:grid;place-items:center;font-size:8px;color:var(--faint)}
+.grab.l{left:-4px}.grab.r{right:-4px}
+.grab.h{top:auto;left:50%;bottom:-4px;margin:0 0 0 -32px;width:64px;height:7px;cursor:ns-resize}
+.grab.h::after{content:"⋯"}
+.pin{position:absolute;left:9px;top:7px;font-size:9px;color:var(--sub);letter-spacing:.06em;background:rgba(17,17,16,.72);border:1px solid var(--line);border-radius:4px;padding:0 5px;z-index:4}
+.note{font-size:11px;color:var(--faint);line-height:1.8;margin:9px 0 0}
+.note b{color:var(--sub);font-weight:600}
+.ok{color:#7fbf93}
+.warn{color:#e0a34a}
+.bad{color:#e2565c}
+
+/* 拖动四区示意 */
+.zones{display:grid;grid-template-columns:1fr 1fr 1fr;grid-template-rows:1fr 1fr;height:250px;gap:0;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--reader-bg)}
+.zones .zd{display:grid;place-items:center;border:2px dashed var(--red);background:rgba(226,86,92,.06);color:var(--red);font-size:11.5px;margin:7px;border-radius:9px}
+.zones .zd small{display:block;text-align:center;font-size:9.5px;color:rgba(226,86,92,.75);margin-top:2px}
+.zones .mid{grid-area:1/2/3/3;display:grid;place-items:center;color:var(--faint);font-size:11.5px;border-left:1px solid var(--line2);border-right:1px solid var(--line2)}
+.zl{grid-area:1/1/2/2}.zl2{grid-area:2/1/3/2}.zr{grid-area:1/3/2/4}.zr2{grid-area:2/3/3/4}
+
+/* 宽度对比 */
+.compare{display:flex;gap:18px;align-items:flex-start}
+.win{background:var(--reader-bg);border:1px solid var(--line);border-radius:8px;overflow:hidden;flex:none}
+.win .bar{height:20px;background:var(--card);border-bottom:1px solid var(--line2);display:flex;align-items:center;padding:0 6px;gap:4px}
+.win .bar i{width:5px;height:5px;border-radius:50%;background:var(--line);display:block}
+.win .body{display:grid;height:250px}
+.win .sd{background:var(--card);border-right:1px solid var(--line2);font-size:9.5px;color:var(--faint);padding:5px}
+.win .sd.r{border-right:0;border-left:1px solid var(--line2)}
+.win .rd{display:grid;place-items:center;background:var(--reader-bg)}
+.win .pg{background:var(--page);height:206px;aspect-ratio:1/1.414;border-radius:1px;box-shadow:0 1px 8px rgba(0,0,0,.5)}
+.win .lbl{text-align:center;font-size:10px;color:var(--faint);padding:5px 0 0}
+.measure{font-size:11px;color:var(--sub);line-height:1.9;margin:0 0 0 18px}
+.measure b{color:var(--ink)}
+.measure .k{display:inline-block;min-width:72px;color:var(--faint)}
+.bar2{height:5px;border-radius:3px;background:var(--line);overflow:hidden;width:100%;margin:3px 0 8px}
+.bar2 i{display:block;height:100%;background:var(--green)}
+.bar2 i.red{background:var(--red)}
+.bar2 i.amber{background:var(--amber)}
+
+/* 底部空位 */
+.gapdemo{display:flex;gap:18px;align-items:flex-start}
+.frame{position:relative;width:330px;height:250px;border:1px solid var(--line);border-radius:8px;background:var(--reader-bg);overflow:hidden}
+.frame .win{border:0;border-radius:0;height:100%;display:flex;flex-direction:column}
+.frame .cb{display:grid;grid-template-columns:80px 1fr 80px;flex:0 0 auto;border-bottom:1px solid var(--line2);background:var(--card);height:26px;align-items:center;font-size:8px;color:var(--faint);padding:0 5px}
+.frame .cb2{display:grid;grid-template-columns:1fr 80px;height:150px;background:var(--reader-bg)}
+.frame .cb2 .s{background:var(--card);border-left:1px solid var(--line2)}
+.frame .cb2 .r{display:grid;place-items:center}
+.frame .cb2 .p{background:var(--page);height:126px;aspect-ratio:1/1.414;border-radius:1px}
+.frame .gap{position:absolute;left:0;right:0;bottom:0;height:74px;background:
+  repeating-linear-gradient(45deg,rgba(226,86,92,.13) 0 6px,transparent 6px 12px);border-top:1px dashed var(--red)}
+.frame .gl{position:absolute;left:50%;top:53%;transform:translateX(-50%);font-size:9px;color:var(--red);white-space:nowrap}
+.frame.after .cb2{height:224px}
+.frame.after .cb2 .p{height:190px}
+.frame .tag2{position:absolute;top:5px;left:6px;font-size:9px;color:var(--sub);background:rgba(17,17,16,.8);border:1px solid var(--line);border-radius:4px;padding:0 5px;z-index:2}
+.legend{font-size:10.5px;color:var(--faint);margin-top:7px;line-height:1.8}
+
+/* 全屏拖动 */
+.fsbar{display:flex;align-items:center;gap:12px;height:52px;padding:0 16px;background:var(--card);border:1px solid var(--line);border-radius:12px 12px 0 0}
+.fsbar .dots{display:grid;grid-template-columns:repeat(3,4px);grid-template-rows:repeat(3,4px);gap:2px}
+.fsbar .dots i{background:var(--faint);border-radius:1px;display:block}
+.fsbar .txt{font-size:11.5px;color:var(--sub)}
+.fsbar .txt b{color:var(--ink)}
+.fsbar .cur{margin-left:auto;font-size:11px;color:var(--red);display:flex;align-items:center;gap:6px}
+.fsbody{height:74px;background:var(--reader-bg);border:1px solid var(--line);border-top:0;border-radius:0 0 12px 12px;display:grid;place-items:center;color:var(--faint);font-size:11px}
+
+table{border-collapse:collapse;width:100%;font-size:11.5px}
+th,td{border-bottom:1px solid var(--line2);padding:7px 9px;text-align:left;vertical-align:top}
+th{color:var(--faint);font-weight:400;font-size:10.5px;letter-spacing:.05em}
+td b{color:var(--ink);font-weight:600}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.pill{display:inline-block;border:1px solid var(--line);border-radius:999px;padding:1px 8px;font-size:10px;color:var(--sub)}
+.pill.keep{border-color:rgba(63,125,90,.6);color:#8ec6a2}
+.pill.cut{border-color:rgba(226,86,92,.55);color:#e58b8f}
+</style>
+</head>
+<body>
+
+<h1>阅读页 · 四角侧栏 + 宽度可调 + 铺满高度（v1.9.24 提案）</h1>
+<p class="sub">四条一起改：<b>① 全屏也能拖窗口</b>；<b>② 侧栏铺到窗口底边</b>，不再留空；<b>③ 同侧分上下两块</b>（左上 / 左下 / 右上 / 右下）；<b>④ 侧栏宽度能拖、窗口跟着变宽</b>，讲义列不被挤窄。下面数字都是在本机 1582×1053 的浏览器布局里量出来的（窗口 CSS 尺寸）。</p>
+
+<h2><span class="n">1</span>四个角都能停：同侧上下各一块，中间仍是讲义</h2>
+<p class="cap">左侧「笔记」在上、「翻译」在下，各自独立成行、各自滚动；右侧「会话」在上，右下空着时自己收起。讲义跨上下两行，永远是中间的主区。同一格里放两块，就还按现在的页签叠，不复制面板。</p>
+
+<div class="mock">
+  <div class="wbar"><span>✒ 羽毛笔 La Pluma</span><span style="color:var(--faint)">v1.9.24</span><span class="dot3"><i></i><i></i><i></i></span></div>
+  <div class="rtop"><div><div class="t">CS340_九讲合订本_讲义.pdf</div><div class="p">CS340/01_讲义/CS340_九讲合订本_讲义.pdf</div></div>
+    <div class="ctl"><span class="tb">‹ 1 / 144 ›</span><span class="tb">− 130% ＋</span><span class="tb">▤ 侧栏</span><span class="tb">译</span><span class="tb">⤢ 全屏</span></div></div>
+  <div class="rb">
+    <div class="dock d-lt dz" data-corner="左上">
+      <span class="pin">左上 · 笔记</span>
+      <div class="tabs" style="padding-top:24px"><span class="stab on">笔记 2</span><span class="stab">翻译</span></div>
+      <div class="dbody">
+        <div class="h">第 p.1 页 <button class="btn">记笔记</button></div>
+        <div class="nitem">p.1 04:33<br>「附进程状态图」这一页先记下来。<span class="tag">自己写</span></div>
+        <div class="nitem trans">【译文 p.1】Operating Systems · Handouts in One Volume<span class="tag a">引用译文</span></div>
+      </div>
+    </div>
+
+    <div class="dock d-lb dz" data-corner="左下">
+      <span class="pin">左下 · 翻译</span>
+      <div class="tabs" style="padding-top:24px"><span class="stab on">翻译</span></div>
+      <div class="dbody">
+        <div class="h">第 p.1 页 · 翻译 <span style="margin-left:auto;display:flex;gap:4px"><span class="tb">管理</span><span class="tb on">翻译</span></span></div>
+        <div class="ta">在上面输入要翻译的文字（右键「翻译这段」也会带到这里）</div>
+        <div class="dir"><span>中文</span><b>↑↓</b><span>英文</span></div>
+        <div class="out">译文会出现在这里</div>
+      </div>
+    </div>
+
+    <div class="reader">
+      <div class="grab l" title="拖宽左侧栏（260–560）"></div>
+      <div class="grab r" title="拖宽右侧栏（260–560）"></div>
+      <div class="page">
+        <div class="ph1">CS340 · 讲义合订本 · 九讲</div>
+        <div class="ph2">操作系统 · 讲义合订本</div>
+        <div class="line m"></div><div class="line s"></div>
+        <div class="box"><div class="line"></div><div class="line m"></div><div class="line s"></div></div>
+        <div class="line" style="margin-top:16px"></div><div class="line s"></div>
+        <div class="pno">1 / 144</div>
+      </div>
+      <div style="position:absolute;left:50%;top:8px;transform:translateX(-50%);font-size:10px;color:var(--faint);white-space:nowrap">讲义跨上下两行 · 宽度不变</div>
+    </div>
+
+    <div class="dock d-rt dz" data-corner="右上">
+      <span class="pin">右上 · 会话</span>
+      <div class="tabs" style="padding-top:24px"><span class="stab on">会话</span></div>
+      <div class="dbody" style="display:flex;flex-direction:column;padding-bottom:0">
+        <div class="h">本课程会话 <button class="btn">清除</button></div>
+        <div class="msg"><div class="who">你</div>这一讲的进程状态图在哪一页？</div>
+        <div class="msg u"><div class="who">羽毛笔</div>在第 1 页封面目录之后，L02 里给了三态图。</div>
+        <div class="scin"><div class="row"><span class="inp">只在本课程内提问…</span><span class="go">提问</span></div><div>☐ 引用其他课件</div></div>
+      </div>
+    </div>
+
+    <div class="dock d-rb dz" data-corner="右下" style="opacity:.55">
+      <span class="pin">右下 · 空着就收</span>
+      <div class="dbody" style="display:grid;place-items:center;color:var(--faint);font-size:10.5px;text-align:center;line-height:1.9">把页签拖到右下角<br>这里就独立成一行</div>
+    </div>
+  </div>
+</div>
+<p class="note"><b>分隔线：</b>左右两条竖线可拖宽（260–560，双击回 300）；左侧上下之间那条横线也能拖（默认 1:1），两边各记各的比例。没有面板的格子自动收成 0 高，不会留空。</p>
+
+<div class="cap" style="margin-top:18px"><b>拖动时：</b>四个角同时亮出投放区，落下即停靠；拖动中面板不复制，只是搬家。</div>
+<div class="zones">
+  <div class="zd zl">放到左上<small>左上角</small></div>
+  <div class="mid">讲义（不吃拖动）</div>
+  <div class="zd zr">放到右上<small>右上角</small></div>
+  <div class="zd zl2">放到左下<small>左下角</small></div>
+  <div class="zd zr2">放到右下<small>右下角</small></div>
+</div>
+
+<h2><span class="n">2</span>宽度：侧栏自己拉，窗口向外长，讲义列保持不变</h2>
+<p class="cap">实测根因有两层：阅读卡片被 <span class="warn">.wrap 的 1080px 上限</span>卡住，窗口再宽也只有 1048 的卡片；双侧栏各吃 300，讲义列只剩 446（无侧栏时 1046）。改法：阅读页用满窗口宽度；打开侧栏 / 拖宽侧栏时，窗口先按同样像素向外加，加不动了才轮到讲义列变窄。</p>
+
+<div class="compare">
+  <div>
+    <div class="win" style="width:400px">
+      <div class="bar"><i></i><i></i><i></i><span style="font-size:8px;color:var(--faint);margin-left:4px">现在 · 1582</span></div>
+      <div class="body" style="grid-template-columns:70px 1fr 70px">
+        <div class="sd">笔记</div><div class="rd"><div class="pg" style="height:150px"></div></div><div class="sd r">会话</div>
+      </div>
+    </div>
+    <div class="lbl">双侧栏各 300 · 讲义列 <b class="bad">446</b> · 卡片 1048（1080 上限）</div>
+    <div class="measure" style="margin-left:0">
+      <span class="k">图4 无侧栏</span><b>1046</b><div class="bar2"><i style="width:100%"></i></div>
+      <span class="k">现在双侧栏</span><b class="bad">446（43%）</b><div class="bar2"><i class="red" style="width:43%"></i></div>
+    </div>
+  </div>
+
+  <div>
+    <div class="win" style="width:560px">
+      <div class="bar"><i></i><i></i><i></i><span style="font-size:8px;color:var(--faint);margin-left:4px">改后 · 窗口 1582 → 2048（屏幕工作区上限）</span></div>
+      <div class="body" style="grid-template-columns:96px 1fr 96px">
+        <div class="sd">笔记</div><div class="rd"><div class="pg" style="height:210px"></div></div><div class="sd r">会话</div>
+      </div>
+    </div>
+    <div class="lbl">双侧栏仍各 300 · 讲义列 <b class="ok">1416</b> · 卡片 2016（用满窗口）</div>
+    <div class="measure" style="margin-left:0">
+      <span class="k">改后双侧栏</span><b class="ok">1416（比图4 还宽）</b><div class="bar2"><i style="width:100%"></i></div>
+      <span class="k">就算加不动</span><b>950（91%）</b><div class="bar2"><i class="amber" style="width:91%"></i></div>
+    </div>
+  </div>
+</div>
+<p class="note"><b>拖动侧栏更宽时：</b>窗口同步向外长相同像素（到屏幕边为止），讲义页不重排、不闪。<b>侧栏收起时：</b>窗口缩回原来那截；你把窗口手动改过大小，就以你最后一次的大小为准。屏幕不够时先保讲义列，并在分隔条上显一句「到屏幕边了」。</p>
+
+<h2><span class="n">3</span>侧栏和讲义都铺到窗口底边</h2>
+<p class="cap">现在的空位不是错觉：双侧栏时卡片只有 678 高，底边到窗口底边整整 <b class="bad">273px</b> 什么都没画（左图斜纹）。原因是卡片高度跟着 PDF 高度走，侧栏只有 min-height:560。改后阅读区按可用高度撑满，侧栏与讲义一起到底边。</p>
+<div class="gapdemo">
+  <div>
+    <div class="frame">
+      <span class="tag2">现在</span>
+      <div class="cb"><span>‹ 1 / 144 ›</span><span style="text-align:center">− 130% ＋</span><span style="text-align:right">⤢</span></div>
+      <div class="cb2"><div class="s"></div><div class="r"><div class="p"></div></div><div class="s"></div></div>
+      <div class="gap"></div>
+      <div class="gl">空 273px · 侧栏底线在这里断了</div>
+    </div>
+  </div>
+  <div>
+    <div class="frame after">
+      <span class="tag2">改后</span>
+      <div class="cb"><span>‹ 1 / 144 ›</span><span style="text-align:center">− 130% ＋</span><span style="text-align:right">⤢</span></div>
+      <div class="cb2"><div class="s"></div><div class="r"><div class="p"></div></div><div class="s"></div></div>
+    </div>
+    <div class="legend">左侧栏、右侧栏、讲义底边与窗口底边齐平；正文再长就在各自里面滚。</div>
+  </div>
+</div>
+
+<h2><span class="n">4</span>全屏也能拖窗口</h2>
+<p class="cap">现在全屏时标题栏被收起，整页没有一处能按住拖；最大化时拖标题条只还原、不跟手（要拖第二次）。改法：全屏里按住阅读工具条的空白处，先退出全屏回原尺寸，再继续跟着鼠标走；最大化时同理，还原与拖动一次完成。</p>
+<div class="fsbar">
+  <div class="dots"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+  <div class="txt"><b>按住这里拖</b>（工具条空白处；按钮点按不受影响）</div>
+  <div class="cur">↖ 拖 = 退出全屏并移动</div>
+</div>
+<div class="fsbody">全屏阅读区 · 松开后窗口停在拖到的位置，阅读页保持原来的缩放与页码</div>
+<p class="note">判据走真窗口：全屏 → 拖到 (+120, +80) → 窗口矩形确实变了、已退出全屏、缩放与页码不变；最大化 → 一次拖动完成「还原 + 位移」，不再要拖第二次。</p>
+
+<h2><span class="n">5</span>全屏也留 12px 出血位</h2>
+<p class="cap">全屏不是贴死屏幕四边：四周留 12px 界面底色（与窗口模式 .wrap 的 12px 对齐），并保留同款圆角。原生全屏的浏览器规则会把 margin 强制成 0，所以用 12px 同色边框做出血位；浮层兜底则直接用 inset:12px。</p>
+<div style="display:flex;gap:18px">
+  <div style="flex:1;position:relative;height:220px;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--reader-bg)">
+    <div style="position:absolute;inset:0;display:grid;place-items:center;color:var(--faint);font-size:11.5px">全屏阅读区 · 贴死四边</div>
+    <span style="position:absolute;left:10px;top:10px;font-size:10px;color:var(--red);background:rgba(226,86,92,.1);border:1px solid rgba(226,86,92,.35);border-radius:4px;padding:0 6px">现在 · 0px</span>
+  </div>
+  <div style="flex:1;position:relative;height:220px;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--card);padding:12px">
+    <div style="height:100%;border-radius:8px;background:var(--reader-bg);display:grid;place-items:center;color:var(--faint);font-size:11.5px">全屏阅读区</div>
+    <span style="position:absolute;left:14px;top:14px;font-size:10px;color:var(--green);background:rgba(63,125,90,.12);border:1px solid rgba(63,125,90,.4);border-radius:4px;padding:0 6px">改后 · 12px</span>
+  </div>
+</div>
+<p class="note"><b>为什么不是 margin：</b>WebView2 走原生全屏时，浏览器 UA 样式会把全屏元素的 margin 强制为 0（实测 12px 被吃掉）；改成 12px 同色边框后，内容从边框内侧开始，四边仍有界面底色，且不会缩掉阅读宽度。</p>
+
+<h2><span class="n">6</span>默认值与记忆</h2>
+<div class="card" style="padding:4px 16px 10px">
+<table>
+  <tr><th style="width:160px">项目</th><th>默认</th><th>记忆 / 边界</th></tr>
+  <tr><td><b>四个角</b></td><td>笔记右上；翻译右下（同侧上下）；会话左上</td><td>拖到任意角即记住；同一格多块按页签叠</td></tr>
+  <tr><td><b>侧栏宽度</b></td><td>左右各 300</td><td>260–560；左右各记各的；双击分隔线回 300</td></tr>
+  <tr><td><b>上下比例</b></td><td>1 : 1</td><td>0.25–0.75；某格空着时另一格占满</td></tr>
+  <tr><td><b>窗口加宽</b></td><td>开</td><td>到屏幕工作区边为止（本机 2048 宽）；加不动就先保讲义列</td></tr>
+  <tr><td><b>全屏拖动</b></td><td>开</td><td>按住阅读工具条空白；不挡按钮与选字</td></tr>
+</table>
+</div>
+<p class="note" style="margin-top:14px"><span class="pill keep">保留</span> 三个面板不复制、拖动只是搬家；页签、最近阅读、笔记 / 翻译 / 会话的内容与接口都不动。<span class="pill cut">不改</span> 不改生成页、课程页；不动 PDF 渲染与文字层。</p>
+<p class="note">实现顺序：先做铺满高度与窗口加宽（②④），再做四角停靠（③），最后补全屏拖动（①）；每条各配真窗口判据，做完再把真实截图放进 <span style="font-family:Consolas,monospace">docs\资产\</span>。</p>
+
+</body>
+</html>

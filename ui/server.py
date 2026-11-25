@@ -3467,8 +3467,10 @@ class _WinApi:
             h = wt.HWND(hwnd)
             if u.IsZoomed(h):
                 # 最大化的窗口先还原（与系统行为一致：拖一个最大化窗口 = 还原）
+                # 2026-11-25 用户：「全屏之后没办法拖动软件视窗」——以前还原完就 return，
+                # 要拖第二次才动；现在还原后等系统放稳，接着用同一个循环继续跟手。
                 u.ShowWindow(h, 9)          # SW_RESTORE
-                return {"ok": True, "restored": True}
+                time.sleep(0.10)
             # 12.2：SetWindowPos 参数类型显式写清，64 位下不写会按 int 截断句柄
             u.SetWindowPos.argtypes = [wt.HWND, wt.HWND, ctypes.c_int, ctypes.c_int,
                                        ctypes.c_int, ctypes.c_int, ctypes.c_uint]
@@ -3502,7 +3504,7 @@ class _WinApi:
         return self.drag_window()
 
     def get_box(self):
-        """窗口位置与大小（拉边缩放用）。"""
+        """窗口位置与大小（拉边缩放用）。顺带报屏幕工作区，前端算加宽上限。"""
         try:
             import ctypes
             import ctypes.wintypes as wt
@@ -3512,10 +3514,56 @@ class _WinApi:
                 return {"ok": False}
             r = wt.RECT()
             u.GetWindowRect(hwnd, ctypes.byref(r))
+            work = wt.RECT()
+            u.SystemParametersInfoW(0x0030, 0, ctypes.byref(work), 0)   # SPI_GETWORKAREA
             return {"ok": True, "x": r.left, "y": r.top,
                     "w": r.right - r.left, "h": r.bottom - r.top,
-                    "maxed": bool(u.IsZoomed(hwnd))}
+                    "maxed": bool(u.IsZoomed(hwnd)),
+                    "max_w": work.right - work.left, "max_h": work.bottom - work.top}
         except Exception as e:  # noqa: BLE001
+            return {"ok": False, "error": str(e)}
+
+    def shift_width(self, dx):
+        """按侧栏宽度把窗口向外加宽 / 收回（2026-11-25 用户第四条）。
+
+        为什么不是改 CSS 就完：侧栏打开会吃掉讲义列；用户要的是「以图 4 的讲义宽度为准，
+        两侧加栏」。所以开一栏就把窗口加同样像素，讲义列保持原宽；屏幕边到了才让讲义让一点。
+        保持窗口中心不动，并夹在工作区内；最大化时不动（最大化已经是屏幕宽）。
+        """
+        try:
+            import ctypes
+            import ctypes.wintypes as wt
+            u = ctypes.windll.user32
+            hwnd = _find_hwnd()
+            if not hwnd:
+                return {"ok": False, "error": "找不到窗口句柄"}
+            h = wt.HWND(hwnd)
+            if u.IsZoomed(h):
+                return {"ok": True, "applied": 0, "maxed": True}
+            r = wt.RECT()
+            u.GetWindowRect(h, ctypes.byref(r))
+            oldw, oldh = r.right - r.left, r.bottom - r.top
+            work = wt.RECT()
+            if not u.SystemParametersInfoW(0x0030, 0, ctypes.byref(work), 0):
+                work = wt.RECT(0, 0, u.GetSystemMetrics(0), u.GetSystemMetrics(1))
+            room = max(720, work.right - work.left)
+            want = oldw + int(dx)
+            w = max(900, min(room, want))
+            app = w - oldw
+            if not app:
+                return {"ok": True, "applied": 0, "w": oldw, "maxed": False}
+            cx = (r.left + r.right) // 2
+            x = cx - w // 2
+            x = max(work.left, min(work.right - w, x))
+            y = max(work.top, min(work.bottom - oldh, r.top))
+            u.SetWindowPos.argtypes = [wt.HWND, wt.HWND, ctypes.c_int, ctypes.c_int,
+                                       ctypes.c_int, ctypes.c_int, ctypes.c_uint]
+            u.SetWindowPos(h, None, int(x), int(y), int(w), int(oldh),
+                           0x0004 | 0x0010)          # SWP_NOZORDER | SWP_NOACTIVATE
+            self._relayout_later()
+            return {"ok": True, "applied": app, "w": w, "maxed": False}
+        except Exception as e:  # noqa: BLE001
+            _log_error("shift_width", e)
             return {"ok": False, "error": str(e)}
 
     def set_box(self, x: int, y: int, w: int, h: int):
