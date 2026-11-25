@@ -17,7 +17,7 @@
 
 <div align="center">
 
-<a href="https://github.com/Charlotte0124/LaPluma/releases/download/v1.9.17/LaPluma-1.9.17.zip"><img src="https://img.shields.io/badge/⬇_下载_v1.9.17-C8202C?style=for-the-badge&logo=windows&logoColor=white" height="40" alt="下载"></a>
+<a href="https://github.com/Charlotte0124/LaPluma/releases/download/v1.9.24/LaPluma-1.9.24.zip"><img src="https://img.shields.io/badge/⬇_下载_v1.9.24-C8202C?style=for-the-badge&logo=windows&logoColor=white" height="40" alt="下载"></a>
 &nbsp;
 <a href="一键启动.ps1"><img src="https://img.shields.io/badge/▶_一键启动-2F7D4F?style=for-the-badge&logo=powershell&logoColor=white" height="40" alt="一键启动"></a>
 &nbsp;
@@ -32,7 +32,7 @@
 ![license](https://img.shields.io/badge/license-MIT-171714?style=flat-square)
 ![content](https://img.shields.io/badge/示例内容-CC_BY--NC_4.0-171714?style=flat-square)
 ![python](https://img.shields.io/badge/python-3.12-171714?style=flat-square)
-![version](https://img.shields.io/badge/version-1.9.17-171714?style=flat-square)
+![version](https://img.shields.io/badge/version-1.9.24-171714?style=flat-square)
 ![gates](https://img.shields.io/badge/三道门-绿才出门-C8202C?style=flat-square)
 ![offline](https://img.shields.io/badge/出_PDF-不需要密钥-2F7D4F?style=flat-square)
 
@@ -252,12 +252,12 @@ A/B/C 三层可离线运行；仅「让模型撰写新内容」时才需要 D �
 <!-- 最近更新:begin（由 tools/sync-readme.py 生成，别手改） -->
 | 版本 | 日期 | 这一版做了什么 |
 |:--|:--|:--|
+| **v1.9.24** | 11-25 | 阅读空态只留最近阅读；侧栏加「列表」在同课程内换成品/原件；会话给开场白与示例；修掉偶尔半屏黑 |
 | **v1.9.23** | 11-25 | 阅读页没打开讲义时给「最近阅读」；侧栏换边改成拖页签，工具条不再放按钮 |
 | **v1.9.22** | 11-25 | 修 1.9.21 阅读页的布局：空栏占位与没藏住的会话面板，底下不再留白 |
 | **v1.9.21** | 11-25 | 阅读侧栏可以放到左边、左右两侧同时开着；设置页版本行不再说「已是最新」 |
 | **v1.9.20** | 11-25 | 默认把课程库放到 C 盘之外；已在 C 盘的旧库问一次要不要复制挪走 |
-| **v1.9.19** | 11-25 | 课程库位置可独立于程序目录；首次启动只提示旧版本目录、由用户决定改用/复制/不用，不再偷偷导入 |
-| — | — | 更早的 35 个版本 → [CHANGELOG](CHANGELOG.md) |
+| — | — | 更早的 36 个版本 → [CHANGELOG](CHANGELOG.md) |
 <!-- 最近更新:end -->
 
 ## 目录

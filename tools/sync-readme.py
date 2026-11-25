@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import io
+import json
 import os
 import re
 import sys
@@ -18,6 +19,7 @@ import paths  # noqa: E402  路径双根：CHANGELOG / README 属于随程序发
 ROOT = paths.RES_ROOT
 CHANGELOG = os.path.join(ROOT, "CHANGELOG.md")
 README = os.path.join(ROOT, "README.md")
+FEED = os.path.join(ROOT, "feed", "latest.json")
 BEGIN = "<!-- 最近更新:begin（由 tools/sync-readme.py 生成，别手改） -->"
 END = "<!-- 最近更新:end -->"
 LIMIT = 5        # 只列最近 5 个版本；更早的指向 CHANGELOG（用户 2026-11-17 定）
@@ -82,6 +84,29 @@ def render(rows) -> str:
     return BEGIN + "\n" + head + "\n" + body + "\n" + END
 
 
+def feed_version() -> str:
+    """最新版本只认 feed/latest.json 一个来源（应用内更新读的也是它）。"""
+    try:
+        return str(json.load(io.open(FEED, encoding="utf-8")).get("latest") or "")
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def sync_head(src: str, ver: str) -> str:
+    """把顶部「下载」按钮与版本徽章钉到 feed 的版本（2026-11-26）。
+
+    为什么补这段：用户 2026-11-26 看主页发现图与文字一直没更新——下载按钮与徽章停在
+    v1.9.17，Release 已到 v1.9.24。根因是这两处以前手写、没有任何东西会红。
+    """
+    if not ver:
+        return src
+    src = re.sub(r"releases/download/v[\d.]+/LaPluma-[\d.]+\.zip",
+                 "releases/download/v%s/LaPluma-%s.zip" % (ver, ver), src)
+    src = re.sub(u"⬇_下载_v[\\d.]+", u"⬇_下载_v" + ver, src)
+    src = re.sub(r"badge/version-[\d.]+", "badge/version-" + ver, src)
+    return src
+
+
 def main(argv: list[str]) -> int:
     rows = parse(CHANGELOG)
     if not rows:
@@ -95,6 +120,8 @@ def main(argv: list[str]) -> int:
     # 2026-11-17 修：原来直接拿 block 当替换串，block 里的反斜杠（如 tools\print\pdfjs）
     #   会被当成转义序列，re 直接报 bad escape \p。用函数替换就不做转义解析了。
     new = re.sub(re.escape(BEGIN) + r".*?" + re.escape(END), lambda _m: block, src, flags=re.S)
+    ver = feed_version()
+    new = sync_head(new, ver)
     if "--check" in argv:
         if new != src:
             print("最近更新表与 CHANGELOG 不一致：跑 python tools\\sync-readme.py")
