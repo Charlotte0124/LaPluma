@@ -1,25 +1,25 @@
 {
   "schema": "lapluma-feed-v1",
   "product": "LaPluma",
-  "latest": "1.9.19",
-  "title": "v1.9.19 · 课程库位置可独立于程序目录",
+  "latest": "1.9.20",
+  "title": "v1.9.20 · 默认把课程库放到 C 盘之外",
   "released": "2026-11-25",
-  "summary": "课程库位置可独立于程序目录；首次启动只提示旧版本目录、由用户决定改用/复制/不用，不再偷偷导入",
+  "summary": "默认把课程库放到 C 盘之外；已在 C 盘的旧库问一次要不要复制挪走",
   "notes": [
-    "课程库位置可固定：以前数据根就是程序目录，换新版解到新文件夹，课程自然不在",
-    "首次启动改为先问再做：检测到旧版本目录时弹「检测到以前的课程库」，三个选择——直接改用这个库（不复制，重启后课程就在）、复制到当前目录（旧文件夹原样保留）、不用（记下来，下次不再问）",
-    "库位置找不到时说明白：移动硬盘没插 / 文件夹被删时退回程序目录，并在启动时弹窗说明是哪条库路径失效，不再让课程「看起来全没了」",
-    "库不与程序混用：库指定为别的文件夹后，paths.bootstrap() 不再把库目录插到 sys.path 最前面，旧版 ui\\ / paths.py 不会遮住新程序自己的模块",
-    "判据：check-paths.py 新增库位置 4 项（配置生效 / 目录不存在回退 / PLUMA_DATA 优先 / 默认行为不变），--selftest 仍要求造坏会红"
+    "默认库不再落在 C 盘：程序装在系统盘（通常是 C:）且机器还有别的固定盘时，课程库自动放到 <那块盘>\\羽毛笔库",
+    "已有旧库不静默搬：启动时若库在系统盘且里面已有课程，弹「课程库在系统盘，要不要挪走？」",
+    "不会误搬：程序目录里已有课程、用户点过「恢复默认」、或已经配置过库时，自动挑盘一律不动",
+    "判据：check-paths.py 新增第 12、13 项（挑盘规则 / 自动挑选一次并写状态），共 13 项",
+    "实测：临时目录模拟「程序在 C: 的全新目录」，数据根为 D:\\羽毛笔库、状态写入、重跑不变"
   ],
-  "page": "https://github.com/Charlotte0124/LaPluma/releases/tag/v1.9.19",
+  "page": "https://github.com/Charlotte0124/LaPluma/releases/tag/v1.9.20",
   "assets": {
     "app": {
-      "url": "https://github.com/Charlotte0124/LaPluma/releases/download/v1.9.19/LaPluma-1.9.19.zip",
-      "size": 13845773,
-      "sha256": "6ea762417dd1b653756d20248fe447778a132d1070ea5533f600fe6cfa5be44e",
-      "name": "LaPluma-1.9.19.zip"
+      "url": "https://github.com/Charlotte0124/LaPluma/releases/download/v1.9.20/LaPluma-1.9.20.zip",
+      "size": 14169735,
+      "sha256": "c401c325924d0355ca19e6a8c4dc04e15bf6f160a2e69442bf3de5c473b0728a",
+      "name": "LaPluma-1.9.20.zip"
     }
   },
-  "_generated": "2026-11-25 00:34:57"
+  "_generated": "2026-11-25 12:28:30"
 }
