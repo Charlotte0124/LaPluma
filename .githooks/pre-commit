@@ -42,4 +42,6 @@ echo "[hook] 截图覆盖 check-shot-coverage ..."
 python -X utf8 tools/check/check-shot-coverage.py || { echo "[hook] 新功能没在截图覆盖表占位 / 登记了不存在的图：提交已拦下"; exit 1; }
 echo "[hook] 规矩接线 check-rules-wired ..."
 python -X utf8 tools/check/check-rules-wired.py || { echo "[hook] 规矩与判据没对上：提交已拦下"; exit 1; }
+echo "[hook] 主页版本与图 check-readme-fresh ..."
+python -X utf8 tools/check/check-readme-fresh.py || { echo "[hook] 主页版本或图比最新版旧：提交已拦下（先跑 tools/sync-readme.py）"; exit 1; }
 echo "[hook] 通过"

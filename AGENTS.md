@@ -208,6 +208,7 @@
 | `check-repo-clean.py` | 提交钩子自动（产品仓只放能跑的代码；courses.json 只留 DEMO） |
 | `check-shot-coverage.py` | 提交钩子自动（功能总表 ↔ 截图覆盖表 ↔ docs\资产 三边对上；新功能没占位 = 红） |
 | `check-rules-wired.py` | 提交钩子自动（本文件与 tools/check 对账） |
+| `check-readme-fresh.py` | 提交钩子 + 推送前（主页版本号 / 下载按钮 / 最近更新表 / 介绍图时效） |
 | `check-error-guard.py` | 手动：`python tools\check\check-error-guard.py`（打 14 条坏请求验错误兜底） |
 | `check-fresh-install.py` | 手动：全新配置跑一遍首启流程 |
 | `check-paths.py` | 手动：数据根 / 保存目录解析 |
@@ -266,3 +267,14 @@
 4. **规矩写进 PRTS**：这条同时写进 PRTS `CONVENTIONS.md`（软件发布一节），PRTS 与项目台两边都能查到；只在这里写、不写 PRTS = 没落规矩。
 
 **怎么验证它被执行**：本仓 `docs\版本速览\v<版本>-*.png` 存在且与 `feed\latest.json` 的 `image`、GitHub Release 正文里的图是同一张（同一 sha256）；PRTS `assets\版本速览更新\羽毛笔\` 下有同名文件；项目台图库里「版本速览更新」分组能看到它。发版清单里逐项打勾，缺一项不算发完。
+
+## 二十一、主页（README）与最新版同一步（2026-11-26 用户定）
+
+**为什么有这条**：用户 2026-11-26 看主页发现「图和文字一直没有更新」——下载按钮与版本徽章停在 v1.9.17，Release 已经到 v1.9.24；主页顶上的介绍图还是 2026-11-17 的。根因不是忘了改，是**没有任何东西会红**：`sync-readme.py` 只管「最近更新」表，版本徽章是手写的，它的 `--check` 也从没接进钩子或 CI。
+
+1. **版本只有一个来源**：`feed/latest.json` 的 `latest`。README 顶部的下载按钮、版本徽章、「最近更新」表都由 `python tools\sync-readme.py` 写回，不许手改。
+2. **发版必跑**：`python tools\sync-readme.py` → `python tools\check\check-readme-fresh.py` 绿了才算发完。
+3. **主页用图跟着界面**：README 引用的 `docs\资产\*.png` 比 `ui\` 旧判黄，提醒重拍；图旧不许当没问题。
+4. **提交 / 推送不许 `--no-verify`**：钩子挡住就改判据或改代码。2026-11-25 的 `3e9e454` 用 `--no-verify` 越过钩子，CI 连红三次（GitHub 通知 13 条）。现在多了 `.githooks/pre-push`（占位防护 / 界面预览 / 主页版本三条）：提交能绕过，推送绕不过。
+
+**怎么验证它被执行**：`python tools\check\check-readme-fresh.py`（红 = 版本号或表对不上，黄 = 主页图旧）；`.githooks/pre-commit` 与 `.githooks/pre-push` 都接了它。CI 那一步还没接：2026-11-26 推不上去——这台机器的 token 缺 `workflow` 权限（`refusing to allow an OAuth App to create or update workflow`），等有 `workflow` 权限时再把 `checks.yml` 那一步加上。

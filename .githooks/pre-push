@@ -1,0 +1,14 @@
+#!/bin/sh
+# 2026-11-26：提交钩子能被 --no-verify 绕过（11-25 的 3e9e454 就是这么把红推到 GitHub 的：
+#   钩子判红后改用 git commit --no-verify，CI 接着连红三次）。推送前再跑一遍最要紧的三条，
+#   这一关只能 git push --no-verify 才绕得过去，而规矩不允许那么做。
+set -e
+ROOT=$(git rev-parse --show-toplevel)
+cd "$ROOT"
+echo "[pre-push] 占位防护 ..."
+python -X utf8 tools/check/check-stub-guard.py || { echo "[pre-push] 占位防护红，推送已取消"; exit 1; }
+echo "[pre-push] 界面预览 ..."
+python -X utf8 tools/check/check-ui-preview.py || { echo "[pre-push] 界面改动没带图，推送已取消"; exit 1; }
+echo "[pre-push] 主页版本与图 ..."
+python -X utf8 tools/check/check-readme-fresh.py || { echo "[pre-push] 主页版本/图比最新版旧，推送已取消"; exit 1; }
+echo "[pre-push] 通过"
