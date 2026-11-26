@@ -72,6 +72,14 @@ def main() -> int:
 
     # Y1 主页用图跟着 ui 走
     t_ui = last_ts("ui")
+    # 2026-11-27：带 [ui-noshow] 的界面提交没有可见变化，不作主页图新鲜度的基准
+    try:
+        rc, out = git("log", "-1", "--format=%ct", "--invert-grep",
+                      "--grep=\\[ui-noshow\\]", "--", "ui")
+        if rc == 0 and str(out).strip().isdigit():
+            t_ui = int(str(out).strip())
+    except Exception:  # noqa: BLE001
+        pass
     # 只算「界面截图」与主页介绍图：图标这类不随界面变的，不逼着重画
     imgs = sorted(set(name for name in re.findall(r'docs/资产/([^")\s]+\.png)', src)
                       if name.startswith(u"界面-") or name.startswith(u"产品介绍图")))

@@ -107,6 +107,14 @@ def run(root):
     ui_files = [f.replace('\\', '/') for f in commit_files(root, ui_rev)] if ui_rev else []
     page_changed = any(f.startswith('ui/index.html') for f in ui_files)
     note.append('ui/ 最后提交 %s · docs\\预览 最后提交 %s' % (fmt(t_ui), fmt(t_prev)))
+    # 2026-11-27：提交信息带 [ui-noshow] 的界面提交没有可见变化，不作截图新鲜度的基准；
+    # 否则每改一次行为（如切页关浮层）就会把全部截图判旧，逼着重拍没有变化的图。
+    t_vis = t_ui
+    if t_ui:
+        rc, out, _ = git(root, 'log', '-1', '--format=%ct', '--invert-grep',
+                         '--grep=\\[ui-noshow\\]', '--', UI)
+        if rc == 0 and out.isdigit():
+            t_vis = int(out)
 
     # —— A：改界面的那一次，有没有给图留痕（同一次必须带 docs\预览 或 docs\资产）
     # 2026-11-22 修正：提交钩子跑的时候 HEAD 还是**上一次**提交，按 HEAD 判会永远判上一次
@@ -179,7 +187,7 @@ def run(root):
         yel.append('C ui/ 有未提交改动，docs\\预览 没动 —— 正在改界面？图记得一起出')
 
     # —— D：已实现截图忘了重拍（只在「真的改了 index.html」时才比，否则改服务代码会误报）
-    if page_changed and os.path.isdir(asset_dir) and t_ui:
+    if page_changed and os.path.isdir(asset_dir) and t_vis:
         # 2026-11-27：加显式豁免清单（历史版本图 / docs\\预览 的设计记录）。
         # 不禁用 D：新图没登记照样黄；豁免的条数也打出来，避免「看不见就当没有」。
         exempt = {}
@@ -192,7 +200,7 @@ def run(root):
         for name in sorted(os.listdir(asset_dir)):
             if name.startswith('界面-') and name.lower().endswith('.png'):
                 t = last_ts(root, os.path.join(ASSET, name))
-                if t and t < t_ui:
+                if t and t < t_vis:
                     if name in exempt:
                         skipped.append(name)
                     else:
