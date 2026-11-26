@@ -194,11 +194,13 @@ def check(root):
     ), "标题独占可收缩那份（省略号），「占位」徽标与讲号不收缩不折行")
 
     # 2 最近五条翻译挪到整块最下面
-    ti, to, th = idx.find('id="trHist"'), idx.find('id="trOut"'), idx.find("留空就直接翻这一页的文字层")
+    # 2026-11-27：R101 去重时删掉了译文框下面那条提示语，锚点改成译文框本身（#trOut）；
+    #   要判的仍然是「历史在译文框之后 = 整块最下面」。
+    ti, to = idx.find('id="trHist"'), idx.find('id="trOut"')
     add(10, "翻译历史在底部", (
-        ti > 0 and to > 0 and th > 0 and ti > to and ti > th
+        ti > 0 and to > 0 and ti > to
         and ".tr-hist{margin:14px 0 0;border-top:1px solid var(--line2)" in idx
-    ), "「最近 5 条」在译文框与提示语之后（整块最下面），不再挡在输入框上面")
+    ), "「最近 5 条」在译文框之后（整块最下面），不再挡在输入框上面")
 
     # 3 笔记颜色 + PDF 里的引用高亮
     add(11, "笔记颜色与高亮", (

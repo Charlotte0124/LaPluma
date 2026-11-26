@@ -1026,15 +1026,13 @@ body.win #appScroll{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden
           <code id="outPath">out</code><span id="dirHint" style="font-size:11.5px;color:var(--faint)">保存目录 · 点击选择</span></div>
         <p class="hint" id="dirFix" style="display:none;color:var(--red);border:0">保存目录在配置里是乱码（出现过 ?），已临时退回默认目录；请到「设置」里重填。</p>
         <h3 style="margin-top:16px">成品形态</h3>
-        <p class="hint">单本：一讲一份 PDF。合订本：全部讲次合为一本，不含各讲自带的封面与目录。</p>
         <div class="opts" id="formOpts">
           <div class="opt on" data-form="single"><b>单本</b><small>一讲一份</small></div>
           <div class="opt" data-form="book"><b>合订本</b><small>全部讲一本</small></div>
         </div>
         <h3 style="margin-top:16px">讲义语言</h3>
-        <p class="hint">全中：正文中文，专业术语附英文。全英：正文英文，专业名称写成「English（中文）」，例如 CO2（二氧化碳）。</p>
         <div class="opts" id="langOpts">
-          <div class="opt on" data-lang="zh"><b>全中</b><small>专业术语英文</small></div>
+          <div class="opt on" data-lang="zh"><b>全中</b><small>专业术语英文，如 CO2（二氧化碳）</small></div>
           <div class="opt" data-lang="en"><b>全英</b><small>专有名称中文</small></div>
         </div>
         <div class="tools">
@@ -1252,7 +1250,6 @@ body.win #appScroll{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden
             </div>
             <!-- 下面这个框一直在（用户：「有两个框在」），没译文时只是一句占位提示 -->
             <div id="trOut" class="tr-out empty"><span class="ph">译文会出现在这里</span></div>
-            <p class="hint" style="border:0;margin:8px 0 0">留空就直接翻这一页的文字层；扫描件没有文字层会直说读不到。</p>
             <!-- 2026-11-23 用户：「最近五条翻译移动到最底下去（图2位置）」——历史放整块最下面，
                  翻完看结果时它不再挡在上面。 -->
             <div class="tr-hist" id="trHist"></div>
@@ -2339,8 +2336,7 @@ function askDeleteLesson(no){
   if(!code) return;
   $('#dlg').innerHTML = `
     <div class="eb">Delete lesson</div><h4>删除讲次 ${esc(no)}</h4>
-    <p class="desc">讲义源文件 <code>_lessons\\${esc(no)}.py</code> 将从本课程中移除；已生成的 PDF 与原件不受影响。</p>
-    <p class="fine">文件移入软件目录下的 <code>_trash</code> 回收目录，需要时可取回。</p>
+    <p class="desc">讲义源文件 <code>_lessons\\${esc(no)}.py</code> 将从本课程中移除；已生成的 PDF 与原件不受影响。文件移入软件目录下的 <code>_trash</code> 回收目录，需要时可取回。</p>
     <div class="acts"><button class="btn ghost" id="dlNo">取消</button>
       <button class="btn danger" id="dlYes">删除这一讲</button></div>`;
   openVeil();
@@ -2650,11 +2646,10 @@ function moneyDialog(j){
   const bal = (j.balance && j.balance.ok) ? ('¥'+j.balance.balance) : ('读不到（'+(j.balance&&j.balance.error||'接口没回')+'）');
   $('#dlg').innerHTML = `
     <div class="eb">Balance</div><h4>余额不足，本次提问未能执行</h4>
-    <p class="desc">接口返回「Insufficient Balance」。账户余额与本次提问的估算花费如下。</p>
+    <p class="desc">接口返回「Insufficient Balance」。账户余额与本次提问的估算花费如下。充值到账后点「去充值并重试」；也可先查看已检索到的片段，不产生费用。</p>
     <div class="kv"><span>账户余额</span><b>${esc(bal)}</b></div>
     <div class="kv"><span>本次估算</span><b>${esc(j.cost_est||'约 ¥0.02')}（估）</b></div>
     <div class="kv"><span>当前模型</span><b>${esc(mname(j.model||MODEL))}</b></div>
-    <p class="note-s">充值到账后点「去充值并重试」；也可先查看已检索到的片段，不产生费用。</p>
     <div class="acts"><button class="btn ghost" id="balSee">先看检索片段</button>
       <button class="btn" id="balGo">去充值并重试</button></div>`;
   openVeil();
@@ -4702,13 +4697,12 @@ function wizard(step){
       <div class="pick-model">${(B.models||[]).map(m=>`<div class="p ${W.model===m.id?'on':''}" data-m="${esc(m.id)}">
         <b>${esc(m.name)}</b><small>${esc(m.note)}</small></div>`).join('')}</div>`;
   }else if(step===1){
-    body = `<h4>填写 API 密钥</h4>
-      <p class="note-s">仅保存在本机（%USERPROFILE%\\.pluma\\api.json），不进入仓库，可先跳过。还没有密钥？<a href="/doc?p=使用/08-怎么拿到API密钥.md" target="_blank" style="color:var(--ok);text-decoration:underline">怎么拿到 API 密钥（手把手教程）</a></p>
-      <input type="password" id="wKey" placeholder="sk-…" autocomplete="off">`;
+    body = `<h4>填写 API 密钥（仅存本机 .pluma\\api.json，不进仓库）</h4>
+      <input type="password" id="wKey" placeholder="sk-…" autocomplete="off">
+      <a href="/doc?p=使用/08-怎么拿到API密钥.md" target="_blank" style="font-size:12px;color:var(--ok)">还没有密钥？怎么拿到 API 密钥（手把手教程）</a>`;
   }else if(step===2){
     body = `<h4>选择保存目录</h4>
-      <p class="note-s">生成的讲义会复制到此目录。相对路径以软件目录为根，也可直接填绝对路径。</p>
-      <div class="dirline"><input type="text" id="wDir" value="${esc(B.save_dir||'')}">
+      <div class="dirline"><input type="text" id="wDir" title="生成的讲义会复制到此目录；相对路径以软件目录为根，也可直接填绝对路径" value="${esc(B.save_dir||'')}">
         <button class="pickbtn" id="wPick">📁 选择文件夹…</button></div>
       <p class="pickfine" id="wFine">当前指向：<code>${esc(dirText(B.save_dir, B.save_dir_abs))}</code></p>`;
   }else{
@@ -4864,8 +4858,7 @@ function libAskC(){
   if(!L.suggest) return;
   $('#dlg').innerHTML = `
     <div class="eb">Library</div><h4>课程库在系统盘，要不要挪走？</h4>
-    <p class="fine">课程现在存在 <code>${esc(L.root||'')}</code>（${esc(L.system_drive||'C:')} 盘）。重装系统或清理系统盘时，这里可能被一起清掉。</p>
-    <p class="pickfine">建议复制到 <code>${esc(L.suggest)}</code> 再改用它：复制完关掉软件重开一次生效；原位置的文件不删，保持原样。</p>
+    <p class="fine">课程现在存在 <code>${esc(L.root||'')}</code>（${esc(L.system_drive||'C:')} 盘）。重装系统或清理系统盘时，这里可能被一起清掉。<br>建议复制到 <code>${esc(L.suggest)}</code> 再改用它：复制完关掉软件重开一次生效；原位置的文件不删，保持原样。</p>
     <div class="acts">
       <button class="btn ghost" id="libcNo">先不用</button>
       <button class="btn" id="libcMove">复制过去并切换</button>
@@ -4884,10 +4877,9 @@ function libAsk(){
   const opts = cs.map((c,i)=>'<option value="'+i+'">'+esc(c.path)+'（'+c.items+' 项 · '+esc(c.why)+'）</option>').join('');
   $('#dlg').innerHTML = `
     <div class="eb">Library</div><h4>检测到以前的课程库</h4>
-    <p class="fine">这可能是你上一个版本的文件夹。课程还在里面，没有丢。要怎么办？</p>
+    <p class="fine">这可能是你上一个版本的文件夹。课程还在里面，没有丢。要怎么办？「直接改用」不复制，重启后课程就在；「复制过来」把课程搬进当前目录（旧文件夹保持原样）。</p>
     <div class="lbl">旧文件夹</div>
     <select id="libSel">${opts}</select>
-    <p class="pickfine">「直接改用」不复制，重启后课程就在；「复制过来」把课程搬进当前目录（旧文件夹保持原样）。</p>
     <div class="acts">
       <button class="btn ghost" id="libSkip">不用</button>
       <button class="btn ghost" id="libUse2">直接改用这个库</button>
@@ -4902,9 +4894,7 @@ function libAsk(){
 function askLibraryChange(p){
   $('#dlg').innerHTML = `
     <div class="eb">Library</div><h4>把课程库定在这里？</h4>
-    <p class="pickfine" style="word-break:break-all"><code>${esc(p)}</code></p>
-    <p class="fine">「直接改用」：以后就读这个文件夹，不复制；课程马上都在（要重启一次）。<br>
-    「复制过去再改」：先把现在库里的课程复制进去，再切过去；旧位置保持原样。</p>
+    <p class="pickfine" style="word-break:break-all"><code>${esc(p)}</code><br>「直接改用」：以后就读这个文件夹，不复制；课程马上都在（要重启一次）。「复制过去再改」：先把现在库里的课程复制进去，再切过去；旧位置保持原样。</p>
     <div class="acts">
       <button class="btn ghost" id="lbCancel">取消</button>
       <button class="btn ghost" id="lbUse">直接改用</button>
