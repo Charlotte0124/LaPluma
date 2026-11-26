@@ -433,6 +433,13 @@ body.read-mode footer{display:none}
 .side-col.right{border-left:1px solid var(--line2)}
 .side-grip{position:absolute;top:0;bottom:0;width:7px;z-index:7;cursor:ew-resize;touch-action:none}
 .side-col.left .side-grip{right:-4px}
+/* 2026-11-26 用户：「增加侧栏右上角可以删除侧栏（例如我想只要左边的我就删除右边的侧栏）」。
+   关掉的侧记在 localStorage（pluma.sideOff），顶部「显示侧栏」可以再接回来。 */
+.side-close{position:absolute;top:5px;right:7px;z-index:9;width:22px;height:22px;padding:0;
+  border:1px solid var(--line);background:var(--card);color:var(--faint);border-radius:6px;
+  font:inherit;font-size:13px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.side-close:hover{color:var(--ink);border-color:var(--faint)}
+.side-close[hidden]{display:none}
 .side-col.right .side-grip{left:-4px}
 .side-grip[hidden]{display:none}
 body.col-resizing{cursor:ew-resize;user-select:none}
@@ -1139,7 +1146,7 @@ body.win #appScroll{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden
         <div class="read-ctl">
           <div class="seg"><button id="pgPrev">‹</button><span class="val" id="pgVal">— / —</span><button id="pgNext">›</button></div>
           <div class="seg"><button id="zOut">−</button><span class="val" id="zVal">100%</span><button id="zIn">＋</button></div>
-          <button class="tbtn" id="btnNotes" title="显示 / 隐藏侧栏">▤ <span id="notesLabel">侧栏</span></button>
+          <button class="tbtn" id="btnNotes" title="显示侧栏（关掉的侧栏会接回来）">▤ <span id="notesLabel">显示侧栏</span></button>
           <button class="tbtn" id="btnTrans" title="翻译这一页（会调用模型）">译</button>
           <button class="tbtn" id="btnFs"><span id="fsIcon">⤢</span><span id="fsLabel">全屏</span></button>
           <button class="tbtn" id="btnTheme2"><span id="themeIcon2">◐</span><span id="themeLabel2">深色</span></button>
@@ -1154,6 +1161,7 @@ body.win #appScroll{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden
         <!-- 2026-11-25：每侧一列，上下两格；面板在哪一格由 JS（applyDock）放。
              左边先摆着（hidden），面板搬过来时才显示。 -->
         <div class="side-col left" data-side="left" hidden>
+          <button class="side-close" data-close="left" title="关掉左侧栏（顶部「显示侧栏」可以再打开）">×</button>
           <div class="side dock" data-slot="lt" hidden>
             <div class="side-tabs"></div>
             <div class="dock-body"></div>
@@ -1167,6 +1175,7 @@ body.win #appScroll{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden
         </div>
         <div class="reader" id="readerBox"><div id="pdfwrap"><canvas id="pdfcanvas"></canvas><div id="pdfhl"></div><div id="pdftext"></div></div></div>
         <div class="side-col right" data-side="right">
+          <button class="side-close" data-close="right" title="关掉右侧栏（顶部「显示侧栏」可以再打开）">×</button>
           <div class="side dock" data-slot="rt">
             <div class="side-tabs"></div>
             <div class="dock-body">
@@ -3325,6 +3334,12 @@ let SIDE_W = { left: 300, right: 300 };
 let SIDE_SPLIT = { left: 50, right: 50 };
 let SIDE_HIDDEN = false;
 try{ SIDE_HIDDEN = localStorage.getItem('pluma.hideSide') === '1'; }catch(_){}
+/* 2026-11-26：每侧右上角的 × 关掉那一侧；关掉的是「这一侧」，面板本身还在，点「显示侧栏」接回来。 */
+let SIDE_OFF = { left: false, right: false };
+try{
+  const jo = JSON.parse(localStorage.getItem('pluma.sideOff') || 'null') || {};
+  SIDE_OFF.left = !!jo.left; SIDE_OFF.right = !!jo.right;
+}catch(_){ }
 
 function loadDockState(){
   try{
@@ -3356,12 +3371,13 @@ function saveDock(){
     localStorage.setItem('pluma.sideActive', JSON.stringify(SIDE_ACTIVE));
     localStorage.setItem('pluma.sideW', JSON.stringify(SIDE_W));
     localStorage.setItem('pluma.sideSplit', JSON.stringify(SIDE_SPLIT));
+    localStorage.setItem('pluma.sideOff', JSON.stringify(SIDE_OFF));
   }catch(_){ }
 }
 function panelEl(k){ return document.getElementById(PANEL_IDS[k]); }
 function dockEl(slot){ return document.querySelector('.side.dock[data-slot="' + slot + '"]'); }
 function dockList(slot){ return PANEL_KEYS.filter(k => SIDE_DOCK[k] === slot); }
-function slotShown(slot){ return !SIDE_HIDDEN && dockList(slot).length > 0; }
+function slotShown(slot){ return !SIDE_HIDDEN && !SIDE_OFF[SLOT_SIDE[slot]] && dockList(slot).length > 0; }
 function sideShown(side){ return SLOTS.some(s => SLOT_SIDE[s] === side && slotShown(s)); }
 function visibleWidths(){
   return { left: sideShown('left') ? SIDE_W.left : 0,
@@ -3433,7 +3449,7 @@ function applyDock(){
   SLOTS.forEach(slot => {
     const dock = dockEl(slot); if(!dock) return;
     const list = dockList(slot);
-    const on = !SIDE_HIDDEN && list.length > 0;
+    const on = !SIDE_HIDDEN && !SIDE_OFF[SLOT_SIDE[slot]] && list.length > 0;
     dock.hidden = !on;
     shown[slot] = on;
     if(!on) return;
@@ -3557,18 +3573,37 @@ document.querySelectorAll('.dropzone').forEach(z => {
 function applySide(){
   const card = readCard();
   if(card) card.classList.toggle('hide-side', SIDE_HIDDEN);
-  if($('#notesLabel')) $('#notesLabel').textContent = SIDE_HIDDEN ? '显示侧栏' : '侧栏';
+  if($('#notesLabel')) $('#notesLabel').textContent = '显示侧栏';
   applyDock();
 }
+/* 2026-11-26 用户：「取消隐藏侧栏按钮 改为显示侧栏」——这个按钮只负责把侧栏露出来，
+   关掉某一侧改用每列右上角的 ×（见下面 .side-close）。 */
 $('#btnNotes').onclick = () => {
   const before = visibleWidths();
-  SIDE_HIDDEN = !SIDE_HIDDEN;
-  try{ localStorage.setItem('pluma.hideSide', SIDE_HIDDEN ? '1' : '0'); }catch(_){ }
+  SIDE_HIDDEN = false;
+  SIDE_OFF.left = false; SIDE_OFF.right = false;
+  if(!PANEL_KEYS.some(k => SLOTS.includes(SIDE_DOCK[k]))) { SIDE_DOCK.notes = 'rt'; }  // 兜底：恢复到出厂「笔记在右上」
+  try{ localStorage.setItem('pluma.hideSide', '0'); }catch(_){ }
+  saveDock();
   applySide();
-  if(!SIDE_HIDDEN && typeof sideTab === 'function') sideTab('notes');   // 打开时回到笔记页签
+  if(typeof sideTab === 'function') sideTab('notes');
   shiftWindowForDock(before);
   setTimeout(() => { if(RD.doc) renderPdf(); }, 120);
 };
+/* 每侧右上角的 ×：只关这一侧，不把面板删掉——点「显示侧栏」接回来。 */
+document.querySelectorAll('.side-close').forEach(b => {
+  b.onclick = (e) => {
+    e.stopPropagation();
+    const side = b.dataset.close;
+    const before = visibleWidths();
+    SIDE_OFF[side] = true;
+    saveDock();
+    applyDock();
+    shiftWindowForDock(before);
+    setTimeout(() => { if(RD.doc) renderPdf(); }, 120);
+    toast((side === 'left' ? '左' : '右') + '侧栏已关掉；点顶部「显示侧栏」可以再打开');
+  };
+});
 
 /* ---- 拖宽侧栏 / 拖高上下两块（2026-11-25 用户第四条） ---- */
 function setSideWidth(side, w, opts){

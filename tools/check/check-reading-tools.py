@@ -359,6 +359,19 @@ def check(root):
         and "body.win{height:100vh;overflow:hidden;display:flex;flex-direction:column}" in idx
     ), "pdf.js 的字体测量画布（不透明黑）被挪出视口并缩到 1px；否则它会成为 body 的 flex 子项，实测把 #appScroll 从 794 挤到 168（页面下半截全黑）")
 
+    # 23 侧栏「显示侧栏」+ 每侧右上角 ×（2026-11-26 用户定）
+    add(23, "侧栏：按钮只显示、每侧右上角可关掉", (
+        'id="btnNotes" title="显示侧栏（关掉的侧栏会接回来）"' in idx
+        and '<span id="notesLabel">显示侧栏</span>' in idx                # 不再有「隐藏侧栏」
+        and "SIDE_HIDDEN = false;\n  SIDE_OFF.left = false; SIDE_OFF.right = false;" in idx
+        and "let SIDE_OFF = { left: false, right: false };" in idx
+        and "localStorage.setItem('pluma.sideOff', JSON.stringify(SIDE_OFF))" in idx
+        and "function slotShown(slot){ return !SIDE_HIDDEN && !SIDE_OFF[SLOT_SIDE[slot]] && dockList(slot).length > 0; }" in idx
+        and 'data-close="left"' in idx and 'data-close="right"' in idx
+        and "SIDE_OFF[side] = true;" in idx
+        and "点顶部「显示侧栏」可以再打开" in idx
+    ), "顶部按钮只负责显示（关掉的侧栏一并接回，不再当隐藏开关）；每侧一列右上角有 ×，只关掉这一侧、面板不删，选择记在 pluma.sideOff")
+
     return rows
 
 
@@ -427,6 +440,9 @@ def selftest():
             ("列表页签被拿掉", 21, IDX, 'id="sideList" hidden', 'id="sideListX" hidden'),
             ("会话开场白被拿掉", 21, IDX, 'class="msg a sc-welcome"', 'class="msg a"'),
             ("pdf.js 测量画布又占位", 22, IDX, ".hiddenCanvasElement{position:absolute !important", ".hiddenCanvasElement{"),
+            ("侧栏右上角的关闭按钮被拿掉", 23, IDX, 'data-close="left"', 'data-closeX="left"'),
+            ("显示侧栏又变回隐藏开关", 23, IDX, "SIDE_HIDDEN = false;\n  SIDE_OFF.left = false; SIDE_OFF.right = false;", "SIDE_HIDDEN = !SIDE_HIDDEN;"),
+            ("关掉的侧栏没有记账", 23, IDX, "localStorage.setItem('pluma.sideOff', JSON.stringify(SIDE_OFF))", "localStorage.setItem('pluma.sideOffX', JSON.stringify(SIDE_OFF))"),
         ]
         all_ok = True
         for label, no, rel, old, new in defects:
