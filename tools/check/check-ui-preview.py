@@ -180,12 +180,26 @@ def run(root):
 
     # —— D：已实现截图忘了重拍（只在「真的改了 index.html」时才比，否则改服务代码会误报）
     if page_changed and os.path.isdir(asset_dir) and t_ui:
-        stale = []
+        # 2026-11-27：加显式豁免清单（历史版本图 / docs\\预览 的设计记录）。
+        # 不禁用 D：新图没登记照样黄；豁免的条数也打出来，避免「看不见就当没有」。
+        exempt = {}
+        try:
+            with open(os.path.join(root, 'tools', 'check', 'ui-shot-exempt.json'), encoding='utf-8') as fh:
+                exempt = {x.get('name'): x.get('why', '') for x in json.load(fh).get('files', [])}
+        except Exception:  # noqa: BLE001
+            exempt = {}
+        stale, skipped = [], []
         for name in sorted(os.listdir(asset_dir)):
             if name.startswith('界面-') and name.lower().endswith('.png'):
                 t = last_ts(root, os.path.join(ASSET, name))
                 if t and t < t_ui:
-                    stale.append(name)
+                    if name in exempt:
+                        skipped.append(name)
+                    else:
+                        stale.append(name)
+        if skipped:
+            note.append('D 豁免 %d 张（%s）：历史版本 / 设计记录，见 tools\\check\\ui-shot-exempt.json'
+                        % (len(skipped), '、'.join(skipped)))
         if stale:
             yel.append('D 已实现界面截图比 ui/ 旧（%s）：重拍一张放 docs\\资产'
                        % '、'.join(stale))

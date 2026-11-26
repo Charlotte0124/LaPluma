@@ -1,7 +1,5 @@
 <div align="center">
 
-<img src="docs/资产/lapluma-icon-256.png" alt="羽毛笔 La Pluma" width="96">
-
 # 羽毛笔 La Pluma
 
 **把备课数据渲染成可核对、可复现的讲义 PDF**（Windows 文件夹版，双击启动；需要 Python 3.12）

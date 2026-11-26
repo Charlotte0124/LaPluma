@@ -1468,6 +1468,8 @@ function showPage(p){
   document.body.classList.toggle('read-mode', p === 'read');
   if(p !== 'courses' && typeof findOpen === 'function' && FIND.open) findOpen(false);
   if(typeof closeDrawer === 'function') closeDrawer();   // 切导航时抽屉不留着
+  // R96-pageSwitch：切页时把还开着的弹窗一起收掉（只在浮层真的开着时才动，避免打断打开流程）
+  if(typeof closeVeil === 'function' && document.querySelector('#veil.on')) closeVeil();
   document.querySelectorAll('.page').forEach(e=>e.classList.toggle('on', e.id==='page-'+p));
   document.querySelectorAll('#nav a').forEach(a=>a.classList.toggle('on', a.dataset.page===p));
   scrollApp(0);
@@ -4979,13 +4981,14 @@ function closeDrawer(){
 }
 $('#dveil').onclick = closeDrawer;
 // 点遮罩空白关弹窗（点弹窗内容不关：target 不等于 #veil）
-document.addEventListener('click', e => { if(e.target === $('#veil')) closeVeil(); });
+document.addEventListener('click', e => { if(e.target === $('#veil')) closeVeil(); });   // R96-backdrop
 // Esc：满屏浮层先退（不关弹窗、不关抽屉）；搜索面板自己处理（先清空再一次收起），剩下的先关弹窗、再关抽屉
 document.addEventListener('keydown', e => {
   if(e.key !== 'Escape') return;
   if(FIND.open) return;
   const card = readCard();
   if(card && card.classList.contains('fs')){ e.preventDefault(); setFullscreen(false); return; }
+  // R96-escape
   if($('#veil').classList.contains('on')){ e.preventDefault(); closeVeil(); return; }
   if($('#drawer').classList.contains('on')){ e.preventDefault(); closeDrawer(); }
 });
