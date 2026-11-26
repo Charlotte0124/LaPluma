@@ -62,6 +62,47 @@ def coverage(cover_path: str) -> dict:
     return out
 
 
+GROUP_RE = re.compile(r"^###\s*---\s*(.+?)\s*[（(]\s*(\d+)\s*张\s*[）)]\s*---\s*$")
+
+
+def check_groups(cover_path: str) -> list:
+    """2026-11-26 用户定：预览图要分类，每组一行 `--- 分类（N 张）---`，N 要与实际行数相符。
+
+    只查「已拍」段里的分组标题与它下面紧跟的表格行数；标题写 12 张、下面只有 11 行 → 红。
+    """
+    errs = []
+    group = None
+    count = 0
+    seen = 0
+    section = "已拍"
+
+    def flush():
+        if group is None:
+            return
+        if count != group[1]:
+            errs.append("分组「%s」写的是 %d 张，下面只有 %d 行" % (group[0], group[1], count))
+
+    for line in open(cover_path, encoding="utf-8"):
+        s = line.strip()
+        if s.startswith("## "):
+            flush(); group = None; count = 0
+            section = "待补" if "待补" in s else ("未实现" if "未实现" in s else "已拍")
+            continue
+        m = GROUP_RE.match(s)
+        if m:
+            flush()
+            group = (m.group(1), int(m.group(2)))
+            count = 0
+            seen += 1
+            continue
+        if group is not None and section == "已拍" and ROW_RE.match(s):
+            count += 1
+    flush()
+    if section == "已拍" and seen == 0:
+        errs.append("已拍段一张分组标题都没有（要 `### --- 分类（N 张）---`，见 AGENTS.md §二十一）")
+    return errs
+
+
 def audit(root: str) -> tuple:
     table = os.path.join(root, "docs", "功能总表.md")
     cover = os.path.join(root, "docs", "资产", "截图覆盖.md")
@@ -73,6 +114,7 @@ def audit(root: str) -> tuple:
         return [], ["没有 docs/资产/截图覆盖.md（新功能没有地方留空位）"]
     feats = features(table)
     cov = coverage(cover)
+    errs.extend(check_groups(cover))
     need = [k for k, v in feats.items() if v["status"] in ("✅", "🟡")]
     shot_n = wait_n = 0
     for lid in need:
