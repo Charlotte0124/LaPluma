@@ -156,7 +156,9 @@ def find_hwnd(pid):
 
     def cb(hwnd, _l):
         p = wt.DWORD()
-        u.GetWindowThreadProcessId(hwnd, ctypes.byref(p))
+        # 2026-11-27：64 位下句柄超过 32 位时直接传 int 会 OverflowError（回调里被吞掉，
+        #   结果就是「找不到窗口」）。包一层 HWND(c_void_p) 才对。
+        u.GetWindowThreadProcessId(wt.HWND(hwnd), ctypes.byref(p))
         if p.value == pid:
             n = u.GetWindowTextLengthW(hwnd)
             if n > 0:

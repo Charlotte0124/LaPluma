@@ -89,8 +89,9 @@
 2. 验收以**软件自己的窗口（WebView2）**为准：截图用 `PrintWindow` 抓真窗口，不用浏览器页代替。
 3. 浏览器只允许在用户明确要求时手动打开；不许把它当默认验证手段。
 4. 给用户看结果时，一段话＋关键数字就够，不必附截图（用户明确说不看）。
+5. **R113 窗口段在本仓落地**（2026-11-27）：`python tools\check\check-window-fresh.py` 起真窗口 + 干净临时数据根，点抽屉 / 生成 / 设置，落证据 `_logs\fresh-window-<时间戳>.json`（W1–W4 + 四张截图）。PRTS 的 `check-fresh-install.ps1` **只读这份证据**（≤30 天、版本号一致、W1–W4 无红项），它自己不起窗口——这样「自检不弹窗」和「窗口段真跑过」两头都成立。
 
-**怎么验证它被执行**：`grep -L -- "--no-browser" tools/check/*.py` 里出现起服务的脚本即算红；`.githooks\pre-commit` 每次提交都会跑 `check-ui-conflicts`，它起服务的那一行必须带这两个开关。
+**怎么验证它被执行**：`grep -L -- "--no-browser" tools/check/*.py` 里出现起服务的脚本即算红；`.githooks\pre-commit` 每次提交都会跑 `check-ui-conflicts`，它起服务的那一行必须带这两个开关。窗口段：`python tools\check\check-window-fresh.py` 必须 **W1–W4 全绿**并留下证据；删掉证据后 PRTS 的 `check-fresh-install.ps1` 要回黄（先证明它咬人）。
 
 ## 九、改完必须落规矩，规矩必须接钩子（2026-11-22 用户定）
 
@@ -227,6 +228,7 @@
 | `check-pdf-brand.py` | 手动：成品 PDF 的固定文案与品牌 |
 | `check-startup-guard.py` | 手动：启动期自保（遮蔽目录 / stdout） |
 | `check-update.py` | 手动：应用内更新逻辑 |
+| `check-window-fresh.py` | 手动 / 发版前：R113 窗口段（W1 窗口 / W2 抽屉不被顶栏压 / W3 真出 PDF / W4 设置版本行），落证据给 PRTS 读；约 1–3 分钟，跑完自己关窗 |
 | `check-window-real.py` | 手动：真窗口量测 21 项（全屏矩形 / 选中框对位 / 成稿隐藏 / 右键菜单 / 出处可点 / 侧栏会话 / 缩放铺满 / 拖边不露白边 / 不被测量画布挤黑），`--drag` 含真实鼠标拖动；约 4 分钟 |
 | `_win_launch.py` | 不是判据：自测启动器（`PLUMA_TEST_DATA` 指临时数据根），只给 `check-window-real.py` 用 |
 
