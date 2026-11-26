@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """九讲合订本：把多讲的正文拼成一本（自带封面与总目录）。
 
-    python engine\\_book.py                      # 默认 CS340 全部讲，按讲号顺序
+    python engine\\_book.py                      # 默认课程（paths.detect_course）全部讲，按讲号顺序
     python engine\\_book.py L01 L05 L06          # 只合指定的几讲（顺序即书里的顺序）
 
 为什么合订本不复用各讲的封面与目录
@@ -33,8 +33,8 @@ sys.path.insert(0, paths.res('engine'))
 sys.path.insert(0, paths.res('tools', 'print'))
 # 2026-11-17：ROOT 改成数据根（冻结后是 exe 旁的可写目录；源码下就是仓根）
 ROOT = paths.DATA_ROOT
-# 2026-11-17：课程代码不再写死（示例课程 / 截图演示用 PLUMA_COURSE 切，默认仍是 CS340）
-COURSE = os.environ.get("PLUMA_COURSE") or "CS340"
+# 2026-11-17：课程代码不再写死；2026-11-27 起认目录（paths.detect_course），不写死某个代号
+COURSE = paths.detect_course()
 
 import _build_讲义 as builder  # noqa: E402
 
@@ -44,7 +44,7 @@ OUT_PDF = ''
 
 
 def set_course(course: str) -> None:
-    """同一进程里切课程：数据目录与产物名跟着换（默认课程仍是 CS340）。"""
+    """同一进程里切课程：数据目录与产物名跟着换（默认课程由 paths.detect_course 认）。"""
     global COURSE, OUT_HTML, OUT_PDF
     COURSE = course or COURSE
     builder.COURSE = COURSE
@@ -96,12 +96,12 @@ def cover(lessons: list[dict]) -> str:
         for L in lessons)
     return (
         '<section class="cover">\n'
-        '  <div class="kicker">CS340 · 讲义合订本 · 九讲</div>\n'
-        '  <h1>操作系统 · 讲义合订本</h1>\n'
-        '  <div class="sub">Operating Systems · Handouts in One Volume<br>\n'
+        '  <div class="kicker">%s · 讲义合订本 · 九讲</div>\n'
+        '  <h1>%s · 讲义合订本</h1>\n'
+        '  <div class="sub">Handouts in One Volume<br>\n'
         '  封面只有一张；每讲的正文、例题、代码与结构图都在，各讲自带的封面与目录已去掉</div>\n'
         '  <div class="meta">\n%s\n  </div>\n'
-        '</section>' % rows)
+        '</section>' % (COURSE, COURSE, rows))
 
 
 def toc(lessons: list[dict]) -> str:
@@ -125,7 +125,7 @@ def build_book(nos: list[str]) -> tuple[str, list[dict]]:
     css = style_of(lessons[0])
     parts = ['<!DOCTYPE html>\n<html lang="zh-CN" data-theme="dark" data-reader="大学">',
              '<head>\n<meta charset="utf-8">\n<meta name="out" content="%s">' % os.path.basename(OUT_PDF),
-             '<title>CS340 操作系统 · 九讲合订本</title>\n<style>%s</style>\n</head>\n<body>' % css,
+             '<title>%s · 九讲合订本</title>\n<style>%s</style>\n</head>\n<body>' % (COURSE, css),
              cover(lessons), toc(lessons)]
     secs = 0
     for L in lessons:

@@ -1,14 +1,14 @@
 # -*- coding: utf-8 -*-
-"""CS340 讲义生成器：一份数据 → 一份讲义源 HTML（深色主题、A4 打印、目录自动回填）。
+"""讲义生成器：一份课程数据 → 一份讲义源 HTML（深色主题、A4 打印、目录自动回填）。
 
 为什么用生成器：8 讲共用同一套 CSS、封面、目录、术语表、附录结构。
 只写「这一讲讲什么」，版式与固定件由脚本产出；改版式只改这一处。
 
 用法：
-    python CS340\\_build_讲义.py L02        # 生成 CS340\\06_笔记\\L02_零基础_讲义_源.html
-    python CS340\\_build_讲义.py L02 L03    # 一次多份
+    python engine\\_build_讲义.py L02        # 生成 <课程>\\06_笔记\\L02_零基础_讲义_源.html
+    python engine\\_build_讲义.py L02 L03    # 一次多份
 
-数据文件放在 CS340\\_lessons\\<编号>.py，变量名 LESSON，结构见文件末尾注释。
+数据文件放在 <课程>\\_lessons\\<编号>.py，变量名 LESSON，结构见文件末尾注释。
 术语附英不在这里做：生成后统一跑 tools\\print\\terms.py（同一口径，L01 也是这么来的）。
 
 原件图（2026-11-21 加，R115）
@@ -30,8 +30,8 @@ import paths  # noqa: E402  路径双根，见仓根 paths.py
 # 2026-11-17：不再用 dirname(dirname(__file__))——冻结后那指向临时解包目录。
 #   ROOT = 数据根（exe 旁的可写目录；源码运行时就是仓根，行为不变）。
 ROOT = paths.DATA_ROOT
-# 2026-11-17：课程代码不再写死（示例课程 / 截图演示用 PLUMA_COURSE 切，默认仍是 CS340）
-COURSE = os.environ.get("PLUMA_COURSE") or "CS340"
+# 2026-11-17：课程代码不再写死；2026-11-27 起认目录（paths.detect_course），不写死某个代号
+COURSE = paths.detect_course()
 
 # ── 课件页图（2026-11-16 加；2026-11-21 加 R115「原件图必须真的画出来」）────────
 # 为什么要有：拆家后「课件原图」留在资料仓（80 MB），软件仓里一张都没有；
@@ -776,7 +776,7 @@ def load(no: str, lang: str = None) -> dict:
 
 def main(argv):
     if not argv:
-        print('用法: python CS340\\_build_讲义.py L02 [L03 ...]')
+        print('用法: python engine\\_build_讲义.py L02 [L03 ...]')
         return 2
     for no in argv:
         lesson = load(no)

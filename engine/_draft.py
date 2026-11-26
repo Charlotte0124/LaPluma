@@ -1022,7 +1022,7 @@ def main(argv: list) -> int:
     import argparse
     ap = argparse.ArgumentParser(description="导入原件 → DeepSeek 写讲义数据")
     ap.add_argument("no")
-    ap.add_argument("--course", default=os.environ.get("PLUMA_COURSE") or "CS340")
+    ap.add_argument("--course", default=paths.detect_course())
     ap.add_argument("--lang", default="zh", choices=["zh", "en"])
     ap.add_argument("--model", default="")
     ap.add_argument("--no-save", action="store_true")

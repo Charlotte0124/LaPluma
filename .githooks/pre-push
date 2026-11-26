@@ -11,4 +11,6 @@ echo "[pre-push] 界面预览 ..."
 python -X utf8 tools/check/check-ui-preview.py || { echo "[pre-push] 界面改动没带图，推送已取消"; exit 1; }
 echo "[pre-push] 主页版本与图 ..."
 python -X utf8 tools/check/check-readme-fresh.py || { echo "[pre-push] 主页版本/图比最新版旧，推送已取消"; exit 1; }
+echo "[pre-push] 隐私扫描 ..."
+python -X utf8 tools/check/check-privacy.py || { echo "[pre-push] 真实课程名会公开，推送已取消"; exit 1; }
 echo "[pre-push] 通过"

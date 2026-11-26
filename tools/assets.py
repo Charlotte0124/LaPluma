@@ -8,8 +8,8 @@
 用法
     python tools\\assets.py --list                  # 这门课现在读哪个目录、有多少张图
     python tools\\assets.py --check                 # 每讲的 fig 引用能不能全部找到（缺就退 1）
-    python tools\\assets.py --set CS340 "<目录>"     # 写进 %USERPROFILE%\\.pluma\\assets.json
-    python tools\\assets.py --unset CS340           # 清掉本机配置（回到默认查找）
+    python tools\\assets.py --set <课程> "<目录>"       # 写进 %USERPROFILE%\\.pluma\\assets.json
+    python tools\\assets.py --unset <课程>             # 清掉本机配置（回到默认查找）
 
 退出码：0 正常；1 --check 发现缺图；2 参数问题
 """
@@ -41,7 +41,7 @@ def read_cfg() -> dict:
 
 
 def lessons() -> list[str]:
-    files = sorted(glob.glob(os.path.join(ROOT, 'CS340', '_lessons', 'L*.py')))
+    files = sorted(glob.glob(os.path.join(ROOT, paths.detect_course(), '_lessons', 'L*.py')))
     return [os.path.splitext(os.path.basename(f))[0] for f in files]
 
 
@@ -62,7 +62,7 @@ def main(argv: list[str]) -> int:
     if '--set' in argv:
         i = argv.index('--set')
         if len(argv) < i + 3:
-            print('用法：python tools\\assets.py --set CS340 "<课件图目录>"')
+            print('用法：python tools\\assets.py --set <课程> "<课件图目录>"')
             return 2
         code, path = argv[i + 1], argv[i + 2]
         if not os.path.isdir(path):
@@ -80,7 +80,7 @@ def main(argv: list[str]) -> int:
     if '--unset' in argv:
         i = argv.index('--unset')
         data = read_cfg()
-        code = argv[i + 1] if len(argv) > i + 1 else 'CS340'
+        code = argv[i + 1] if len(argv) > i + 1 else paths.detect_course()
         data.pop(code, None)
         with open(cfg_path(), 'w', encoding='utf-8') as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
@@ -88,7 +88,7 @@ def main(argv: list[str]) -> int:
         return 0
 
     if '--list' in argv:
-        code = argv[argv.index('--list') + 1] if len(argv) > argv.index('--list') + 1 else 'CS340'
+        code = argv[argv.index('--list') + 1] if len(argv) > argv.index('--list') + 1 else paths.detect_course()
         path, src = builder.resolve_assets(code)
         print('%s 的课件图目录' % code)
         if path:
@@ -119,7 +119,7 @@ def main(argv: list[str]) -> int:
             else:
                 print('  过  %-6s %d 张全部找到' % (no, len(names)))
         if bad:
-            print('\n%d 讲引用的图找不到。指定目录：python tools\\assets.py --set CS340 "<课件图目录>"' % bad)
+            print('\n%d 讲引用的图找不到。指定目录：python tools\\assets.py --set <课程> "<课件图目录>"' % bad)
             return 1
         print('\n全部能找到。')
         return 0

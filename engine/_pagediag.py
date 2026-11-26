@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """版面诊断：逐页给「填充高度 + 首行字体字号 + 首行文字」，并标出页首是正文的页。
 
-    python CS340\\_pagediag.py L02
+    python engine\\_pagediag.py L02
 """
 import os
 import sys
@@ -11,8 +11,8 @@ import pymupdf
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import paths  # noqa: E402  路径双根：产物在数据根
 ROOT = paths.DATA_ROOT
-# 2026-11-17：课程代码不再写死（示例课程 / 截图演示用 PLUMA_COURSE 切，默认仍是 CS340）
-COURSE = os.environ.get("PLUMA_COURSE") or "CS340"
+# 2026-11-17：课程代码不再写死；2026-11-27 起认目录（paths.detect_course）
+COURSE = paths.detect_course()
 
 
 def main(no):

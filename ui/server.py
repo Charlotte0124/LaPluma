@@ -85,7 +85,7 @@ else:
 ROOT = paths.DATA_ROOT          # 可写数据：课程、生成物、日志（冻结后 = exe 旁边）
 RES = paths.RES_ROOT            # 只读资源：ui\ api\ engine\ tools\（冻结后 = 解包目录）
 UI_DIR = paths.res("ui")
-# 2016-11-17：默认课程不再写死 CS340 —— 原来的「多课程」只是 UI 支持，代码里到处是 CS340，
+# 2016-11-17：默认课程不再写死真实课程代号 —— 原来的「多课程」只是 UI 支持，代码里到处是它，
 #   换一门课（示例课程 / 截图演示）就得改代码。现在取 courses.json 的第一个 key，
 #   环境变量 PLUMA_COURSE 可覆盖（截图演示仓靠它切到示例课程）。
 def _pick_default_course() -> str:
@@ -95,7 +95,7 @@ def _pick_default_course() -> str:
     try:
         with open(paths.data_or_res("courses.json"), "r", encoding="utf-8-sig") as _f:
             _keys = [k for k in json.load(_f).keys() if not k.startswith("_")]
-        # 2026-11-17 打包后真撞到：exe 只带示例课程 DEMO，courses.json 第一个键却是 CS340（真实课程
+        # 2026-11-17 打包后真撞到：exe 只带示例课程 DEMO，courses.json 第一个键却是本机没有的课（真实课程
         #   不入公开仓），于是默认课程指向一个不存在的目录，界面看着像空的。先挑目录真存在的，
         #   都不存在才退回第一个键。
         for k in _keys:
@@ -345,10 +345,10 @@ def _safe_code(code: str) -> str:
 
 
 def load_lesson(course: str, no: str) -> dict:
-    """按 <课程>/_lessons/<讲>.py 读数据（引擎的 builder.load 写死了 CS340，这里按课程走）。"""
+    """按 <课程>/_lessons/<讲>.py 读数据（引擎的 builder.load 写死了默认课程，这里按课程走）。"""
     import importlib.util as ilu
     path = paths.data_or_res(course, "_lessons", no + ".py")
-    # 2026-11-23：英文档只有 <讲>.en.py 时（如 CS340/T01）也要能读；问答侧不再把这一讲丢掉。
+    # 2026-11-23：英文档只有 <讲>.en.py 时（如 <课程>/T01）也要能读；问答侧不再把这一讲丢掉。
     if not os.path.isfile(path):
         p_en = paths.data_or_res(course, "_lessons", no + ".en.py")
         if os.path.isfile(p_en):
@@ -575,7 +575,7 @@ def dep_state() -> dict:
 
 def load_cfg():
     cfg = _read_json(CFG_PATH)
-    # 2026-11-17 用户定：「删除 CS340 的字眼，那是课件」——真实课件名不该出现在界面上（截图、默认值）。
+    # 2026-11-17 用户定：「删掉真实课件的字眼，那是课件」——真实课件名不该出现在界面上（截图、默认值）。
     #   默认保存目录改成中性的 out\（软件目录下），生成物仍然写在 <课程>\01_讲义，这里只是多复制一份。
     default_dir = "out"
     out = {
@@ -593,7 +593,7 @@ def load_cfg():
         "translate_engine": cfg.get("translate_engine") if cfg.get("translate_engine") in
                             ("auto", "online", "offline") else "auto",
     }
-    # 2026-11-16 实际撞到：某个写入环节把「讲义」写成了 ??，之后每次生成都往 CS340/01_?? 里放。
+    # 2026-11-16 实际撞到：某个写入环节把「讲义」写成了 ??，之后每次生成都往 <课程>/01_?? 里放。
     # 路径里出现问号就认为被编码破坏，退回默认目录并在界面上说明。
     if "?" in out["save_dir"] or "\ufffd" in out["save_dir"]:
         out["save_dir"] = default_dir
@@ -681,7 +681,7 @@ def courses_meta() -> dict:
     """课程标题/说明：仓里的 courses.json 打底，数据根里的 courses.local.json 覆盖。
 
     2026-11-22 用户：「那些算后台维护」「只可以保留源代码在仓库里面」——真实课程名不能进公开仓，
-    但本机界面上还得显示「操作系统」这种标题。所以把「真实标题」放到**不进 git** 的
+    但本机界面上还得显示真实课程标题。所以把「真实标题」放到**不进 git** 的
     courses.local.json（.gitignore 已忽略），仓里那份只留 DEMO。
     """
     meta = _read_json(paths.data_or_res("courses.json"), {})
@@ -1129,7 +1129,7 @@ def make_stub_lesson(course: str, orig_name: str) -> dict:
                 ["原件", "original", "本讲 §0", "导入到 00_原件 的源课件 PDF"],
                 ["讲义数据", "lesson data", "本讲 §0", "_lessons\\<讲号>.py 里的 LESSON"],
                 ["讲号", "lesson code", "本讲 §0", "如 T05；由原件文件名里的数字推出来"],
-                ["课程代码", "course code", "本讲 §0", "仓根下的目录名，如 CS340"],
+                ["课程代码", "course code", "本讲 §0", "仓根下的目录名，如 DEMO"],
                 ["节", "section", "本讲 §0", "sections 里的一项，一页一节"],
                 ["块", "block", "本讲 §0", "body 里的一条（p / code / eg / table / svg / q）"],
                 ["内容门", "content gate", "本讲 §1", "逐节查代码 / 例题 / 术语 / 定位标注"],

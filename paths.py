@@ -273,6 +273,26 @@ def course_dir(code: str) -> str:
     return data_or_res(code)
 
 
+def detect_course() -> str:
+    """默认课程：PLUMA_COURSE → 数据根/资源根里第一个带 _lessons 的目录 → DEMO。
+
+    2026-11-27：课程代号不再写死在代码里（真实课程名不进公开仓）。只按磁盘事实认；
+    一个都认不到时退回随程序发布的 DEMO，不指一个不存在的目录让下游报「找不到」。
+    """
+    env = os.environ.get("PLUMA_COURSE")
+    if env:
+        return env
+    for root in (DATA_ROOT, RES_ROOT):
+        try:
+            names = sorted(os.listdir(root))
+        except OSError:
+            continue
+        for name in names:
+            if os.path.isdir(os.path.join(root, name, "_lessons")):
+                return name
+    return "DEMO"
+
+
 def bootstrap() -> None:
     """把资源根与 engine\\ tools\\print\\ api\\ 挂上 sys.path；冻结后也照做（幂等）。
 

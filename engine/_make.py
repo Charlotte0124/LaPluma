@@ -27,8 +27,8 @@ import paths  # noqa: E402  路径双根，见仓根 paths.py
 sys.path.insert(0, paths.res('tools', 'print'))
 sys.path.insert(0, paths.res('engine'))
 ROOT = paths.DATA_ROOT
-# 2026-11-17：课程代码不再写死（示例课程 / 截图演示用 PLUMA_COURSE 切，默认仍是 CS340）
-COURSE = os.environ.get("PLUMA_COURSE") or "CS340"
+# 2026-11-17：课程代码不再写死；2026-11-27 起认目录（paths.detect_course）
+COURSE = paths.detect_course()
 
 from terms import attach_first_per_section  # noqa: E402
 from _split_long import split_long  # noqa: E402

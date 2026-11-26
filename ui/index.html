@@ -2217,8 +2217,8 @@ document.addEventListener('drop', async e => {
 
 /* ---------- 生成 ---------- */
 function fillSelects(){
-  // 2026-11-17：默认课程排第一（以前按字母序，PLUMA_COURSE=DEMO 时下拉框仍停在 CS340，
-  //   截图里出现「保存目录 DEMO\01_讲义 但课程选的是操作系统」这种不一致）。
+  // 2026-11-17：默认课程排第一（以前按字母序，PLUMA_COURSE=DEMO 时下拉框仍停在真实课程，
+  //   截图里出现「保存目录 DEMO\01_讲义 但课程选的是另一门课」这种不一致）。
   const d = B.default;
   const list = (B.courses||[]).slice().sort((a,b)=>((a.code===d)?-1:0) - ((b.code===d)?-1:0));
   $('#courseSel').innerHTML = list.map(c=>`<option value="${esc(c.code)}">${esc(c.title)}</option>`).join('');
