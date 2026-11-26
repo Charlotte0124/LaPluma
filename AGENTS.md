@@ -216,6 +216,7 @@
 | `check-shot-coverage.py` | 提交钩子自动（功能总表 ↔ 截图覆盖表 ↔ docs\资产 三边对上；新功能没占位 = 红） |
 | `check-rules-wired.py` | 提交钩子自动（本文件与 tools/check 对账） |
 | `check-readme-fresh.py` | 提交钩子 + 推送前（主页版本号 / 下载按钮 / 最近更新表 / 介绍图时效） |
+| `check-shot-light.py` | 提交钩子（只查这次改动的界面截图）+ 手动全量（截图一律白天模式；深色图必须声明） |
 | `check-error-guard.py` | 手动：`python tools\check\check-error-guard.py`（打 14 条坏请求验错误兜底） |
 | `check-fresh-install.py` | 手动：全新配置跑一遍首启流程 |
 | `check-paths.py` | 手动：数据根 / 保存目录解析 |
@@ -285,3 +286,9 @@
 4. **提交 / 推送不许 `--no-verify`**：钩子挡住就改判据或改代码。2026-11-25 的 `3e9e454` 用 `--no-verify` 越过钩子，CI 连红三次（GitHub 通知 13 条）。现在多了 `.githooks/pre-push`（占位防护 / 界面预览 / 主页版本三条）：提交能绕过，推送绕不过。
 
 **怎么验证它被执行**：`python tools\check\check-readme-fresh.py`（红 = 版本号或表对不上，黄 = 主页图旧）；`.githooks/pre-commit` 与 `.githooks/pre-push` 都接了它。CI 那一步还没接：2026-11-26 推不上去——这台机器的 token 缺 `workflow` 权限（`refusing to allow an OAuth App to create or update workflow`），等有 `workflow` 权限时再把 `checks.yml` 那一步加上。
+
+## 二十二、截图一律白天（浅色）模式（2026-11-27 用户定）
+
+**为什么有这条**：用户 2026-11-27 定「截图一律以白天模式为标准」。同一批图深浅混着放，看的人分不清「这是深色模式的演示」还是「这张恰好拍在深色下」，文档与主页也更难看清。
+
+1. **默认白天**：界面截图用浅色/白天模式拍；拍深色的那张，只有一种正当理由——这张图本身就是在演示深色模式。

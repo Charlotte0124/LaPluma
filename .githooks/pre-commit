@@ -40,6 +40,14 @@ python -X utf8 tools/check/check-repo-clean.py || { echo "[hook] 仓里混进了
 # 2026-11-23 用户：「以后检测有新功能 截图的那边就要增加一个空位留补 等推送的时候再截图」
 echo "[hook] 截图覆盖 check-shot-coverage ..."
 python -X utf8 tools/check/check-shot-coverage.py || { echo "[hook] 新功能没在截图覆盖表占位 / 登记了不存在的图：提交已拦下"; exit 1; }
+# 2026-11-27 用户：「截图一律以白天模式为标准」——只查这次改动/新增的界面截图，
+#   旧图（已知有 4 张深色待重拍）不在这里反复拦；全量审计跑不带参数的同一脚本。
+SHOTS=$(git diff --cached --name-only --diff-filter=ACM -- 'docs/资产/界面-*.png' 'docs/资产/产品介绍图*.png' | tr '\n' ' ')
+if [ -n "$(echo $SHOTS | tr -d ' ')" ]; then
+  echo "[hook] 截图白天模式 check-shot-light（这次改的图）..."
+  # shellcheck disable=SC2086
+  python -X utf8 tools/check/check-shot-light.py $SHOTS || { echo "[hook] 新截图不是白天模式：文件名若确实是深色演示，请带「深色」；否则重拍"; exit 1; }
+fi
 echo "[hook] 规矩接线 check-rules-wired ..."
 python -X utf8 tools/check/check-rules-wired.py || { echo "[hook] 规矩与判据没对上：提交已拦下"; exit 1; }
 echo "[hook] 主页版本与图 check-readme-fresh ..."
